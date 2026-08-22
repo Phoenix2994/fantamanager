@@ -276,7 +276,6 @@ export class FinanceSection {
     return [
       { label: 'Imponibile fairplay finanziario', value: f.spesaAnnuale, warnNegative: true },
       { label: 'Multe fairplay finanziario', value: f.tasse },
-      { label: 'Soldi da versare', value: f.soldiDaVersare, warnNegative: true },
       { label: 'Valore rosa', value: f.valoreRosa },
       { label: 'Bilancio stagionale', value: f.bilancioSocietarioStagionale, warnNegative: true },
     ];
