@@ -36,7 +36,7 @@ const USCITE: RowDef[] = [
   { key: 'acquistiAstaSettembre', label: 'Asta settembre' },
   { key: 'acquistiAstaGennaio', label: 'Asta gennaio' },
   { key: 'rescissioni', label: 'Rescissioni' },
-  { key: 'penali', label: 'Penali' },
+  { key: 'penali', label: 'Multe condotta antisportiva' },
   { key: 'trasferimentiUscita', label: 'Trasferimenti in uscita' },
   { key: 'indennizzoSettembre', label: 'Indennizzo settembre' },
   { key: 'indennizzoGennaio', label: 'Indennizzo gennaio' },
@@ -275,7 +275,7 @@ export class FinanceSection {
     }
     return [
       { label: 'Spesa annuale', value: f.spesaAnnuale, warnNegative: true },
-      { label: 'Tasse', value: f.tasse },
+      { label: 'Multe fairplay finanziario', value: f.tasse },
       { label: 'Spesa da versare', value: f.spesaDaVersare, warnNegative: true },
       { label: 'Spesa totale', value: f.spesaTotale, warnNegative: true },
       { label: 'Soldi da versare', value: f.soldiDaVersare, warnNegative: true },
