@@ -26,22 +26,22 @@ interface RowDef {
 }
 
 const ENTRATE: RowDef[] = [
-  { key: 'premi', label: 'Premi' },
+  { key: 'indennizzoSettembre', label: 'Indennizzo settembre' },
+  { key: 'indennizzoGennaio', label: 'Indennizzo gennaio' },
+  { key: 'rimborsi', label: 'Rimborsi' },
   { key: 'trasferimentiEntrata', label: 'Trasferimenti in entrata' },
+  { key: 'premi', label: 'Premi' }
 ];
 
 const USCITE: RowDef[] = [
   { key: 'rinnovi', label: 'Rinnovi' },
-  { key: 'acquistiMercatoInfrasettimanale', label: 'Asta infrasettimanale' },
   { key: 'acquistiAstaSettembre', label: 'Asta settembre' },
+  { key: 'acquistiMercatoInfrasettimanale', label: 'Asta infrasettimanale' },
   { key: 'acquistiAstaGennaio', label: 'Asta gennaio' },
   { key: 'rescissioni', label: 'Rescissioni' },
-  { key: 'penali', label: 'Multe condotta antisportiva' },
   { key: 'trasferimentiUscita', label: 'Trasferimenti in uscita' },
-  { key: 'indennizzoSettembre', label: 'Indennizzo settembre' },
-  { key: 'indennizzoGennaio', label: 'Indennizzo gennaio' },
-  { key: 'rimborsi', label: 'Rimborsi' },
-  { key: 'soldiVersati', label: 'Soldi versati' },
+  { key: 'penali', label: 'Multe condotta antisportiva' },
+  { key: 'soldiVersati', label: 'Soldi versati' }
 ];
 
 interface ComputedRow {
@@ -274,9 +274,9 @@ export class FinanceSection {
       return [];
     }
     return [
+      { label: 'Valore rosa', value: f.valoreRosa },
       { label: 'Imponibile fairplay finanziario', value: f.spesaAnnuale, warnNegative: true },
       { label: 'Multe fairplay finanziario', value: f.tasse },
-      { label: 'Valore rosa', value: f.valoreRosa },
       { label: 'Bilancio stagionale', value: f.bilancioSocietarioStagionale, warnNegative: true },
     ];
   });
