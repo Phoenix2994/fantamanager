@@ -274,10 +274,8 @@ export class FinanceSection {
       return [];
     }
     return [
-      { label: 'Spesa annuale', value: f.spesaAnnuale, warnNegative: true },
+      { label: 'Imponibile fairplay finanziario', value: f.spesaAnnuale, warnNegative: true },
       { label: 'Multe fairplay finanziario', value: f.tasse },
-      { label: 'Spesa da versare', value: f.spesaDaVersare, warnNegative: true },
-      { label: 'Spesa totale', value: f.spesaTotale, warnNegative: true },
       { label: 'Soldi da versare', value: f.soldiDaVersare, warnNegative: true },
       { label: 'Valore rosa', value: f.valoreRosa },
       { label: 'Bilancio stagionale', value: f.bilancioSocietarioStagionale, warnNegative: true },
