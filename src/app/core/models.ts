@@ -104,6 +104,7 @@ export interface SeasonFinanceInputs {
   rimborsi: number;
   premi: number;
   soldiVersati: number;
+  tasse: number;
 }
 
 export const EMPTY_FINANCE_INPUTS: SeasonFinanceInputs = {
@@ -120,6 +121,7 @@ export const EMPTY_FINANCE_INPUTS: SeasonFinanceInputs = {
   rimborsi: 0,
   premi: 0,
   soldiVersati: 0,
+  tasse: 0
 };
 
 /** Campi calcolati (client-side ora, Cloud Functions in produzione) */

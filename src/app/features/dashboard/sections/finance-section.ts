@@ -41,7 +41,8 @@ const USCITE: RowDef[] = [
   { key: 'rescissioni', label: 'Rescissioni' },
   { key: 'trasferimentiUscita', label: 'Costi per trasferimenti' },
   { key: 'penali', label: 'Multe condotta antisportiva' },
-  { key: 'soldiVersati', label: 'Bilancio societario saldato' }
+  { key: 'tasse', label: 'Multe fairplay finanziario' },
+  { key: 'soldiVersati', label: 'Bilancio stagionale saldato' }
 ];
 
 interface ComputedRow {
@@ -138,7 +139,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
 
         <!-- CALCOLATI (sempre read-only) -->
         <div class="group computed">
-          <h3>Calcolati</h3>
+          <h3>Bilancio</h3>
           @for (row of calcolati(); track row.label) {
             <div class="row">
               <span>{{ row.label }}</span>
@@ -274,9 +275,8 @@ export class FinanceSection {
       return [];
     }
     return [
-      { label: 'Valore rosa', value: f.valoreRosa },
+      // { label: 'Valore rosa', value: f.valoreRosa },
       { label: 'Imponibile fairplay finanziario', value: f.spesaAnnuale, warnNegative: true },
-      { label: 'Multe fairplay finanziario', value: f.tasse },
       { label: 'Bilancio stagionale', value: f.bilancioSocietarioStagionale, warnNegative: true },
     ];
   });
@@ -306,6 +306,7 @@ export class FinanceSection {
           rimborsi: current.rimborsi,
           premi: current.premi,
           soldiVersati: current.soldiVersati,
+          tasse: current.tasse,
         }
       : { ...EMPTY_FINANCE_INPUTS };
 

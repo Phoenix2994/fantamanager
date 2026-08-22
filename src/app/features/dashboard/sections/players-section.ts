@@ -140,7 +140,7 @@ function roleSortKey(ruolo: string): number {
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <!-- <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Contratto</mat-label>
           <mat-select [value]="filterContratto()" (selectionChange)="filterContratto.set($event.value)">
             <mat-option value="">Tutti</mat-option>
@@ -148,7 +148,13 @@ function roleSortKey(ruolo: string): number {
               <mat-option [value]="tipo">{{ tipo }}</mat-option>
             }
           </mat-select>
-        </mat-form-field>
+        </mat-form-field> -->
+      </div>
+
+      <div class="rosa-summary">
+        Valore rosa:
+        <strong>{{ valoreRosa() | number: '1.2-2' }} €</strong>
+        · {{ players().length }} giocatori
       </div>
 
       <!-- MOBILE: card espandibili -->
@@ -319,12 +325,6 @@ function roleSortKey(ruolo: string): number {
           </table>
         </div>
       }
-
-      <div class="rosa-summary">
-        Valore rosa:
-        <strong>{{ valoreRosa() | number: '1.2-2' }} €</strong>
-        · {{ players().length }} giocatori
-      </div>
 
       <!-- Giocatori ceduti in prestito -->
       <div class="loans-header">
@@ -546,12 +546,13 @@ function roleSortKey(ruolo: string): number {
     }
 
     .rosa-summary {
-      margin-top: 12px;
+      margin: 12px 0;
       font-size: 0.9rem;
       color: var(--mat-sys-on-surface-variant);
     }
 
     .loans-header {
+      margin: 12px 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
