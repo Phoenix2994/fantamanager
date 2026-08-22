@@ -29,7 +29,7 @@ const ENTRATE: RowDef[] = [
   { key: 'indennizzoSettembre', label: 'Indennizzo settembre' },
   { key: 'indennizzoGennaio', label: 'Indennizzo gennaio' },
   { key: 'rimborsi', label: 'Rimborsi' },
-  { key: 'trasferimentiEntrata', label: 'Trasferimenti in entrata' },
+  { key: 'trasferimentiEntrata', label: 'Proventi da trasferimenti' },
   { key: 'premi', label: 'Premi' }
 ];
 
@@ -39,9 +39,9 @@ const USCITE: RowDef[] = [
   { key: 'acquistiMercatoInfrasettimanale', label: 'Asta infrasettimanale' },
   { key: 'acquistiAstaGennaio', label: 'Asta gennaio' },
   { key: 'rescissioni', label: 'Rescissioni' },
-  { key: 'trasferimentiUscita', label: 'Trasferimenti in uscita' },
+  { key: 'trasferimentiUscita', label: 'Costi per trasferimenti' },
   { key: 'penali', label: 'Multe condotta antisportiva' },
-  { key: 'soldiVersati', label: 'Soldi versati' }
+  { key: 'soldiVersati', label: 'Bilancio societario saldato' }
 ];
 
 interface ComputedRow {
