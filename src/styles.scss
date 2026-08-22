@@ -1,1 +1,39 @@
-/* You can add global styles to this file, and also import other style files */
+@use '@angular/material' as mat;
+
+// Tema Material 3: primary blu, tertiary/arancione (come da spec),
+// tipografia Roboto, densità standard.
+html {
+  color-scheme: light;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$orange-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--mat-sys-surface-container-lowest, #fafafa);
+  color: var(--mat-sys-on-surface, #1c1b1f);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Touch-friendly: target minimi 48px su elementi interattivi comuni */
+button {
+  touch-action: manipulation;
+}

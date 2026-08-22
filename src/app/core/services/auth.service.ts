@@ -1,0 +1,48 @@
+import { Injectable, inject } from '@angular/core';
+import {
+  Auth,
+  User,
+  authState,
+  signInWithEmailAndPassword,
+  signOut,
+} from '@angular/fire/auth';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
+
+/**
+ * Autenticazione con password condivisa della lega.
+ *
+ * Implementazione: un singolo account Firebase Authentication (email fissa in
+ * environment.adminEmail) è condiviso tra gli admin. La UI chiede solo la
+ * password; le security rules di Firestore autorizzano qualsiasi utente
+ * autenticato (l'unico account esistente è quello admin).
+ *
+ * Vantaggi: le regole lato server sono realmente enforce (a differenza di un
+ * check client-side) e non servono Cloud Functions per il login.
+ */
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+  private readonly auth = inject(Auth);
+
+  /** Stato di autenticazione realtime (null = non autenticato) */
+  readonly user$: Observable<User | null> = authState(this.auth);
+
+  /** true se c'è una sessione attiva */
+  readonly isAuthenticated$: Observable<boolean> = this.user$.pipe(
+    map((user) => user !== null),
+  );
+
+  /**
+   * Login con la password condivisa della lega.
+   * Lancia un errore (auth/invalid-credential ecc.) se la password è errata.
+   */
+  async login(password: string): Promise<void> {
+    await signInWithEmailAndPassword(this.auth, environment.adminEmail, password);
+  }
+
+  /** Logout: termina la sessione */
+  async logout(): Promise<void> {
+    await signOut(this.auth);
+  }
+}
