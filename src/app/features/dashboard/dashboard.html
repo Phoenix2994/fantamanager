@@ -20,6 +20,7 @@
     <main class="content desktop">
       <section class="panel">
         <app-players-section />
+        <app-svincolati-section />
       </section>
       <section class="panel">
         <app-finance-section />
@@ -39,6 +40,9 @@
           <mat-tab label="Spese">
             <app-finance-section />
           </mat-tab>
+          <mat-tab label="Svincolati">
+            <app-svincolati-section />
+          </mat-tab>
           <mat-tab label="Storico">
             <app-history-section />
           </mat-tab>
@@ -51,6 +55,9 @@
       @switch (activeSection()) {
         @case ('players') {
           <app-players-section />
+        }
+        @case ('svincolati') {
+          <app-svincolati-section />
         }
         @case ('finance') {
           <app-finance-section />
@@ -68,6 +75,14 @@
       >
         <mat-icon>groups</mat-icon>
         <span>Rosa</span>
+      </button>
+      <button
+        type="button"
+        [class.active]="activeSection() === 'svincolati'"
+        (click)="selectSection('svincolati')"
+      >
+        <mat-icon>person_search</mat-icon>
+        <span>Svincolati</span>
       </button>
       <button
         type="button"

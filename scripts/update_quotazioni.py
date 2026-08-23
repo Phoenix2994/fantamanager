@@ -1,8 +1,13 @@
 """Aggiorna le quotazioni attuali dei calciatori nel database Firestore
 dal sito https://www.fantacalcio.it/quotazioni-fantacalcio.
 
+Inoltre raccoglie i GIOCATORI SVINCOLATI: calciatori presenti sul listone
+di fantacalcio.it che non trovano corrispondenza (fuzzy) nelle rose del DB.
+Vengono salvati in league/{leagueId}/svincolati/{playerId} con nome, ruolo
+mantra, quotazione mantra e squadra.
+
 Uso:
-    py -3 scripts/update_quotazioni.py              # DRY-RUN: stampa riepilogo senza modifiche
+    py -3 scripts/update_quotazioni.py              # DRY-RUN: solo riepilogo
     py -3 scripts/update_quotazioni.py --write      # aggiorna Firestore
 
 Richiede:
@@ -22,11 +27,30 @@ from difflib import SequenceMatcher
 
 import requests
 from bs4 import BeautifulSoup
+from decimal import Decimal, ROUND_HALF_UP
 
 SEASON = "2026-27"
+LEAGUE_ID = "main"
 URL = "https://www.fantacalcio.it/quotazioni-fantacalcio"
 
 KEY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "serviceAccountKey.json")
+
+# Mappatura codici ruolo fantacalcio.it -> ruoli usati nell'app
+ROLE_MAP = {
+    "por": "Por",
+    "p": "Por",
+    "dd": "Dd",
+    "dc": "Dc",
+    "ds": "Ds",
+    "b": "B",
+    "m": "M",
+    "c": "C",
+    "e": "E",
+    "w": "W",
+    "t": "T",
+    "a": "A",
+    "pc": "Pc",
+}
 
 
 def normalize_name(value: str) -> str:
@@ -37,8 +61,20 @@ def normalize_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_).strip()
 
 
+def slugify(value: str) -> str:
+    """Nome normalizzato come ID documento deterministico."""
+    return normalize_name(value).replace(" ", "-")
+
+
+def round_half_up(x: float, ndigits: int = 1) -> float:
+    """Arrotonda HALF UP (come ROUND di Excel); Python round() usa
+    banker's rounding (round(2.5)=2) e qui non va bene."""
+    quantum = Decimal("0.1") if ndigits == 1 else Decimal("0.01")
+    return float(Decimal(str(x)).quantize(quantum, rounding=ROUND_HALF_UP))
+
+
 def fetch_quotazioni() -> list[dict]:
-    """Scarica la pagina e restituisce [{nome, squadra, qi, qa}]."""
+    """Scarica la pagina e restituisce [{nome, squadra, ruolo, qi, qa}]."""
     response = requests.get(
         URL,
         timeout=30,
@@ -57,15 +93,26 @@ def fetch_quotazioni() -> list[dict]:
     soup = BeautifulSoup(response.text, "html.parser")
     quotazioni = []
     for tr in soup.find_all("tr"):
-        cells = [c.get_text(strip=True) for c in tr.find_all(["td", "th"])]
-        # Struttura reale tabella: 3 vuote | NOME | SQ | QI(classic) | QA(classic)
-        # | FVM/1000(classic) | QI(mantra) | QA(mantra) | FVM/1000(mantra)
-        # Vogliamo la QUOTAZIONE MANTRA → colonne 8 (QI) e 9 (QA).
-        if len(cells) < 10 or not cells[3]:
+        cells = tr.find_all(["td", "th"])
+        texts = [c.get_text(strip=True) for c in cells]
+        # Struttura: [championship] | ruolo-classic | ruolo-mantra | NOME | SQ
+        # | QI(classic) | QA(classic) | FVM(classic) | QI(mantra) | QA(mantra) | FVM(mantra)
+        if len(cells) < 10 or not texts[3]:
             continue
-        nome = cells[3]
-        qi = cells[8]
-        qa = cells[9]
+
+        nome = texts[3]
+        squadra = texts[4]
+
+        # Ruolo mantra: fino a 3 span .role nella cella 2, uniti con ";"
+        ruoli: list[str] = []
+        for role_span in cells[2].find_all("span", class_="role"):
+            mapped = ROLE_MAP.get((role_span.get("data-value") or "").lower())
+            if mapped and mapped not in ruoli:
+                ruoli.append(mapped)
+        ruolo = ";".join(ruoli)
+
+        qi = texts[8]
+        qa = texts[9]
         try:
             qi_num = float(qi.replace(",", "."))
             qa_num = float(qa.replace(",", "."))
@@ -73,22 +120,24 @@ def fetch_quotazioni() -> list[dict]:
             continue
         if not nome or qa_num <= 0:
             continue
-        quotazioni.append({"nome": nome, "qi": qi_num, "qa": qa_num})
+        quotazioni.append(
+            {"nome": nome, "squadra": squadra, "ruolo": ruolo, "qi": qi_num, "qa": qa_num}
+        )
     return quotazioni
 
 
-def find_match(nome_db: str, quotes) -> float | None:
-    """Cerca la quotazione migliore con fuzzy matching >= 0.88."""
-    best = None
+def find_match(nome_db: str, quotes) -> int | None:
+    """Cerca l'indice della quotazione migliore con fuzzy matching >= 0.88."""
+    best_idx = None
     best_ratio = 0.0
     target = normalize_name(nome_db)
-    for q in quotes:
+    for i, q in enumerate(quotes):
         ratio = SequenceMatcher(None, target, q["nome_norm"]).ratio()
         if ratio > best_ratio:
             best_ratio = ratio
-            best = q
-    if best_ratio >= 0.88 and best:
-        return best["qa"]
+            best_idx = i
+    if best_ratio >= 0.88 and best_idx is not None:
+        return best_idx
     return None
 
 
@@ -114,6 +163,46 @@ def build_db_index(db):
     return players
 
 
+def sync_svincolati(db, svincolati: list[dict]) -> None:
+    """Sincronizza league/{leagueId}/svincolati: cancella i documenti
+    esistenti e scrive la lista corrente (ID deterministico = slug nome)."""
+    from firebase_admin import firestore
+
+    ref = db.collection("league").document(LEAGUE_ID).collection("svincolati")
+
+    batch = db.batch()
+    count = 0
+
+    # Cancella tutti i documenti esistenti
+    for d in ref.stream():
+        batch.delete(d.reference)
+        count += 1
+        if count >= 400:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    # Scrive i nuovi svincolati
+    for s in svincolati:
+        batch.set(
+            ref.document(slugify(s["name"])),
+            {
+                **s,
+                "season": SEASON,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        count += 1
+        if count >= 400:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    if count:
+        batch.commit()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Aggiornamento quotazioni da fantacalcio.it")
     parser.add_argument("--write", action="store_true",
@@ -124,7 +213,7 @@ def main() -> None:
         import firebase_admin
         from firebase_admin import credentials, firestore
     except ImportError:
-        sys.exit("ERRORE: installa firebase-admin → py -3 -m pip install firebase-admin")
+        sys.exit("ERRORE: installa firebase-admin -> py -3 -m pip install firebase-admin")
 
     if os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
         cred = credentials.Certificate(json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"]))
@@ -138,41 +227,63 @@ def main() -> None:
 
     print("Fetch quotazioni...")
     quotes = fetch_quotazioni()
-    print(f"✔ Estratte {len(quotes)} quotazioni.\n")
+    print(f"Estratte {len(quotes)} quotazioni.")
 
-    quotes_norm = [
-        {"nome": q["nome"], "nome_norm": normalize_name(q["nome"]),
-         "qa": q["qa"], "qi": q["qi"]}
-        for q in quotes
-    ]
+    quotes_norm = [{**q, "nome_norm": normalize_name(q["nome"])} for q in quotes]
 
     players = build_db_index(db)
-    print(f"✔ Trovati {len(players)} giocatori nel DB (stagione {SEASON}).\n")
+    print(f"Trovati {len(players)} giocatori nel DB (stagione {SEASON}).")
 
     updated = []
-    not_found = []
+    matched_quote_idx: set[int] = set()
+    not_found_db = []
     for p in players:
-        qa_new = find_match(p["name"], quotes_norm)
-        if qa_new is None:
-            not_found.append(p["name"])
+        idx = find_match(p["name"], quotes_norm)
+        if idx is None:
+            not_found_db.append(p["name"])
             continue
+        matched_quote_idx.add(idx)
+        q = quotes_norm[idx]
         qi = p["qi"]
         vi = p["vi"]
-        va = round(vi * (qa_new / qi) * 10) / 10 if qi else 0.0
-        spesa = round(va * p["perc"] * 10) / 10
-        updated.append({**p, "qa_new": qa_new, "va_new": va, "spesa_new": spesa})
+        # V.A. e spesa rinnovo mai sotto 0.10 €, arrotondamento half up
+        va = max(round_half_up(vi * (q["qa"] / qi), 1) if qi else 0.0, 0.1)
+        spesa = max(round_half_up(va * p["perc"], 1), 0.1)
+        updated.append({**p, "qa_new": q["qa"], "va_new": va, "spesa_new": spesa})
 
-    print(f"\n→ {len(updated)} giocatori con quota aggiornata.")
-    if not_found:
-        print(f"→ {len(not_found)} senza match (primi 10): {not_found[:10]}")
+    # Svincolati: quote della fonte NON matchate da nessun giocatore del DB
+    svincolati = [
+        {
+            "name": q["nome"],
+            "ruolo": q["ruolo"],
+            "quotazioneAttuale": q["qa"],
+            "squadra": q["squadra"],
+        }
+        for i, q in enumerate(quotes_norm)
+        if i not in matched_quote_idx
+    ]
+    svincolati.sort(key=lambda s: -s["quotazioneAttuale"])
+
+    print()
+    print(f"{len(updated)} giocatori con quota aggiornata.")
+    print(f"{len(svincolati)} svincolati (in listone ma non in nessuna rosa).")
+    if not_found_db:
+        print(f"{len(not_found_db)} giocatori DB senza match nel listone (primi 10): {not_found_db[:10]}")
 
     if not args.write:
-        print("\n=== DRY-RUN (nessuna scrittura) ===")
+        print()
+        print("=== DRY-RUN (nessuna scrittura) ===")
         for u in updated[:5]:
-            print(f"  {u['name']}: Q.A. {u['qa_db']}→{u['qa_new']}, V.A. {u['va']}→{u['va_new']}")
+            print(f"  {u['name']}: Q.A. {u['qa_db']}->{u['qa_new']}, V.A. {u['va']}->{u['va_new']}")
+        print()
+        print("Svincolati (primi 10, ordinati per quotazione):")
+        for s in svincolati[:10]:
+            print(f"  {s['name']} ({s['ruolo'] or '?'}, {s['squadra']}) - {s['quotazioneAttuale']}")
+        print()
         print("Esegui con --write per aggiornare Firestore.")
         return
 
+    # Scrittura quotazioni rose (batch)
     batch = db.batch()
     count = 0
     for u in updated:
@@ -189,9 +300,13 @@ def main() -> None:
     if count:
         batch.commit()
 
+    # Sincronizzazione svincolati
+    sync_svincolati(db, svincolati)
+
+    # audit
     db.collection("auditLog").add({
         "timestamp": firestore.SERVER_TIMESTAMP,
-        "leagueId": "main",
+        "leagueId": LEAGUE_ID,
         "teamId": "",
         "adminId": "github-actions",
         "entityType": "player",
@@ -199,11 +314,14 @@ def main() -> None:
         "operation": "update",
         "fieldModified": "quotazioneAttuale",
         "valueBefore": None,
-        "valueAfter": len(updated),
-        "changeSummary": f"Aggiornamento quotazioni da fantacalcio.it ({len(updated)} giocatori)",
+        "valueAfter": {"aggiornati": len(updated), "svincolati": len(svincolati)},
+        "changeSummary":
+            f"Aggiornamento quotazioni da fantacalcio.it "
+            f"({len(updated)} giocatori, {len(svincolati)} svincolati)",
     })
 
-    print(f"\n✔ Aggiornati {len(updated)} giocatori su Firestore.")
+    print()
+    print(f"Aggiornati {len(updated)} giocatori e sincronizzati {len(svincolati)} svincolati.")
 
 
 if __name__ == "__main__":

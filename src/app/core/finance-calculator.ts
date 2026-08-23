@@ -1,8 +1,20 @@
 import { SeasonFinanceComputed, SeasonFinanceInputs, TaxBracket } from './models';
 
+/**
+ * Arrotondamento ROUND HALF UP (come ROUND di Excel): le mezze cifre
+ * si allontanano sempre da zero (2.5 → 3, -2.5 → -3). Math.round di JS
+ * invece tronca i negativi verso +∞ (-2.5 → -2), quindi implementiamo
+ * esplicitamente il half-away-from-zero con epsilon per i float.
+ */
+function roundTo(n: number, decimals: number): number {
+  const factor = Math.pow(10, decimals);
+  const scaled = Math.abs(n) * factor;
+  return (Math.sign(n) * Math.round(scaled + Number.EPSILON * scaled)) / factor;
+}
+
 /** Arrotonda a 2 decimali (come ROUND di Excel) */
 export function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+  return roundTo(n, 2);
 }
 
 /**
@@ -10,12 +22,15 @@ export function round2(n: number): number {
  * V.A. e spesa rinnovo dei giocatori (es. 5.018 → 5.0).
  */
 export function round1(n: number): number {
-  return Math.round((n + Number.EPSILON) * 10) / 10;
+  return roundTo(n, 1);
 }
+
+/** Valore minimo per V.A. e spesa rinnovo (mai 0) */
+export const MIN_VALORE = 0.1;
 
 /**
  * V.A. = valoreIniziale × (quotazioneAttuale / quotazioneIniziale)
- * Restituisce 0 se quotazioneIniziale non è valida.
+ * Mai inferiore a MIN_VALORE (0.10 €).
  */
 export function calcolaValoreAttuale(
   valoreIniziale: number,
@@ -23,17 +38,34 @@ export function calcolaValoreAttuale(
   quotazioneAttuale: number,
 ): number {
   if (!Number.isFinite(valoreIniziale) || !quotazioneIniziale) {
-    return 0;
+    return MIN_VALORE;
   }
-  return round1(valoreIniziale * (quotazioneAttuale / quotazioneIniziale));
+  return Math.max(round1(valoreIniziale * (quotazioneAttuale / quotazioneIniziale)), MIN_VALORE);
 }
 
-/** Prossima spesa rinnovo = valoreAttuale × prossimaPercRinnovo */
+/** Prossima spesa rinnovo = valoreAttuale × prossimaPercRinnovo, minimo 0.10 € */
 export function calcolaProssimaSpesaRinnovo(
   valoreAttuale: number,
   prossimaPercRinnovo: number,
 ): number {
-  return round1((valoreAttuale || 0) * (prossimaPercRinnovo || 0));
+  return Math.max(round1((valoreAttuale || 0) * (prossimaPercRinnovo || 0)), MIN_VALORE);
+}
+
+/**
+ * Mappatura della prossima percentuale di rinnovo dopo un rinnovo.
+ * Scala fissa: 0.85 → 1.15, 1.1 → 1.55, 1.45 → 2.15, 2.0 → 2.9.
+ * Valori non presenti in mappa restano invariati (aggiornamento manuale).
+ */
+const PROSSIMA_PERC_MAP: Record<number, number> = {
+ 0.85: 1.15,
+ 1.1: 1.55,
+ 1.45: 2.15,
+ 2.0: 2.9,
+};
+
+export function prossimaPercentRinnovo(perce: number): number {
+ const key = round2(perce);
+ return PROSSIMA_PERC_MAP[key] ?? perce;
 }
 
 /** Valore rosa = somma dei V.A. di tutti i giocatori della squadra */

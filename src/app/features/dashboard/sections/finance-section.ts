@@ -14,7 +14,13 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, switchMap } from 'rxjs';
 import { environment } from '../../../../environments/environment';
-import { EMPTY_FINANCE_INPUTS, SeasonFinance, SeasonFinanceInputs } from '../../../core/models';
+import {
+  DEFAULT_TAX_BRACKETS,
+  EMPTY_FINANCE_INPUTS,
+  SeasonFinance,
+  SeasonFinanceInputs,
+  TaxBracket,
+} from '../../../core/models';
 import { AuthService } from '../../../core/services/auth.service';
 import { FinanceService } from '../../../core/services/finance.service';
 import { TeamSelectionService } from '../../../core/services/team-selection.service';
@@ -41,8 +47,7 @@ const USCITE: RowDef[] = [
   { key: 'rescissioni', label: 'Rescissioni' },
   { key: 'trasferimentiUscita', label: 'Costi per trasferimenti' },
   { key: 'penali', label: 'Multe condotta antisportiva' },
-  { key: 'tasse', label: 'Multe fairplay finanziario' },
-  { key: 'soldiVersati', label: 'Bilancio stagionale saldato' }
+  { key: 'tasse', label: 'Multe fairplay finanziario' }
 ];
 
 interface ComputedRow {
@@ -98,7 +103,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
         }
       </p>
     } @else {
-      <div class="finance-grid">
+      <div class="finance-grid" [formGroup]="financeForm ?? emptyForm">
         <!-- ENTRATE -->
         <div class="group">
           <h3>Entrate</h3>
@@ -107,7 +112,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
               <span>{{ row.label }}</span>
               @if (editing() && financeForm) {
                 <mat-form-field appearance="outline" subscriptSizing="dynamic" class="edit-field">
-                  <input matInput type="number" step="0.01" [formControlName]="row.key" [formGroup]="financeForm" />
+                  <input matInput type="number" step="0.01" [formControlName]="row.key" />
                 </mat-form-field>
               } @else {
                 <strong [class.negative]="isNegative(row.key)">
@@ -126,7 +131,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
               <span>{{ row.label }}</span>
               @if (editing() && financeForm) {
                 <mat-form-field appearance="outline" subscriptSizing="dynamic" class="edit-field">
-                  <input matInput type="number" step="0.01" [formControlName]="row.key" [formGroup]="financeForm" />
+                  <input matInput type="number" step="0.01" [formControlName]="row.key" />
                 </mat-form-field>
               } @else {
                 <strong [class.negative]="isNegative(row.key)">
@@ -137,9 +142,19 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
           }
         </div>
 
-        <!-- CALCOLATI (sempre read-only) -->
+        <!-- BILANCIO (primo campo editabile, resto read-only) -->
         <div class="group computed">
           <h3>Bilancio</h3>
+          <div class="row">
+            <span>Soldi versati alla Lega</span>
+            @if (editing() && financeForm) {
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="edit-field">
+                <input matInput type="number" step="0.01" formControlName="soldiVersati" />
+              </mat-form-field>
+            } @else {
+              <strong>{{ valueOf('soldiVersati') | number: '1.2-2' }} €</strong>
+            }
+          </div>
           @for (row of calcolati(); track row.label) {
             <div class="row">
               <span>{{ row.label }}</span>
@@ -148,6 +163,35 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
               </strong>
             </div>
           }
+        </div>
+
+        <!-- FAIR PLAY FINANZIARIO -->
+        <div class="group computed">
+          <h3>Fairplay finanziario</h3>
+          <div class="row">
+            <span>Imponibile fairplay finanziario</span>
+            <strong [class.negative]="imponibile() < 0">
+              {{ imponibile() | number: '1.2-2' }} €
+            </strong>
+          </div>
+          <table class="brackets">
+            <thead>
+              <tr>
+                <th>Scaglione</th>
+                <th>Soglia €</th>
+                <th>Aliquota</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (b of brackets(); track b.bracketIndex) {
+                <tr [class.active]="isBracketActive(b)">
+                  <td>{{ b.bracketIndex }}</td>
+                  <td>{{ b.limiteSogliaEuro | number: '1.2-2' }}</td>
+                  <td>{{ percentuale(b.aliquota) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
         </div>
       </div>
     }
@@ -218,6 +262,35 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
       color: var(--mat-sys-error);
     }
 
+    .brackets {
+      width: 100%;
+      margin-top: 8px;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    .brackets th,
+    .brackets td {
+      padding: 4px 6px;
+      text-align: right;
+      border-bottom: 1px dashed var(--mat-sys-outline-variant);
+    }
+
+    .brackets th:first-child,
+    .brackets td:first-child {
+      text-align: left;
+    }
+
+    .brackets th {
+      color: var(--mat-sys-on-surface-variant);
+      font-weight: 500;
+    }
+
+    .brackets tr.active td {
+      font-weight: 700;
+      color: var(--mat-sys-primary);
+    }
+
     .empty-state {
       color: var(--mat-sys-on-surface-variant);
       font-size: 0.875rem;
@@ -244,6 +317,10 @@ export class FinanceSection {
 
   financeForm: FinanceForm | null = null;
 
+  /** Form vuoto: usato come parent quando non si è in editing */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  protected readonly emptyForm = new FormGroup({}) as any;
+
   readonly finance = toSignal(
     toObservable(this.selectedTeamId).pipe(
       switchMap((id) =>
@@ -269,14 +346,34 @@ export class FinanceSection {
     Math.round(this.players().reduce((sum, p) => sum + (p.valoreAttuale || 0), 0) * 100) / 100,
   );
 
+  /** Scaglioni fiscali della lega (con fallback ai default) */
+  readonly brackets = toSignal(this.financeService.taxBrackets$, {
+    initialValue: [...DEFAULT_TAX_BRACKETS] as TaxBracket[],
+  });
+
+  /** Imponibile fair play finanziario = spesa annuale */
+  readonly imponibile = computed(() => this.finance()?.spesaAnnuale ?? 0);
+
+  /** true se l'imponibile corrente rientra in questo scaglione */
+  isBracketActive(b: TaxBracket): boolean {
+    const sorted = this.brackets().sort((x, y) => x.bracketIndex - y.bracketIndex);
+    const idx = sorted.indexOf(b);
+    const next = idx + 1 < sorted.length ? sorted[idx + 1].limiteSogliaEuro : Infinity;
+    const imp = this.imponibile();
+    return imp > b.limiteSogliaEuro && imp <= next;
+  }
+
+  /** 0.35 → "35%" */
+  percentuale(aliquota: number): string {
+    return `${Math.round((aliquota || 0) * 100)}%`;
+  }
+
   readonly calcolati = computed<ComputedRow[]>(() => {
     const f = this.finance();
     if (!f) {
       return [];
     }
     return [
-      // { label: 'Valore rosa', value: f.valoreRosa },
-      { label: 'Imponibile fairplay finanziario', value: f.spesaAnnuale, warnNegative: true },
       { label: 'Bilancio stagionale', value: f.bilancioSocietarioStagionale, warnNegative: true },
     ];
   });

@@ -10,8 +10,9 @@ import { AuthService } from '../../core/services/auth.service';
 import { FinanceSection } from './sections/finance-section';
 import { HistorySection } from './sections/history-section';
 import { PlayersSection } from './sections/players-section';
+import { SvincolatiSection } from './sections/svincolati-section';
 
-export type SectionKey = 'players' | 'finance' | 'history';
+export type SectionKey = 'players' | 'svincolati' | 'finance' | 'history';
 
 /**
  * Shell della dashboard con layout responsive:
@@ -27,6 +28,7 @@ export type SectionKey = 'players' | 'finance' | 'history';
     MatTabsModule,
     RouterLink,
     PlayersSection,
+    SvincolatiSection,
     FinanceSection,
     HistorySection,
   ],

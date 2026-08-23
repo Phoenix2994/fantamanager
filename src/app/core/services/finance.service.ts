@@ -104,6 +104,12 @@ export class FinanceService {
       { merge: true },
     );
 
+    // valueBefore: valori precedenti dei soli campi modificati
+    const valueBefore: Record<string, number> = {};
+    for (const key of Object.keys(partial) as (keyof SeasonFinanceInputs)[]) {
+      valueBefore[key] = current?.[key] ?? 0;
+    }
+
     void this.audit.log({
       leagueId: environment.leagueId,
       teamId,
@@ -112,7 +118,7 @@ export class FinanceService {
       entityId: `${teamId}/${environment.season}`,
       operation: 'update',
       fieldModified: Object.keys(partial).join(', ') || '*',
-      valueBefore: null,
+      valueBefore,
       valueAfter: partial,
       changeSummary: 'Aggiornamento spese societarie',
     });
@@ -179,7 +185,12 @@ export class FinanceService {
       entityId: `${teamId}/${environment.season}`,
       operation: 'update',
       fieldModified: 'rimborsi, indennizzi',
-      valueBefore: null,
+      valueBefore: {
+        rimborsi: current?.rimborsi ?? 0,
+        ...(params.mese === 'settembre'
+          ? { indennizzoSettembre: current?.indennizzoSettembre ?? 0 }
+          : { indennizzoGennaio: current?.indennizzoGennaio ?? 0 }),
+      },
       valueAfter: { rimborso, indennizzo, mese: params.mese },
       changeSummary:
         `Rimborso ${player.name}: +${rimborso} € rimborsi, ` +
@@ -238,8 +249,8 @@ export class FinanceService {
       entityId: `${teamId}/${environment.season}`,
       operation: 'update',
       fieldModified: 'rinnovi',
-      valueBefore: null,
-      valueAfter: { rinnovo, perc: nuovaPercRinnovo },
+      valueBefore: { rinnovi: current?.rinnovi ?? 0 },
+      valueAfter: { rinnovi: merged.rinnovi, rinnovo, perc: nuovaPercRinnovo },
       changeSummary: `Rinnovo ${player.name}: +${rinnovo} € ai rinnovi`,
     });
 
@@ -301,8 +312,8 @@ export class FinanceService {
       entityId: `${teamId}/${environment.season}`,
       operation: 'update',
       fieldModified: campo,
-      valueBefore: null,
-      valueAfter: { importo },
+      valueBefore: { [campo]: current?.[campo] ?? 0 },
+      valueAfter: { [campo]: merged[campo], importo },
       changeSummary: `Acquisto ${nomeGiocatore}: +${importo} € a ${campo}`,
     });
   }

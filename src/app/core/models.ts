@@ -77,6 +77,24 @@ export interface LoanedPlayer {
   createdAt?: Timestamp | null;
 }
 
+/**
+ * Giocatore svincolato (presente nel listone fantacalcio.it ma non in
+ * nessuna rosa): league/{leagueId}/svincolati/{playerId}.
+ * Popolato automaticamente dallo script di aggiornamento quotazioni.
+ */
+export interface Svincolato {
+  id: string;
+  name: string;
+  /** ruolo mantra (Por, Dd, Dc, Ds, B, M, C, E, W, T, A, Pc) */
+  ruolo: string;
+  /** quotazione mantra attuale */
+  quotazioneAttuale: number;
+  /** sigla della squadra (es. INT, MIL) */
+  squadra: string;
+  season: string;
+  updatedAt?: Timestamp | null;
+}
+
 /** Squadra: teams/{teamId} */
 export interface Team {
   id: string;

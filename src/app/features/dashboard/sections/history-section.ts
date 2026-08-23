@@ -145,6 +145,11 @@ export class HistorySection {
     if (typeof value === 'number') {
       return Number.isInteger(value) ? String(value) : value.toFixed(2);
     }
+    if (typeof value === 'object') {
+      // Oggetti (es. {rinnovi: 100, perc: 0.85}): JSON compatto leggibile
+      const text = JSON.stringify(value);
+      return text.length > 60 ? text.slice(0, 57) + '…' : text;
+    }
     const text = String(value);
     return text.length > 40 ? text.slice(0, 37) + '…' : text;
   }
