@@ -4,17 +4,15 @@ import { map } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
 
 /**
- * Dalla pagina di login: se già autenticati come admin → redirect a /dashboard.
- * La dashboard è invece pubblicamente accessibile in sola lettura:
- * il login serve solo a chi vuole operare come admin.
+ * Dalla pagina di login: se già autenticati come ADMIN → redirect a /dashboard.
+ * Gli utenti anonimi (partecipanti all'asta) NON vengono reindirizzati:
+ * devono poter vedere il form per effettuare il login admin.
  */
 export const loginGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  return authService.isAuthenticated$.pipe(
-    map((isAuthenticated) =>
-      isAuthenticated ? router.createUrlTree(['/dashboard']) : true,
-    ),
+  return authService.isAdmin$.pipe(
+    map((isAdmin) => (isAdmin ? router.createUrlTree(['/dashboard']) : true)),
   );
 };

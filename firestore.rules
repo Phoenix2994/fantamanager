@@ -23,6 +23,11 @@ service cloud.firestore {
         allow read: if true;
         allow write: if isAuthenticated();
       }
+
+      match /svincolati/{playerId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
     }
 
     // Squadre e sottocollezioni (players, loanedPlayers, seasonFinance,
@@ -46,6 +51,15 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isAuthenticated();
       allow update, delete: if false;
+    }
+
+    // Asta live: lettura pubblica (vista TV),
+    // scrittura solo da utenti autenticati (admin o partecipanti anonimi).
+    // La validazione del prezzo crescente e del divieto di rilanciare
+    // due volte di fila avviene nella transaction client-side.
+    match /asta/{docId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
 
     // Configurazioni sensibili (es. hash password future):

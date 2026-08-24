@@ -1,11 +1,16 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { Svincolato } from '../../../core/models';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AstaStato, Svincolato } from '../../../core/models';
+import { AstaService } from '../../../core/services/asta.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { TeamService } from '../../../core/services/team.service';
 
 /** Normalizza per la ricerca: minuscole e senza accenti */
@@ -47,15 +52,39 @@ function splitRoles(ruolo: string): string[] {
  * Sezione "Svincolati": giocatori presenti nel listone fantacalcio.it
  * ma non in nessuna rosa. Filtri per nome e ruolo, ordinati per quotazione.
  * I giocatori possono avere fino a 3 ruoli (es. "M;C").
+ * Gli admin possono aprire l'asta live su un giocatore.
  */
 @Component({
   selector: 'app-svincolati-section',
-  imports: [DecimalPipe, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule],
+  imports: [
+    DecimalPipe,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatInputModule,
+    MatSelectModule,
+    RouterLink,
+  ],
   template: `
     <div class="section-header">
       <h2>Svincolati</h2>
-      <span class="count">{{ filtered().length }} giocatori</span>
+      <div class="header-actions">
+        @if (isAdmin()) {
+          <button matButton="tonal" (click)="apriAstaRandom()" [disabled]="filtered().length === 0">
+            <mat-icon>casino</mat-icon>
+            Apri asta random
+          </button>
+        }
+        <span class="count">{{ filtered().length }} giocatori</span>
+      </div>
     </div>
+
+    @if (astaAperta(); as s) {
+      <p class="asta-banner">
+        Asta in corso su <strong>{{ s.giocatoreNome }}</strong> —
+        <a routerLink="/asta">vai alla pagina asta</a>
+      </p>
+    }
 
     <div class="filters">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -95,6 +124,12 @@ function splitRoles(ruolo: string): string[] {
             </span>
             <span class="name">{{ p.name }}</span>
             <span class="team">{{ p.squadra }}</span>
+            @if (isAdmin()) {
+              <button matButton="tonal" class="auction-btn" (click)="apriAsta(p)">
+                <mat-icon>gavel</mat-icon>
+                Apri asta
+              </button>
+            }
             <span class="quota">{{ p.quotazioneAttuale | number: '1.0-0' }}</span>
           </li>
         }
@@ -115,9 +150,23 @@ function splitRoles(ruolo: string): string[] {
       font-size: 1.1rem;
     }
 
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .count {
       font-size: 0.85rem;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .asta-banner {
+      margin: 0 0 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--mat-sys-primary-container);
+      font-size: 0.9rem;
     }
 
     .filters {
@@ -177,6 +226,11 @@ function splitRoles(ruolo: string): string[] {
       white-space: nowrap;
     }
 
+    .auction-btn {
+      min-height: 40px;
+      flex-shrink: 0;
+    }
+
     .quota {
       font-weight: 700;
       color: var(--mat-sys-primary);
@@ -193,9 +247,24 @@ function splitRoles(ruolo: string): string[] {
 })
 export class SvincolatiSection {
   private readonly teamService = inject(TeamService);
+  private readonly astaService = inject(AstaService);
+  private readonly authService = inject(AuthService);
+  private readonly snackBar = inject(MatSnackBar);
 
   readonly svincolati = toSignal(this.teamService.svincolati$, {
     initialValue: [] as Svincolato[],
+  });
+
+  /** true se l'utente ha effettuato il login come admin (non anonimo) */
+  readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
+
+  /** Stato dell'asta: per mostrare il banner quando è aperta */
+  private readonly statoAsta = toSignal(this.astaService.stato$, {
+    initialValue: undefined as AstaStato | undefined,
+  });
+  readonly astaAperta = computed(() => {
+    const s = this.statoAsta();
+    return s && s.aperta ? s : null;
   });
 
   readonly filterRuolo = signal<string>('');
@@ -233,5 +302,27 @@ export class SvincolatiSection {
   /** Ruoli singoli di un giocatore, per i chip */
   rolesOf(player: Svincolato): string[] {
     return splitRoles(player.ruolo);
+  }
+
+  /** Apre l'asta live su un giocatore svincolato a caso */
+  async apriAstaRandom(): Promise<void> {
+    const candidati = this.filtered();
+    if (candidati.length === 0) {
+      return;
+    }
+    const scelto = candidati[Math.floor(Math.random() * candidati.length)];
+    await this.apriAsta(scelto);
+  }
+
+  /** Apre l'asta live sul giocatore scelto */
+  async apriAsta(giocatore: Svincolato): Promise<void> {
+    try {
+      await this.astaService.apriAsta(giocatore);
+      this.snackBar.open(`Asta aperta su ${giocatore.name}`, undefined, { duration: 3000 });
+    } catch {
+      this.snackBar.open('Errore durante l\u2019apertura dell\u2019asta', undefined, {
+        duration: 3000,
+      });
+    }
   }
 }

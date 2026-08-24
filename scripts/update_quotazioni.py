@@ -118,7 +118,9 @@ def fetch_quotazioni() -> list[dict]:
             qa_num = float(qa.replace(",", "."))
         except ValueError:
             continue
-        if not nome or qa_num <= 0:
+        # I giocatori con asterisco nel nome non sono svincolabili:
+        # vengono esclusi dalla lista quotazioni/svincolati
+        if not nome or qa_num <= 0 or "*" in nome:
             continue
         quotazioni.append(
             {"nome": nome, "squadra": squadra, "ruolo": ruolo, "qi": qi_num, "qa": qa_num}
@@ -251,10 +253,11 @@ def main() -> None:
         spesa = max(round_half_up(va * p["perc"], 1), 0.1)
         updated.append({**p, "qa_new": q["qa"], "va_new": va, "spesa_new": spesa})
 
-    # Svincolati: quote della fonte NON matchate da nessun giocatore del DB
+    # Svincolati: quote della fonte NON matchate da nessun giocatore del DB.
+    # Nome in MAIUSCOLO (come nella sezione squadre).
     svincolati = [
         {
-            "name": q["nome"],
+            "name": q["nome"].upper(),
             "ruolo": q["ruolo"],
             "quotazioneAttuale": q["qa"],
             "squadra": q["squadra"],

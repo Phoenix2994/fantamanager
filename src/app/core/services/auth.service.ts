@@ -3,6 +3,7 @@ import {
   Auth,
   User,
   authState,
+  signInAnonymously,
   signInWithEmailAndPassword,
   signOut,
 } from '@angular/fire/auth';
@@ -28,9 +29,17 @@ export class AuthService {
   /** Stato di autenticazione realtime (null = non autenticato) */
   readonly user$: Observable<User | null> = authState(this.auth);
 
-  /** true se c'è una sessione attiva */
+  /** true se c'è una sessione attiva (admin O anonimo) */
   readonly isAuthenticated$: Observable<boolean> = this.user$.pipe(
     map((user) => user !== null),
+  );
+
+  /**
+   * true solo per l'admin autenticato con email/password.
+   * Gli utenti anonimi (partecipanti all'asta) NON sono admin.
+   */
+  readonly isAdmin$: Observable<boolean> = this.user$.pipe(
+    map((user) => !!user && !user.isAnonymous),
   );
 
   /**
@@ -39,6 +48,15 @@ export class AuthService {
    */
   async login(password: string): Promise<void> {
     await signInWithEmailAndPassword(this.auth, environment.adminEmail, password);
+  }
+
+  /**
+   * Login anonimo per i partecipanti all'asta live.
+   * L'identità della squadra è scelta nella UI e salvata in localStorage:
+   * sufficiente per un gruppo di amici fidati (l'asta non è a prova di furto).
+   */
+  async loginAnonymous(): Promise<void> {
+    await signInAnonymously(this.auth);
   }
 
   /** Logout: termina la sessione */

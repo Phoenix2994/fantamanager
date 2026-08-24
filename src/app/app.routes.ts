@@ -15,5 +15,16 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/dashboard/dashboard').then((m) => m.Dashboard),
   },
+  {
+    // Asta live per i partecipanti (login anonimo + scelta squadra)
+    path: 'asta',
+    loadComponent: () =>
+      import('./features/asta/asta-page').then((m) => m.AstaPage),
+  },
+  {
+    // Vista TV dell'asta: sola lettura pubblica
+    path: 'tv',
+    loadComponent: () => import('./features/asta/tv-page').then((m) => m.TvPage),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

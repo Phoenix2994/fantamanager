@@ -95,6 +95,27 @@ export interface Svincolato {
   updatedAt?: Timestamp | null;
 }
 
+/**
+ * Stato corrente dell'asta live: asta/statoCorrente.
+ * Un solo documento: ogni rilancio è un update atomico (transaction).
+ */
+export interface AstaStato {
+  id: string;
+  /** true mentre il giocatore è in asta */
+  aperta: boolean;
+  giocatoreNome: string;
+  /** ruolo mantra (anche composto, es. "M;C") */
+  ruolo: string;
+  /** sigla della squadra del giocatore (es. INT, MIL) */
+  squadra: string;
+  /** quotazione mantra di partenza */
+  quotazione: number;
+  prezzoAttuale: number;
+  rilanciatoDaTeamId: string;
+  rilanciatoDaTeamName: string;
+  timestampUltimoRilancio?: Timestamp | null;
+}
+
 /** Squadra: teams/{teamId} */
 export interface Team {
   id: string;
