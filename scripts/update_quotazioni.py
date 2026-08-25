@@ -31,6 +31,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 SEASON = "2026-27"
 LEAGUE_ID = "main"
+DATABASE_ID = "(default)"
 URL = "https://www.fantacalcio.it/quotazioni-fantacalcio"
 
 KEY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "serviceAccountKey.json")
@@ -217,15 +218,57 @@ def main() -> None:
     except ImportError:
         sys.exit("ERRORE: installa firebase-admin -> py -3 -m pip install firebase-admin")
 
+    # Carica la service account: dal secret GitHub (env) o da file locale.
+    # Il secret a volte arriva con spazi/newline di troppo o apici: sanitizziamo
+    # prima del parse, e usiamo SEMPRE il project_id della chiave per creare
+    # un client Firestore esplicito (evita l'errore "Invalid database id").
     if os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
-        cred = credentials.Certificate(json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"]))
+        raw = os.environ["FIREBASE_SERVICE_ACCOUNT"].strip()
+        if (raw.startswith("'") and raw.endswith("'")) or (
+            raw.startswith('"') and raw.endswith('"')
+        ):
+            raw = raw[1:-1]
+        try:
+            info = json.loads(raw)
+        except json.JSONDecodeError:
+            # Secret salvato con newlines escape (\n letterali nel JSON)
+            info = json.loads(raw.replace("\\n", "\n"))
     elif os.path.exists(KEY_PATH):
-        cred = credentials.Certificate(KEY_PATH)
+        with open(KEY_PATH, encoding="utf-8") as f:
+            info = json.load(f)
     else:
         sys.exit("ERRORE: manca la service account (scripts/serviceAccountKey.json o in env).")
 
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
+    project_id = str(info.get("project_id", "")).strip()
+    if not project_id:
+        sys.exit("ERRORE: la service account non contiene 'project_id'.")
+
+    cred = credentials.Certificate(info)
+    firebase_admin.initialize_app(cred, {"projectId": project_id})
+    print(f"Progetto Firestore: {project_id}")
+
+    # Nota: alcune versioni di google-cloud-firestore (2.20.x) hanno un bug
+    # che codifica male il database "(default)" → INVALID_ARGUMENT
+    # "Invalid database id %28default%29". Creiamo quindi SEMPRE un client
+    # esplicito con progetto e database indicati.
+    from google.cloud.firestore import Client as FsClient
+
+    db = FsClient(
+        project=project_id,
+        credentials=cred.get_credential(),
+        database=DATABASE_ID,
+    )
+
+    # Verifica immediata della connessione con una lettura minima
+    try:
+        next(iter(db.collection("teams").limit(1).stream()), None)
+        print("Connessione a Firestore OK.")
+    except Exception as exc:
+        sys.exit(
+            f"ERRORE connessione Firestore ({exc}).\n"
+            "Verifica che il secret FIREBASE_SERVICE_ACCOUNT contenga il JSON "
+            "completo della chiave privata e che il progetto sia corretto."
+        )
 
     print("Fetch quotazioni...")
     quotes = fetch_quotazioni()
