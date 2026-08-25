@@ -312,7 +312,7 @@ export class FinanceSection {
   readonly entrate = ENTRATE;
   readonly uscite = USCITE;
 
-  readonly isAdmin = toSignal(this.authService.isAuthenticated$, { initialValue: false });
+  readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
   readonly editing = signal(false);
 
   financeForm: FinanceForm | null = null;

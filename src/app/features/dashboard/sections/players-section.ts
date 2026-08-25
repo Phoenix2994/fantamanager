@@ -463,10 +463,10 @@ function roleSortKey(ruolo: string): number {
       overflow: hidden;
     }
 
-    /* Giocatore fuori Serie A (non in alcun listone): evidenziazione rosa tenue */
+        /* Giocatore fuori Serie A (non in alcun listone): evidenziazione rosa più scura */
     .player-card.is-fuori-serie-a,
     tr.is-fuori-serie-a {
-      background: rgba(252, 185, 203, 0.18);
+      background: rgba(252, 185, 203, 0.40);
     }
 
     .card-head {
@@ -685,7 +685,7 @@ export class PlayersSection {
   );
 
   /** true se l'utente ha effettuato il login come admin */
-  readonly isAdmin = toSignal(this.authService.isAuthenticated$, { initialValue: false });
+  readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
   /** Colonne della tabella: la colonna azioni compare solo per gli admin */
   readonly displayedColumns = computed(() => [
@@ -927,14 +927,14 @@ export class PlayersSection {
       return;
     }
 
-    // Chiede se addebitare la rescissione (costo fisso di 1 €)
+    // Chiede se addebitare la rescissione (costo fisso di 1,50 €)
     const addebitaRescissione = await firstValueFrom(
       this.dialog
         .open(ConfirmDialog, {
           data: {
             title: 'Rescissione',
             message:
-              'Addebitare il costo di rescissione di 1,00 € alla voce Rescissioni?',
+              'Addebitare il costo di rescissione di 1,50 € alla voce Rescissioni?',
             confirmLabel: 'Sì, addebita',
           },
           width: '95vw',
@@ -951,9 +951,9 @@ export class PlayersSection {
         Math.round((this.valoreRosa() - (player.valoreAttuale || 0)) * 100) / 100;
 
       if (addebitaRescissione) {
-        await this.financeService.addRescissione(
+                await this.financeService.addRescissione(
           this.selectedTeamId()!,
-          1,
+          1.5,
           nuovaRosa,
         );
       }

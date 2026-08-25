@@ -12,9 +12,11 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { AstaStato, Team } from '../../core/models';
+import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
 import {
   AstaService,
   MAX_GIOCATORI,
@@ -83,12 +85,11 @@ interface TeamStat {
       <header class="asta-header">
         <h1>Asta live</h1>
         <span class="spacer"></span>
-        @if (isAdmin()) {
-          <a matButton routerLink="/dashboard">
-            <mat-icon>dashboard</mat-icon>
-            Dashboard
-          </a>
-        } @else {
+        <a matButton routerLink="/dashboard">
+          <mat-icon>dashboard</mat-icon>
+          Dashboard
+        </a>
+        @if (!isAdmin()) {
           <a matButton routerLink="/login">
             <mat-icon>admin_panel_settings</mat-icon>
             Accedi come admin
@@ -144,6 +145,19 @@ interface TeamStat {
                           <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
                           <mat-option value="acquistiMercatoInfrasettimanale">Asta infrasettimanale</mat-option>
                         </mat-select>
+                      </mat-form-field>
+
+                      <!-- Prezzo prevalorizzato al prezzo corrente, modificabile dall'admin -->
+                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                        <mat-label>Prezzo di assegnazione (€)</mat-label>
+                        <input
+                          matInput
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          [value]="assegnaPrezzo()"
+                          (input)="onPrezzoInput($any($event.target).valueAsNumber || 0)"
+                        />
                       </mat-form-field>
 
                       <div class="admin-actions">
@@ -370,6 +384,19 @@ interface TeamStat {
                     <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
                     <mat-option value="acquistiMercatoInfrasettimanale">Asta infrasettimanale</mat-option>
                   </mat-select>
+                </mat-form-field>
+
+                <!-- Prezzo prevalorizzato al prezzo corrente, modificabile dall'admin -->
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                  <mat-label>Prezzo di assegnazione (€)</mat-label>
+                  <input
+                    matInput
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    [value]="assegnaPrezzo()"
+                    (input)="onPrezzoInput($any($event.target).valueAsNumber || 0)"
+                  />
                 </mat-form-field>
 
                 <div class="admin-actions">
@@ -780,6 +807,21 @@ export class AstaPage {
   readonly assegnaA = signal<string>('');
   readonly provenienza = signal<ProvenienzaAsta>('acquistiAstaSettembre');
 
+  /**
+   * Prezzo con cui assegnare il giocatore: prevalorizzato al prezzo corrente
+   * dell'asta e modificabile dall'admin prima della conferma.
+   */
+  readonly assegnaPrezzo = signal(0);
+  /** true dopo la prima modifica manuale del prezzo: smette di seguire il live */
+  private readonly prezzoModificato = signal(false);
+  /** Giocatore attualmente all'asta: al cambio si resetta il prezzo */
+  private readonly giocatoreCorrente = signal<string | null>(null);
+
+  onPrezzoInput(value: number): void {
+    this.prezzoModificato.set(true);
+    this.assegnaPrezzo.set(value);
+  }
+
   /** Rilancio custom (importo libero) */
   readonly customBid = signal<number>(0);
 
@@ -803,6 +845,24 @@ export class AstaPage {
       const s = this.stato();
       if (s?.aperta && s.rilanciatoDaTeamId) {
         this.assegnaA.set(s.rilanciatoDaTeamId);
+      }
+    });
+
+    // Al cambio di giocatore all'asta: reset del prezzo manuale
+    effect(() => {
+      const s = this.stato();
+      const nome = s?.aperta ? s.giocatoreNome : null;
+      if (nome !== this.giocatoreCorrente()) {
+        this.giocatoreCorrente.set(nome);
+        this.prezzoModificato.set(false);
+      }
+    });
+
+    // Finché l'admin non modifica manualmente il campo, il prezzo di
+    // assegnazione segue il prezzo corrente dell'asta
+    effect(() => {
+      if (!this.prezzoModificato()) {
+        this.assegnaPrezzo.set(this.stato()?.prezzoAttuale ?? 0);
       }
     });
   }
@@ -899,8 +959,13 @@ export class AstaPage {
       return;
     }
     const team = this.teams().find((t) => t.id === teamId);
+    // Only admins can assign a winning player
+    if (!this.isAdmin()) {
+      this.snackBar.open('Solo amministratore può assegnare il vincitore', undefined, { duration: 3000 });
+      return;
+    }
     try {
-      await this.astaService.assegna(teamId, team?.name ?? '', this.provenienza());
+      await this.astaService.assegna(teamId, team?.name ?? '', this.provenienza(), this.assegnaPrezzo());
       this.snackBar.open('Giocatore assegnato', undefined, { duration: 3000 });
     } catch (e) {
       this.snackBar.open(

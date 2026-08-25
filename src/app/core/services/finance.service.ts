@@ -326,7 +326,7 @@ export class FinanceService {
 
   /**
    * Somma un importo alla voce Rescissioni (es. costo fisso di rescissione
-   * di 1 € all'eliminazione di un giocatore) e ricalcola tutti i derivati.
+   * di 1,50 € all'eliminazione di un giocatore) e ricalcola tutti i derivati.
    */
   async addRescissione(teamId: string, importo: number, valoreRosa: number): Promise<void> {
     const snap = await getDoc(this.financeRef(teamId));

@@ -170,24 +170,28 @@ export class AstaService {
     teamId: string,
     teamName: string,
     provenienza: ProvenienzaAsta,
+    prezzo?: number,
   ): Promise<void> {
     const stato = await this.getStato();
     if (!stato || !stato.aperta) {
       throw new Error('L\u2019asta non \u00e8 aperta');
     }
 
+    // Usa il prezzo specificato o quello corrente dell'asta
+    const prezzoDaUsare = prezzo ?? stato.prezzoAttuale;
+
     // 1. Crea il giocatore nella rosa del team vincitore
     const input: PlayerInput = {
       name: stato.giocatoreNome,
       ruolo: stato.ruolo,
       contractType: 'TITOLO DEFINITIVO',
-      acquistoRinnovoSpesa: stato.prezzoAttuale,
+      acquistoRinnovoSpesa: prezzoDaUsare,
       // Il primo rinnovo sarà all'85% del valore attuale
       prossimaPercRinnovo: 0.85,
       // Q.I. = Q.A. = quotazione al momento dell'acquisto
       quotazioneIniziale: stato.quotazione,
       quotazioneAttuale: stato.quotazione,
-      valoreIniziale: stato.prezzoAttuale,
+      valoreIniziale: prezzoDaUsare,
     };
     await this.teamService.addPlayer(teamId, input);
 
@@ -205,7 +209,7 @@ export class AstaService {
     await this.financeService.addAcquisto(
       teamId,
       provenienza,
-      stato.prezzoAttuale,
+      prezzoDaUsare,
       nuovaRosa,
       stato.giocatoreNome,
     );
@@ -229,10 +233,10 @@ export class AstaService {
       operation: 'create',
       fieldModified: 'asta',
       valueBefore: null,
-      valueAfter: { prezzo: stato.prezzoAttuale, provenienza },
+      valueAfter: { prezzo: prezzoDaUsare, provenienza },
       changeSummary:
         `Assegnazione asta: ${stato.giocatoreNome} a ${teamName} ` +
-        `per ${stato.prezzoAttuale} €`,
+        `per ${prezzoDaUsare} €`,
     });
   }
 

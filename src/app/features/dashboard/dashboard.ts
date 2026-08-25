@@ -47,7 +47,7 @@ export class Dashboard {
   readonly leagueName = environment.leagueName;
 
   /** true se l'utente ha effettuato il login come admin */
-  readonly isAdmin = toSignal(this.authService.isAuthenticated$, {
+  readonly isAdmin = toSignal(this.authService.isAdmin$, {
     initialValue: false,
   });
 
