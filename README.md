@@ -19,6 +19,9 @@ src/app/
     models.ts                  # Interfacce Firestore (Player, Team, SeasonFinance, AuditLog…)
     finance-calculator.ts      # Formule pure: V.A., tasse a scaglioni, spese, bilanci
     guards/auth.guard.ts       # loginGuard (redirect se già autenticati)
+    nav/
+      nav-menu.ts              # Menù di navigazione principale (hamburger): Dashboard/Svincolati/Asta/Scambi
+      page-shell.scss          # Stili condivisi delle pagine semplici (svincolati, scambi)
     services/
       auth.service.ts          # Login con password condivisa (account Firebase unico)
       team.service.ts          # CRUD squadre/giocatori/prestiti (realtime)
@@ -30,8 +33,12 @@ src/app/
     dashboard/                 # Shell responsive (desktop 3 col / tablet 2 col / mobile bottom-nav)
       sections/
         players-section.ts     # Rosa: filtri, ricerca fuzzy, tabella, prestiti
+        svincolati-section.ts  # Svincolati (usato in dashboard e nella pagina dedicata)
         finance-section.ts     # Pannello spese (entrate/uscite/calcolati)
         history-section.ts     # Storico operazioni (auditLog)
+    svincolati/                # Pagina dedicata /svincolati (voce del menù)
+    asta/                      # Asta live /asta + vista TV /tv
+    scambi/                    # Scambi tra squadre /scambi (placeholder)
 firestore.rules                # Security rules Firestore
 firestore.indexes.json         # Indici compositi (auditLog)
 firebase.json                  # Config Firebase CLI (rules + hosting)
@@ -83,6 +90,39 @@ firebase deploy --only firestore:rules,firestore:indexes
 | `npm start` | Dev server su http://localhost:4200 |
 | `npm run build` | Build di produzione in `dist/fantamanager/browser` |
 | `npm test` | Unit test (Karma) |
+
+## Backup di Firestore (gratuito)
+
+Le "Scheduled Backups" native richiedono il piano Blaze (carta di credito):
+qui si usa invece **GitHub Actions** (gratuito sui repo pubblici) con uno
+script Python + firebase-admin, lo stesso stack del workflow quotazioni.
+
+- **Workflow**: `.github/workflows/backup-firestore.yml` — cron giornaliero
+  alle 02:30 UTC (+ lancio manuale dal tab Actions → *Run workflow*)
+- **Script**: `scripts/backup_firestore.py` esporta ricorsivamente tutte le
+  collection/subcollection in un JSON con metadati
+- **Destinazione**: branch [`data-backups`](../../tree/data-backups), cartella
+  `backups/`, con retention degli ultimi 90 snapshot (~3 mesi)
+- **Segreto**: usa `FIREBASE_SERVICE_ACCOUNT`, lo stesso già configurato
+
+Backup manuale locale:
+
+```bash
+py -3 -m pip install firebase-admin "google-cloud-firestore>=2.19,<2.20"
+py -3 scripts/backup_firestore.py   # -> backups/firestore-<timestamp>.json
+```
+
+Ripristino (prima sempre in dry-run):
+
+```bash
+py -3 scripts/restore_firestore.py backups/firestore-<ts>.json          # dry-run
+py -3 scripts/restore_firestore.py backups/firestore-<ts>.json --write  # scrive
+```
+
+> Nota: i costi sono zero (letture nel free tier Firestore, Actions gratuiti,
+> repo GitHub come storage). I dati sono già pubblici in lettura secondo
+> `firestore.rules`, quindi il branch dei backup non espone nulla di nuovo;
+> la service account resta nei Secrets e mai nel repository.
 
 ## Modello dati (Firestore)
 

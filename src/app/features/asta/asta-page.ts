@@ -16,7 +16,15 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { AstaStato, Team } from '../../core/models';
-import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
+import {
+  AstaStatsPanel,
+  estraiAcquistiAsta,
+  TeamStatAsta,
+} from './asta-stats-panel';
+import {
+  ConfirmAssegnazioneDialog,
+  ConfirmAssegnazioneData,
+} from './confirm-assegnazione-dialog';
 import {
   AstaService,
   MAX_GIOCATORI,
@@ -24,6 +32,7 @@ import {
   ProvenienzaAsta,
 } from '../../core/services/asta.service';
 import { AuthService } from '../../core/services/auth.service';
+import { NavMenu } from '../../core/nav/nav-menu';
 import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
 
@@ -49,12 +58,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 /** Statistica di una squadra per il pannello dell'asta */
-interface TeamStat {
-  id: string;
-  name: string;
-  giocatori: number;
-  bilancio: number;
-}
+type TeamStat = TeamStatAsta;
 
 /**
  * Pagina dell'asta live per i partecipanti (/asta).
@@ -79,16 +83,15 @@ interface TeamStat {
     MatSelectModule,
     MatTabsModule,
     RouterLink,
+    NavMenu,
+    AstaStatsPanel,
   ],
   template: `
     <div class="asta-page">
       <header class="asta-header">
+        <app-nav-menu />
         <h1>Asta live</h1>
         <span class="spacer"></span>
-        <a matButton routerLink="/dashboard">
-          <mat-icon>dashboard</mat-icon>
-          Dashboard
-        </a>
         @if (!isAdmin()) {
           <a matButton routerLink="/login">
             <mat-icon>admin_panel_settings</mat-icon>
@@ -294,19 +297,7 @@ interface TeamStat {
                 @if (stats().length === 0) {
                   <p class="empty-state">Caricamento statistiche…</p>
                 } @else {
-                  <div class="stats-list">
-                    @for (t of stats(); track t.id) {
-                      <div class="stat-row">
-                        <span class="stat-name">{{ t.name }}</span>
-                        <span class="stat-count" [class.full]="t.giocatori >= 28">
-                          {{ t.giocatori }}/28
-                        </span>
-                        <span class="stat-bilancio" [class.negative]="t.bilancio < 0">
-                          {{ t.bilancio | number: '1.2-2' }} €
-                        </span>
-                      </div>
-                    }
-                  </div>
+                  <app-asta-stats-panel [stats]="stats()" />
                 }
               </mat-card>
             </div>
@@ -324,19 +315,7 @@ interface TeamStat {
           @if (stats().length === 0) {
             <p class="empty-state">Caricamento statistiche…</p>
           } @else {
-            <div class="stats-list">
-              @for (t of stats(); track t.id) {
-                <div class="stat-row">
-                  <span class="stat-name">{{ t.name }}</span>
-                  <span class="stat-count" [class.full]="t.giocatori >= 28">
-                    {{ t.giocatori }}/28
-                  </span>
-                  <span class="stat-bilancio" [class.negative]="t.bilancio < 0">
-                    {{ t.bilancio | number: '1.2-2' }} €
-                  </span>
-                </div>
-              }
-            </div>
+            <app-asta-stats-panel [stats]="stats()" />
           }
         </mat-card>
 
@@ -580,49 +559,6 @@ interface TeamStat {
       margin-bottom: 16px;
     }
 
-    .stats-list {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .stat-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 0;
-      border-bottom: 1px dashed var(--mat-sys-outline-variant);
-      font-size: 0.875rem;
-    }
-
-    .stat-name {
-      flex: 1;
-      font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .stat-count {
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    .stat-count.full {
-      color: var(--mat-sys-error);
-    }
-
-    .stat-bilancio {
-      font-weight: 600;
-      color: var(--mat-sys-primary);
-      white-space: nowrap;
-      min-width: 80px;
-      text-align: right;
-    }
-
-    .stat-bilancio.negative {
-      color: var(--mat-sys-error);
-    }
-
     .giocatore-box {
       display: flex;
       flex-direction: column;
@@ -763,6 +699,7 @@ export class AstaPage {
   );
 
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
+  private readonly dialog = inject(MatDialog);
 
   readonly stato = toSignal(this.astaService.stato$, { initialValue: undefined as AstaStato | undefined });
 
@@ -793,6 +730,7 @@ export class AstaPage {
                     name: team.name,
                     giocatori: players.length,
                     bilancio: finance?.bilancioSocietarioStagionale ?? 0,
+                    acquisti: estraiAcquistiAsta(players),
                   })),
                 ),
               ),
@@ -964,6 +902,33 @@ export class AstaPage {
       this.snackBar.open('Solo amministratore può assegnare il vincitore', undefined, { duration: 3000 });
       return;
     }
+
+    // Modale di conferma: riepilogo squadra vincitrice e cifra finale
+    // prima di finalizzare l'assegnazione (operazione non reversibile)
+    const stato = this.stato();
+    const data: ConfirmAssegnazioneData = {
+      giocatoreNome: stato?.giocatoreNome ?? '',
+      squadra: stato?.squadra,
+      teamName: team?.name ?? '',
+      prezzo: this.assegnaPrezzo(),
+      provenienzaLabel:
+        this.provenienza() === 'acquistiAstaSettembre'
+          ? 'Asta settembre'
+          : 'Asta infrasettimanale',
+    };
+    const confirmed = await firstValueFrom(
+      this.dialog
+        .open(ConfirmAssegnazioneDialog, {
+          data,
+          width: '95vw',
+          maxWidth: '420px',
+        })
+        .afterClosed(),
+    );
+    if (!confirmed) {
+      return;
+    }
+
     try {
       await this.astaService.assegna(teamId, team?.name ?? '', this.provenienza(), this.assegnaPrezzo());
       this.snackBar.open('Giocatore assegnato', undefined, { duration: 3000 });

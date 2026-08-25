@@ -8,6 +8,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { combineLatest, of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { AstaStato, Team } from '../../core/models';
 
 /** Colore del bordo/chip per gruppo di ruolo */
@@ -27,7 +29,13 @@ const ROLE_COLORS: Record<string, string> = {
 };
 import { AstaService, ProvenienzaAsta } from '../../core/services/asta.service';
 import { AuthService } from '../../core/services/auth.service';
+import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
+import {
+  AstaStatsPanel,
+  estraiAcquistiAsta,
+  TeamStatAsta,
+} from './asta-stats-panel';
 
 /**
  * Vista TV dell'asta live (/tv): display in grande aggiornato realtime.
@@ -45,6 +53,7 @@ import { TeamService } from '../../core/services/team.service';
     MatIconModule,
     MatSelectModule,
     RouterLink,
+    AstaStatsPanel,
   ],
   template: `
     <div class="tv">
@@ -55,7 +64,8 @@ import { TeamService } from '../../core/services/team.service';
           Accedi come admin
         </a>
       }
-      <div class="main">
+      <div class="stage">
+        <div class="main">
         @if (stato(); as s) {
           @if (s.aperta) {
             <div class="content">
@@ -94,6 +104,16 @@ import { TeamService } from '../../core/services/team.service';
             <div class="waiting-text">In attesa dell'asta…</div>
           </div>
         }
+        </div>
+
+        <!-- Statistiche asta (solo desktop): squadre con acquisti per esteso -->
+        <aside class="tv-stats">
+          <h2>
+            <mat-icon>bar_chart</mat-icon>
+            Statistiche asta
+          </h2>
+          <app-asta-stats-panel [stats]="stats()" [sempreAperto]="true" [colonne]="true" />
+        </aside>
       </div>
 
       <!-- Pannello admin: visibile solo all'admin autenticato -->
@@ -159,6 +179,36 @@ import { TeamService } from '../../core/services/team.service';
 
     .main {
       width: 100%;
+    }
+
+    /* Stage: giocatore in alto, statistiche sotto */
+    .stage {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      max-width: 1700px;
+    }
+
+    /* Statistiche sotto il giocatore: una colonna per squadra,
+       con scorrimento orizzontale se non entrano nello schermo */
+    .tv-stats {
+      width: 100%;
+      text-align: left;
+      padding: 20px 24px;
+      border-radius: 16px;
+      background: var(--mat-sys-surface-container, #fff);
+      box-sizing: border-box;
+      overflow-x: auto;
+    }
+
+    .tv-stats h2 {
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.25rem;
     }
 
     .content {
@@ -265,6 +315,7 @@ export class TvPage {
   private readonly astaService = inject(AstaService);
   private readonly authService = inject(AuthService);
   private readonly teamService = inject(TeamService);
+  private readonly financeService = inject(FinanceService);
   private readonly snackBar = inject(MatSnackBar);
 
   readonly stato = toSignal(this.astaService.stato$, {
@@ -275,6 +326,39 @@ export class TvPage {
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
+
+  /**
+   * Statistiche di tutte le squadre: giocatori su 28, bilancio e acquisti
+   * fatti durante l'asta (stessa pipeline della pagina /asta).
+   *
+   * Usa combineLatest (NON forkJoin): gli osservabili Firestore non
+   * completano mai, quindi forkJoin non emetterebbe mai nulla.
+   */
+  readonly stats = toSignal(
+    this.teamService.teams$.pipe(
+      switchMap((teams) =>
+        teams.length
+          ? combineLatest(
+              teams.map((team) =>
+                combineLatest([
+                  this.teamService.players$(team.id),
+                  this.financeService.seasonFinance$(team.id),
+                ]).pipe(
+                  map(([players, finance]) => ({
+                    id: team.id,
+                    name: team.name,
+                    giocatori: players.length,
+                    bilancio: finance?.bilancioSocietarioStagionale ?? 0,
+                    acquisti: estraiAcquistiAsta(players),
+                  })),
+                ),
+              ),
+            )
+          : of([] as TeamStatAsta[]),
+      ),
+    ),
+    { initialValue: [] as TeamStatAsta[] },
+  );
 
   readonly assegnaA = signal<string>('');
   readonly provenienza = signal<ProvenienzaAsta>('acquistiAstaSettembre');

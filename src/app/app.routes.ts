@@ -22,6 +22,18 @@ export const routes: Routes = [
       import('./features/asta/asta-page').then((m) => m.AstaPage),
   },
   {
+    // Calciatori svincolati a schermo intero (voce del menù di navigazione)
+    path: 'svincolati',
+    loadComponent: () =>
+      import('./features/svincolati/svincolati-page').then((m) => m.SvincolatiPage),
+  },
+  {
+    // Scambi tra squadre: placeholder in attesa della definizione della sezione
+    path: 'scambi',
+    loadComponent: () =>
+      import('./features/scambi/scambi-page').then((m) => m.ScambiPage),
+  },
+  {
     // Vista TV dell'asta: sola lettura pubblica
     path: 'tv',
     loadComponent: () => import('./features/asta/tv-page').then((m) => m.TvPage),

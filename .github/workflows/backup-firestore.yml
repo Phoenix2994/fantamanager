@@ -1,0 +1,92 @@
+name: Backup Firestore
+
+# Backup periodico GRATUITO del database Firestore:
+# - le "Scheduled Backups" native di Firestore richiedono il piano Blaze
+#   (carta di credito), questa soluzione no;
+# - GitHub Actions e' gratuito sui repository pubblici;
+# - il JSON di backup viene committato sul branch `data-backups`
+#   (i dati sono gia' pubblici in lettura secondo firestore.rules);
+# - la service account arriva dal secret FIREBASE_SERVICE_ACCOUNT,
+#   lo stesso gia' usato da update-quotazioni.yml.
+#
+# Ripristino manuale in caso di disastro:
+#   py -3 scripts/restore_firestore.py backups/firestore-<ts>.json --dry-run
+#   (vedere il branch data-backups per i file disponibili)
+
+on:
+  schedule:
+    # 03:30 CET = 02:30 UTC (02:30 CEST durante l'ora legale).
+    # GitHub Actions usa sempre UTC per i cron.
+    - cron: '30 2 * * 2' # backup giornaliero alle 03:30 CET
+  workflow_dispatch: # Lancio manuale dal tab Actions
+
+permissions:
+  contents: write # Necessario per pushare sul branch data-backups
+
+jobs:
+  backup-firestore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installa dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          # Stesso pin di update-quotazioni.yml: le 2.20.x hanno il bug
+          # INVALID_ARGUMENT "Invalid database id"
+          pip install firebase-admin "google-cloud-firestore>=2.19,<2.20"
+
+      - name: Esporta Firestore su JSON
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python scripts/backup_firestore.py \
+            --out /tmp/backup/firestore-backup.json
+          echo "BACKUP_FILE=/tmp/backup/firestore-backup.json" >> "$GITHUB_ENV"
+
+      - name: Committa il backup sul branch data-backups
+        run: |
+          BACKUP_BRANCH=data-backups
+          KEEP_BACKUPS=90 # retention: ~3 mesi di backup giornalieri
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Partiamo dalla testa del branch dei backup se esiste, altrimenti da main
+          git fetch origin "$BACKUP_BRANCH" --depth=50 || true
+          BASE=$(git rev-parse "origin/$BACKUP_BRANCH" 2>/dev/null || git rev-parse HEAD)
+          git switch --force-create "$BACKUP_BRANCH" "$BASE"
+
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          mkdir -p backups
+          mv "$BACKUP_FILE" "backups/firestore-$TS.json"
+
+          # Retention: elimina i backup piu' vecchi oltre KEEP_BACKUPS
+          ls -1t backups/firestore-*.json 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r git rm -q -- || true
+
+          git add backups
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da committare (backup vuoto o identico)."
+            exit 0
+          fi
+          git commit -m "chore(backup): snapshot Firestore $TS [skip ci]"
+          git push origin "$BACKUP_BRANCH"
+
+      - name: Riepilogo
+        run: |
+          echo "### Backup Firestore completato" >> "$GITHUB_STEP_SUMMARY"
+          python - <<'EOF'
+          import json, os
+          with open(os.environ["BACKUP_FILE"], encoding="utf-8") as f:
+              meta = json.load(f)["_meta"]
+          print(f"- Progetto: `{meta['project']}`")
+          print(f"- Documenti totali: **{meta['totalDocuments']}**")
+          for cid, n in sorted(meta["collections"].items()):
+              print(f"  - `{cid}`: {n} documenti")
+          EOF

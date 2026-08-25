@@ -7,6 +7,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
+import { NavMenu } from '../../core/nav/nav-menu';
 import { FinanceSection } from './sections/finance-section';
 import { HistorySection } from './sections/history-section';
 import { PlayersSection } from './sections/players-section';
@@ -27,6 +28,7 @@ export type SectionKey = 'players' | 'svincolati' | 'finance' | 'history';
     MatIconModule,
     MatTabsModule,
     RouterLink,
+    NavMenu,
     PlayersSection,
     SvincolatiSection,
     FinanceSection,

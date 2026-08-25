@@ -44,3 +44,10 @@ Thumbs.db
 
 # Credenziali Firebase (MAI committare!)
 scripts/serviceAccountKey.json
+
+# Snapshot Firestore locali (vanno solo sul branch data-backups)
+/backups
+
+# Bytecode Python
+scripts/__pycache__/
+

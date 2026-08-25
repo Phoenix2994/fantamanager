@@ -1,5 +1,6 @@
 <div class="dashboard">
   <header class="app-header">
+    <app-nav-menu />
     <mat-icon class="header-logo" aria-hidden="true">sports_soccer</mat-icon>
     <h1 class="app-title">{{ leagueName }}</h1>
     <span class="spacer"></span>
@@ -20,7 +21,7 @@
     <main class="content desktop">
       <section class="panel">
         <app-players-section />
-        <app-svincolati-section />
+        <!--<app-svincolati-section />-->
       </section>
       <section class="panel">
         <app-finance-section />
@@ -85,14 +86,14 @@
         <mat-icon>groups</mat-icon>
         <span>Rosa</span>
       </button>
-      <button
+      <!--<button
         type="button"
         [class.active]="activeSection() === 'svincolati'"
         (click)="selectSection('svincolati')"
       >
         <mat-icon>person_search</mat-icon>
         <span>Svincolati</span>
-      </button>
+      </button>-->
       <button
         type="button"
         [class.active]="activeSection() === 'finance'"
