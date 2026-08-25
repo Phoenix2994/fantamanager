@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
 import {
   Firestore,
@@ -48,6 +48,8 @@ export class FinanceService {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(Auth);
   private readonly audit = inject(AuditService);
+  /** Necessario per chiamare le API Firebase fuori dal contesto di injection */
+  private readonly injector = inject(Injector);
 
   /** Scaglioni fiscali da Firestore, con fallback ai valori default dell'Excel */
   readonly taxBrackets$: Observable<TaxBracket[]> = collectionData(
@@ -65,7 +67,11 @@ export class FinanceService {
 
   /** Documento spese della stagione corrente per una squadra */
   seasonFinance$(teamId: string): Observable<SeasonFinance | undefined> {
-    return docData(this.financeRef(teamId)) as Observable<SeasonFinance | undefined>;
+    // Query dinamica: va eseguita dentro un injection context (vedi TeamService)
+    return runInInjectionContext(
+      this.injector,
+      () => docData(this.financeRef(teamId)) as Observable<SeasonFinance | undefined>,
+    );
   }
 
   /**
@@ -315,6 +321,52 @@ export class FinanceService {
       valueBefore: { [campo]: current?.[campo] ?? 0 },
       valueAfter: { [campo]: merged[campo], importo },
       changeSummary: `Acquisto ${nomeGiocatore}: +${importo} € a ${campo}`,
+    });
+  }
+
+  /**
+   * Somma un importo alla voce Rescissioni (es. costo fisso di rescissione
+   * di 1 € all'eliminazione di un giocatore) e ricalcola tutti i derivati.
+   */
+  async addRescissione(teamId: string, importo: number, valoreRosa: number): Promise<void> {
+    const snap = await getDoc(this.financeRef(teamId));
+    const current = snap.data() as SeasonFinance | undefined;
+
+    const merged: SeasonFinanceInputs = {
+      ...EMPTY_FINANCE_INPUTS,
+      ...(current ?? {}),
+      rescissioni: (current?.rescissioni ?? 0) + importo,
+    };
+
+    const computed = ricalcolaFinance(
+      merged,
+      this.bracketsCache,
+      valoreRosa,
+      current?.taxMinimumHistoric ?? 0,
+    );
+
+    await setDoc(
+      this.financeRef(teamId),
+      {
+        ...merged,
+        ...computed,
+        updatedAt: serverTimestamp(),
+        updatedBy: this.auth.currentUser?.uid ?? 'unknown',
+      },
+      { merge: true },
+    );
+
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'seasonFinance',
+      entityId: `${teamId}/${environment.season}`,
+      operation: 'update',
+      fieldModified: 'rescissioni',
+      valueBefore: { rescissioni: current?.rescissioni ?? 0 },
+      valueAfter: { rescissioni: merged.rescissioni, importo },
+      changeSummary: `Rescissione: +${importo} € alle rescissioni`,
     });
   }
 

@@ -25,9 +25,12 @@
       <section class="panel">
         <app-finance-section />
       </section>
-      <section class="panel">
-        <app-history-section />
-      </section>
+      <!-- Storico visibile solo agli admin -->
+      @if (isAdmin()) {
+        <section class="panel">
+          <app-history-section />
+        </section>
+      }
     </main>
   } @else if (isTablet()) {
     <!-- Tablet (640–1024px): giocatori a sinistra, tab spese/storico a destra -->
@@ -43,9 +46,12 @@
           <mat-tab label="Svincolati">
             <app-svincolati-section />
           </mat-tab>
-          <mat-tab label="Storico">
-            <app-history-section />
-          </mat-tab>
+          <!-- Storico visibile solo agli admin -->
+          @if (isAdmin()) {
+            <mat-tab label="Storico">
+              <app-history-section />
+            </mat-tab>
+          }
         </mat-tab-group>
       </section>
     </main>
@@ -63,7 +69,10 @@
           <app-finance-section />
         }
         @case ('history') {
-          <app-history-section />
+          <!-- Storico visibile solo agli admin -->
+          @if (isAdmin()) {
+            <app-history-section />
+          }
         }
       }
     </main>
@@ -92,14 +101,17 @@
         <mat-icon>euro</mat-icon>
         <span>Spese</span>
       </button>
-      <button
-        type="button"
-        [class.active]="activeSection() === 'history'"
-        (click)="selectSection('history')"
-      >
-        <mat-icon>history</mat-icon>
-        <span>Storico</span>
-      </button>
+      <!-- Storico visibile solo agli admin -->
+      @if (isAdmin()) {
+        <button
+          type="button"
+          [class.active]="activeSection() === 'history'"
+          (click)="selectSection('history')"
+        >
+          <mat-icon>history</mat-icon>
+          <span>Storico</span>
+        </button>
+      }
     </nav>
   }
 </div>

@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
 import {
   Auth,
   User,
@@ -25,6 +25,8 @@ import { environment } from '../../../environments/environment';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly auth = inject(Auth);
+  /** Necessario per chiamare le API Firebase fuori dal contesto di injection */
+  private readonly injector = inject(Injector);
 
   /** Stato di autenticazione realtime (null = non autenticato) */
   readonly user$: Observable<User | null> = authState(this.auth);
@@ -47,7 +49,9 @@ export class AuthService {
    * Lancia un errore (auth/invalid-credential ecc.) se la password è errata.
    */
   async login(password: string): Promise<void> {
-    await signInWithEmailAndPassword(this.auth, environment.adminEmail, password);
+    await runInInjectionContext(this.injector, () =>
+      signInWithEmailAndPassword(this.auth, environment.adminEmail, password),
+    );
   }
 
   /**
@@ -56,7 +60,7 @@ export class AuthService {
    * sufficiente per un gruppo di amici fidati (l'asta non è a prova di furto).
    */
   async loginAnonymous(): Promise<void> {
-    await signInAnonymously(this.auth);
+    await runInInjectionContext(this.injector, () => signInAnonymously(this.auth));
   }
 
   /** Logout: termina la sessione */

@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
 import {
   Firestore,
@@ -45,6 +45,8 @@ export class TeamService {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(Auth);
   private readonly audit = inject(AuditService);
+  /** Necessario per chiamare le API Firebase fuori dal contesto di injection */
+  private readonly injector = inject(Injector);
 
   /** Tutte le squadre della lega (10) */
   readonly teams$: Observable<Team[]> = collectionData(
@@ -59,10 +61,17 @@ export class TeamService {
 
   /** Giocatori della rosa di una squadra (stagione corrente) */
   players$(teamId: string): Observable<Player[]> {
-    return collectionData(
-      collection(this.firestore, `${this.seasonPath(teamId)}/players`),
-      { idField: 'id' },
-    ) as Observable<Player[]>;
+    // Le query dinamiche vanno eseguite dentro un injection context:
+    // AngularFire usa inject() internamente e fuori contesto destabilizza
+    // il change detection (errori mat-form-field a ripetizione).
+    return runInInjectionContext(
+      this.injector,
+      () =>
+        collectionData(
+          collection(this.firestore, `${this.seasonPath(teamId)}/players`),
+          { idField: 'id' },
+        ) as Observable<Player[]>,
+    );
   }
 
   /** Giocatori svincolati (listone fantacalcio.it non in rosa) */
@@ -73,10 +82,14 @@ export class TeamService {
 
   /** Giocatori ceduti in prestito da una squadra (stagione corrente) */
   loanedPlayers$(teamId: string): Observable<LoanedPlayer[]> {
-    return collectionData(
-      collection(this.firestore, `${this.seasonPath(teamId)}/loanedPlayers`),
-      { idField: 'id' },
-    ) as Observable<LoanedPlayer[]>;
+    return runInInjectionContext(
+      this.injector,
+      () =>
+        collectionData(
+          collection(this.firestore, `${this.seasonPath(teamId)}/loanedPlayers`),
+          { idField: 'id' },
+        ) as Observable<LoanedPlayer[]>,
+    );
   }
 
   /** Crea un nuovo giocatore nella rosa della stagione corrente */

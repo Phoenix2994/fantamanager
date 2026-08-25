@@ -2,17 +2,27 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { combineLatest, firstValueFrom, of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTabsModule } from '@angular/material/tabs';
 import { AstaStato, Team } from '../../core/models';
-import { AstaService, ProvenienzaAsta } from '../../core/services/asta.service';
+import {
+  AstaService,
+  MAX_GIOCATORI,
+  minIncremento,
+  ProvenienzaAsta,
+} from '../../core/services/asta.service';
 import { AuthService } from '../../core/services/auth.service';
+import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
 
 const STORAGE_KEY = 'asta.miaSquadra';
@@ -36,12 +46,23 @@ const ROLE_COLORS: Record<string, string> = {
   Pc: '#c62828',
 };
 
+/** Statistica di una squadra per il pannello dell'asta */
+interface TeamStat {
+  id: string;
+  name: string;
+  giocatori: number;
+  bilancio: number;
+}
+
 /**
  * Pagina dell'asta live per i partecipanti (/asta).
  *
  * L'admin autenticato vede SEMPRE il pannello di controllo (assegna/chiudi)
  * in cima, e sotto può comunque partecipare come squadra (scelta o rilancio).
- * I partecipanti vedono solo il flusso squadra → rilancio.
+ * Su mobile il contenuto è organizzato in tab: "Asta" e "Statistiche".
+ * Il markup è duplicato tra le due ramificazioni responsive (pattern
+ * collaudato nell'app): niente NgTemplateOutlet che con i form field
+ * di Material crea problemi di istanziazione viste.
  */
 @Component({
   selector: 'app-asta-page',
@@ -51,8 +72,10 @@ const ROLE_COLORS: Record<string, string> = {
     MatCardModule,
     MatChipsModule,
     MatFormFieldModule,
+    MatInputModule,
     MatIconModule,
     MatSelectModule,
+    MatTabsModule,
     RouterLink,
   ],
   template: `
@@ -73,167 +96,406 @@ const ROLE_COLORS: Record<string, string> = {
         }
       </header>
 
-      <!-- PANNELLO ADMIN (sempre visibile per l'admin) -->
-      @if (isAdmin()) {
+      <!-- MOBILE: tab Asta / Statistiche -->
+      @if (isMobile()) {
+        <mat-tab-group animationDuration="0ms" dynamicHeight>
+          <mat-tab label="Asta">
+            <div class="tab-content">
+              @if (isAdmin()) {
+                <mat-card class="panel">
+                  <h2 class="panel-title">
+                    <mat-icon>admin_panel_settings</mat-icon>
+                    Controllo asta (admin)
+                  </h2>
+                  @if (stato(); as s) {
+                    @if (s.aperta) {
+                      <div class="giocatore-box">
+                        <div class="chips">
+                          @for (r of rolesOf(s.ruolo); track r) {
+                            <span
+                              class="chip"
+                              [style.border-color]="colorFor(r)"
+                              [style.color]="colorFor(r)"
+                            >{{ r }}</span>
+                          }
+                        </div>
+                        <div class="nome">{{ s.giocatoreNome }}</div>
+                        @if (s.squadra) {
+                          <div class="squadra-giocatore">{{ s.squadra }}</div>
+                        }
+                        <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
+                        @if (s.rilanciatoDaTeamName) {
+                          <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
+                        }
+                      </div>
+
+                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                        <mat-label>Assegna alla squadra vincitrice</mat-label>
+                        <mat-select [value]="assegnaA()" (selectionChange)="assegnaA.set($event.value)">
+                          @for (team of teams(); track team.id) {
+                            <mat-option [value]="team.id">{{ team.name }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                        <mat-label>Voce di spesa</mat-label>
+                        <mat-select [value]="provenienza()" (selectionChange)="provenienza.set($event.value)">
+                          <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
+                          <mat-option value="acquistiMercatoInfrasettimanale">Asta infrasettimanale</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+
+                      <div class="admin-actions">
+                        <button matButton="filled" color="primary" (click)="assegnaVincitore()">
+                          <mat-icon>gavel</mat-icon>
+                          Assegna
+                        </button>
+                        <button matButton (click)="chiudi()">
+                          <mat-icon>close</mat-icon>
+                          Chiudi senza assegnare
+                        </button>
+                      </div>
+                    } @else {
+                      <p class="empty-state">L'asta è chiusa. Aprila dalla sezione Svincolati della dashboard.</p>
+                    }
+                  } @else {
+                    <p class="empty-state">Nessuna asta in corso. Aprila dalla sezione Svincolati della dashboard.</p>
+                  }
+                </mat-card>
+              }
+
+              @if (!miaSquadra()) {
+                <mat-card class="panel">
+                  <h2>Chi sei?</h2>
+                  <p class="hint">
+                    Seleziona la tua squadra per partecipare ai rilanci.
+                    La scelta verrà ricordata su questo dispositivo.
+                  </p>
+                  <div class="team-grid">
+                    @for (team of teams(); track team.id) {
+                      <button matButton="tonal" class="team-btn" (click)="scegliSquadra(team)">
+                        {{ team.name }}
+                      </button>
+                    }
+                  </div>
+                </mat-card>
+              }
+
+              @if (miaSquadra(); as squadra) {
+                <mat-card class="panel">
+                  <div class="squadra-bar">
+                    <span>Stai rilanciando per:</span>
+                    <strong>{{ squadra.name }}</strong>
+                    @if (isAdmin()) {
+                      <button matButton (click)="cambiaSquadra()">Cambia</button>
+                    }
+                  </div>
+
+                  @if (stato(); as s) {
+                    @if (s.aperta) {
+                      <div class="giocatore-box">
+                        <div class="chips">
+                          @for (r of rolesOf(s.ruolo); track r) {
+                            <span
+                              class="chip"
+                              [style.border-color]="colorFor(r)"
+                              [style.color]="colorFor(r)"
+                            >{{ r }}</span>
+                          }
+                        </div>
+                        <div class="nome">{{ s.giocatoreNome }}</div>
+                        @if (s.squadra) {
+                          <div class="squadra-giocatore">{{ s.squadra }}</div>
+                        }
+                        <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
+                        @if (s.rilanciatoDaTeamName) {
+                          <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
+                        }
+                      </div>
+
+                      <div class="bids">
+                        @for (inc of incrementi; track inc) {
+                          <button
+                            matButton="filled"
+                            class="bid-btn"
+                            [disabled]="sonoUltimoRilanciante() || inCooldown() || squadraPiena() || inc < minInc()"
+                            (click)="rilancia(inc)"
+                          >
+                            +{{ inc | number: '1.1-1' }} €
+                          </button>
+                        }
+                      </div>
+
+                      <p class="hint">
+                        Rilancio minimo attuale: {{ minInc() | number: '1.2-2' }} € ·
+                        Giocatori squadra: {{ mieiGiocatori() }}/28 ·
+                        Il rilancio custom deve superare il prezzo attuale
+                      </p>
+
+                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                        <mat-label>Rilancio custom (€)</mat-label>
+                        <input
+                          matInput
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          [value]="customBid()"
+                          (input)="customBid.set($any($event.target).valueAsNumber || 0)"
+                        />
+                      </mat-form-field>
+                      <button
+                        matButton="filled"
+                        class="bid-btn custom-bid-btn"
+                        [disabled]="!customValida() || inCooldown() || squadraPiena()"
+                        (click)="rilanciaCustom()"
+                      >
+                        Rilancia {{ customBid() | number: '1.2-2' }} €
+                      </button>
+
+                      @if (inCooldown()) {
+                        <p class="hint warn">Rilancio registrato: attendi un istante…</p>
+                      } @else if (sonoUltimoRilanciante()) {
+                        <p class="hint warn">La tua squadra è già l'ultima rilanciante: attendi una controparte.</p>
+                      } @else if (squadraPiena()) {
+                        <p class="hint warn">Hai raggiunto il limite di 28 giocatori: non puoi rilanciare.</p>
+                      }
+                    } @else {
+                      <p class="empty-state">L'asta è chiusa. Attendi che l'amministratore ne apra una nuova.</p>
+                    }
+                  } @else {
+                    <p class="empty-state">Nessuna asta in corso. Attendi l'apertura.</p>
+                  }
+                </mat-card>
+              }
+            </div>
+          </mat-tab>
+          <mat-tab label="Statistiche">
+            <div class="tab-content">
+              <mat-card class="panel">
+                <h2 class="panel-title">
+                  <mat-icon>bar_chart</mat-icon>
+                  Statistiche squadre
+                </h2>
+                @if (stats().length === 0) {
+                  <p class="empty-state">Caricamento statistiche…</p>
+                } @else {
+                  <div class="stats-list">
+                    @for (t of stats(); track t.id) {
+                      <div class="stat-row">
+                        <span class="stat-name">{{ t.name }}</span>
+                        <span class="stat-count" [class.full]="t.giocatori >= 28">
+                          {{ t.giocatori }}/28
+                        </span>
+                        <span class="stat-bilancio" [class.negative]="t.bilancio < 0">
+                          {{ t.bilancio | number: '1.2-2' }} €
+                        </span>
+                      </div>
+                    }
+                  </div>
+                }
+              </mat-card>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
+      } @else {
+        <!-- DESKTOP/TABLET: sezioni impilate -->
+
+        <!-- Statistiche -->
         <mat-card class="panel">
           <h2 class="panel-title">
-            <mat-icon>admin_panel_settings</mat-icon>
-            Controllo asta (admin)
+            <mat-icon>bar_chart</mat-icon>
+            Statistiche squadre
           </h2>
-          @if (stato(); as s) {
-            @if (s.aperta) {
-              <div class="giocatore-box">
-                <div class="chips">
-                  @for (r of rolesOf(s.ruolo); track r) {
-                    <span
-                      class="chip"
-                      [style.border-color]="colorFor(r)"
-                      [style.color]="colorFor(r)"
-                    >{{ r }}</span>
-                  }
-                </div>
-                <div class="nome">{{ s.giocatoreNome }}</div>
-                @if (s.squadra) {
-                  <div class="squadra-giocatore">{{ s.squadra }}</div>
-                }
-                <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
-                @if (s.rilanciatoDaTeamName) {
-                  <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
-                }
-              </div>
-
-              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
-                <mat-label>Assegna alla squadra vincitrice</mat-label>
-                <mat-select [value]="assegnaA()" (selectionChange)="assegnaA.set($event.value)">
-                  @for (team of teams(); track team.id) {
-                    <mat-option [value]="team.id">{{ team.name }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
-                <mat-label>Voce di spesa</mat-label>
-                <mat-select [value]="provenienza()" (selectionChange)="provenienza.set($event.value)">
-                  <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
-                  <mat-option value="acquistiMercatoInfrasettimanale">Asta infrasettimanale</mat-option>
-                </mat-select>
-              </mat-form-field>
-
-              <div class="admin-actions">
-                <button matButton="filled" color="primary" (click)="assegnaVincitore()">
-                  <mat-icon>gavel</mat-icon>
-                  Assegna
-                </button>
-                <button matButton (click)="chiudi()">
-                  <mat-icon>close</mat-icon>
-                  Chiudi senza assegnare
-                </button>
-              </div>
-            } @else {
-              <p class="empty-state">L'asta è chiusa. Aprila dalla sezione Svincolati della dashboard.</p>
-            }
+          @if (stats().length === 0) {
+            <p class="empty-state">Caricamento statistiche…</p>
           } @else {
-            <p class="empty-state">Nessuna asta in corso. Aprila dalla sezione Svincolati della dashboard.</p>
+            <div class="stats-list">
+              @for (t of stats(); track t.id) {
+                <div class="stat-row">
+                  <span class="stat-name">{{ t.name }}</span>
+                  <span class="stat-count" [class.full]="t.giocatori >= 28">
+                    {{ t.giocatori }}/28
+                  </span>
+                  <span class="stat-bilancio" [class.negative]="t.bilancio < 0">
+                    {{ t.bilancio | number: '1.2-2' }} €
+                  </span>
+                </div>
+              }
+            </div>
           }
         </mat-card>
-      }
 
-      <!-- SCEGLI SQUADRA (partecipanti non ancora identificati) -->
-      @if (!miaSquadra()) {
-        <mat-card class="panel">
-          <h2>Chi sei?</h2>
-          <p class="hint">
-            Seleziona la tua squadra per partecipare ai rilanci.
-            La scelta verrà ricordata su questo dispositivo.
-          </p>
-          <div class="team-grid">
-            @for (team of teams(); track team.id) {
-              <button matButton="tonal" class="team-btn" (click)="scegliSquadra(team)">
-                {{ team.name }}
-              </button>
-            }
-          </div>
-        </mat-card>
-      }
-
-      <!-- PANNELLO RILANCIO (partecipante identificato) -->
-      @if (miaSquadra(); as squadra) {
-        <mat-card class="panel">
-          <div class="squadra-bar">
-            <span>Stai rilanciando per:</span>
-            <strong>{{ squadra.name }}</strong>
-            <button matButton (click)="cambiaSquadra()">Cambia</button>
-          </div>
-
-          @if (stato(); as s) {
-            @if (s.aperta) {
-              <div class="giocatore-box">
-                <div class="chips">
-                  @for (r of rolesOf(s.ruolo); track r) {
-                    <span
-                      class="chip"
-                      [style.border-color]="colorFor(r)"
-                      [style.color]="colorFor(r)"
-                    >{{ r }}</span>
+        <!-- Pannello admin -->
+        @if (isAdmin()) {
+          <mat-card class="panel">
+            <h2 class="panel-title">
+              <mat-icon>admin_panel_settings</mat-icon>
+              Controllo asta (admin)
+            </h2>
+            @if (stato(); as s) {
+              @if (s.aperta) {
+                <div class="giocatore-box">
+                  <div class="chips">
+                    @for (r of rolesOf(s.ruolo); track r) {
+                      <span
+                        class="chip"
+                        [style.border-color]="colorFor(r)"
+                        [style.color]="colorFor(r)"
+                      >{{ r }}</span>
+                    }
+                  </div>
+                  <div class="nome">{{ s.giocatoreNome }}</div>
+                  @if (s.squadra) {
+                    <div class="squadra-giocatore">{{ s.squadra }}</div>
+                  }
+                  <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
+                  @if (s.rilanciatoDaTeamName) {
+                    <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                   }
                 </div>
-                <div class="nome">{{ s.giocatoreNome }}</div>
-                @if (s.squadra) {
-                  <div class="squadra-giocatore">{{ s.squadra }}</div>
-                }
-                <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
-                @if (s.rilanciatoDaTeamName) {
-                  <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
-                }
-              </div>
 
-              <div class="bids">
-                @for (inc of incrementi; track inc) {
-                  <button
-                    matButton="filled"
-                    class="bid-btn"
-                    [disabled]="sonoUltimoRilanciante() || inCooldown()"
-                    (click)="rilancia(inc)"
-                  >
-                    +{{ inc | number: '1.1-1' }} €
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                  <mat-label>Assegna alla squadra vincitrice</mat-label>
+                  <mat-select [value]="assegnaA()" (selectionChange)="assegnaA.set($event.value)">
+                    @for (team of teams(); track team.id) {
+                      <mat-option [value]="team.id">{{ team.name }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                  <mat-label>Voce di spesa</mat-label>
+                  <mat-select [value]="provenienza()" (selectionChange)="provenienza.set($event.value)">
+                    <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
+                    <mat-option value="acquistiMercatoInfrasettimanale">Asta infrasettimanale</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <div class="admin-actions">
+                  <button matButton="filled" color="primary" (click)="assegnaVincitore()">
+                    <mat-icon>gavel</mat-icon>
+                    Assegna
                   </button>
-                }
-              </div>
-
-              <!-- Rilancio custom: importo libero superiore al prezzo attuale -->
-              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
-                <mat-label>Rilancio custom (€)</mat-label>
-                <input
-                  matInput
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  [value]="customBid()"
-                  (input)="customBid.set($any($event.target).valueAsNumber || 0)"
-                />
-                <mat-hint>Deve essere superiore a {{ stato()?.prezzoAttuale ?? 0 | number: '1.2-2' }} €</mat-hint>
-              </mat-form-field>
-              <button
-                matButton="filled"
-                class="bid-btn custom-bid-btn"
-                [disabled]="!customValida() || inCooldown()"
-                (click)="rilanciaCustom()"
-              >
-                Rilancia {{ customBid() | number: '1.2-2' }} €
-              </button>
-
-              @if (inCooldown()) {
-                <p class="hint warn">Rilancio registrato: attendi un istante…</p>
-              } @else if (sonoUltimoRilanciante()) {
-                <p class="hint warn">La tua squadra è già l'ultima rilanciante: attendi una controparte.</p>
+                  <button matButton (click)="chiudi()">
+                    <mat-icon>close</mat-icon>
+                    Chiudi senza assegnare
+                  </button>
+                </div>
+              } @else {
+                <p class="empty-state">L'asta è chiusa. Aprila dalla sezione Svincolati della dashboard.</p>
               }
             } @else {
-              <p class="empty-state">L'asta è chiusa. Attendi che l'amministratore ne apra una nuova.</p>
+              <p class="empty-state">Nessuna asta in corso. Aprila dalla sezione Svincolati della dashboard.</p>
             }
-          } @else {
-            <p class="empty-state">Nessuna asta in corso. Attendi l'apertura.</p>
-          }
-        </mat-card>
+          </mat-card>
+        }
+
+        <!-- Scelta squadra -->
+        @if (!miaSquadra()) {
+          <mat-card class="panel">
+            <h2>Chi sei?</h2>
+            <p class="hint">
+              Seleziona la tua squadra per partecipare ai rilanci.
+              La scelta verrà ricordata su questo dispositivo.
+            </p>
+            <div class="team-grid">
+              @for (team of teams(); track team.id) {
+                <button matButton="tonal" class="team-btn" (click)="scegliSquadra(team)">
+                  {{ team.name }}
+                </button>
+              }
+            </div>
+          </mat-card>
+        }
+
+        <!-- Pannello rilancio -->
+        @if (miaSquadra(); as squadra) {
+          <mat-card class="panel">
+            <div class="squadra-bar">
+              <span>Stai rilanciando per:</span>
+              <strong>{{ squadra.name }}</strong>
+              @if (isAdmin()) {
+                <button matButton (click)="cambiaSquadra()">Cambia</button>
+              }
+            </div>
+
+            @if (stato(); as s) {
+              @if (s.aperta) {
+                <div class="giocatore-box">
+                  <div class="chips">
+                    @for (r of rolesOf(s.ruolo); track r) {
+                      <span
+                        class="chip"
+                        [style.border-color]="colorFor(r)"
+                        [style.color]="colorFor(r)"
+                      >{{ r }}</span>
+                    }
+                  </div>
+                  <div class="nome">{{ s.giocatoreNome }}</div>
+                  @if (s.squadra) {
+                    <div class="squadra-giocatore">{{ s.squadra }}</div>
+                  }
+                  <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
+                  @if (s.rilanciatoDaTeamName) {
+                    <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
+                  }
+                </div>
+
+                <div class="bids">
+                  @for (inc of incrementi; track inc) {
+                    <button
+                      matButton="filled"
+                      class="bid-btn"
+                      [disabled]="sonoUltimoRilanciante() || inCooldown() || squadraPiena() || inc < minInc()"
+                      (click)="rilancia(inc)"
+                    >
+                      +{{ inc | number: '1.1-1' }} €
+                    </button>
+                  }
+                </div>
+
+                <p class="hint">
+                  Rilancio minimo attuale: {{ minInc() | number: '1.2-2' }} € ·
+                  Giocatori squadra: {{ mieiGiocatori() }}/28 ·
+                  Il rilancio custom deve superare il prezzo attuale
+                </p>
+
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                  <mat-label>Rilancio custom (€)</mat-label>
+                  <input
+                    matInput
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    [value]="customBid()"
+                    (input)="customBid.set($any($event.target).valueAsNumber || 0)"
+                  />
+                </mat-form-field>
+                <button
+                  matButton="filled"
+                  class="bid-btn custom-bid-btn"
+                  [disabled]="!customValida() || inCooldown() || squadraPiena()"
+                  (click)="rilanciaCustom()"
+                >
+                  Rilancia {{ customBid() | number: '1.2-2' }} €
+                </button>
+
+                @if (inCooldown()) {
+                  <p class="hint warn">Rilancio registrato: attendi un istante…</p>
+                } @else if (sonoUltimoRilanciante()) {
+                  <p class="hint warn">La tua squadra è già l'ultima rilanciante: attendi una controparte.</p>
+                } @else if (squadraPiena()) {
+                  <p class="hint warn">Hai raggiunto il limite di 28 giocatori: non puoi rilanciare.</p>
+                }
+              } @else {
+                <p class="empty-state">L'asta è chiusa. Attendi che l'amministratore ne apra una nuova.</p>
+              }
+            } @else {
+              <p class="empty-state">Nessuna asta in corso. Attendi l'apertura.</p>
+            }
+          </mat-card>
+        }
       }
 
       <footer class="asta-footer">
@@ -279,12 +541,59 @@ const ROLE_COLORS: Record<string, string> = {
       flex: 1;
     }
 
+    .tab-content {
+      padding-top: 16px;
+    }
+
     .panel {
       display: flex;
       flex-direction: column;
       gap: 12px;
       padding: 16px;
       margin-bottom: 16px;
+    }
+
+    .stats-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px dashed var(--mat-sys-outline-variant);
+      font-size: 0.875rem;
+    }
+
+    .stat-name {
+      flex: 1;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stat-count {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .stat-count.full {
+      color: var(--mat-sys-error);
+    }
+
+    .stat-bilancio {
+      font-weight: 600;
+      color: var(--mat-sys-primary);
+      white-space: nowrap;
+      min-width: 80px;
+      text-align: right;
+    }
+
+    .stat-bilancio.negative {
+      color: var(--mat-sys-error);
     }
 
     .giocatore-box {
@@ -414,9 +723,17 @@ export class AstaPage {
   private readonly astaService = inject(AstaService);
   private readonly authService = inject(AuthService);
   private readonly teamService = inject(TeamService);
+  private readonly financeService = inject(FinanceService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly breakpointObserver = inject(BreakpointObserver);
 
   readonly incrementi = INCREMENTI;
+
+  /** Layout mobile (<640px): tab Asta/Statistiche invece di sezioni impilate */
+  readonly isMobile = toSignal(
+    this.breakpointObserver.observe('(max-width: 639.98px)').pipe(map((r) => r.matches)),
+    { initialValue: false },
+  );
 
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
@@ -426,6 +743,38 @@ export class AstaPage {
 
   /** Squadra del partecipante corrente (persistita in localStorage) */
   readonly miaSquadra = signal<Team | null>(this.leggiSquadraSalvata());
+
+  /**
+   * Statistiche di tutte le squadre: numero giocatori (su 28) e
+   * bilancio societario stagionale corrente.
+   *
+   * Usa combineLatest (NON forkJoin): gli osservabili Firestore non
+   * completano mai, quindi forkJoin non emetterebbe mai nulla.
+   */
+  readonly stats = toSignal(
+    this.teamService.teams$.pipe(
+      switchMap((teams) =>
+        teams.length
+          ? combineLatest(
+              teams.map((team) =>
+                combineLatest([
+                  this.teamService.players$(team.id),
+                  this.financeService.seasonFinance$(team.id),
+                ]).pipe(
+                  map(([players, finance]) => ({
+                    id: team.id,
+                    name: team.name,
+                    giocatori: players.length,
+                    bilancio: finance?.bilancioSocietarioStagionale ?? 0,
+                  })),
+                ),
+              ),
+            )
+          : of([] as TeamStat[]),
+      ),
+    ),
+    { initialValue: [] as TeamStat[] },
+  );
 
   /** Selezione admin per l'assegnazione */
   readonly assegnaA = signal<string>('');
@@ -440,8 +789,7 @@ export class AstaPage {
   constructor() {
     // Se la squadra salvata non esiste più nel DB, resetta la scelta.
     // Attenzione: teams parte da [] (initialValue) — resetta SOLO quando
-    // la lista è stata effettivamente caricata (length > 0), altrimenti
-    // cancellerebbe la squadra appena salvata a ogni refresh.
+    // la lista è stata effettivamente caricata (length > 0).
     toObservable(this.teams).subscribe((teams) => {
       const salvata = this.miaSquadra();
       if (salvata && teams.length > 0 && !teams.some((t) => t.id === salvata.id)) {
@@ -464,6 +812,17 @@ export class AstaPage {
     () => this.stato()?.rilanciatoDaTeamId === this.miaSquadra()?.id,
   );
 
+  /** Incremento minimo consentito al prezzo corrente dell'asta */
+  readonly minInc = computed(() => minIncremento(this.stato()?.prezzoAttuale ?? 0));
+
+  /** Numero di giocatori della mia squadra */
+  readonly mieiGiocatori = computed(
+    () => this.stats().find((t) => t.id === this.miaSquadra()?.id)?.giocatori ?? 0,
+  );
+
+  /** true se la mia squadra ha raggiunto il limite di giocatori */
+  readonly squadraPiena = computed(() => this.mieiGiocatori() >= MAX_GIOCATORI);
+
   leggiSquadraSalvata(): Team | null {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -475,10 +834,8 @@ export class AstaPage {
 
   async scegliSquadra(team: Team): Promise<void> {
     try {
-      // Se non c'è già una sessione (admin o anonima), crea un login anonimo
-      // per poter scrivere su asta/statoCorrente. Se invece l'utente è già
-      // autenticato (es. admin), NON sovrascrivere la sessione: salva solo
-      // la squadra in localStorage.
+      // Se non c'è già una sessione (admin o anonima), crea un login anonimo.
+      // Se l'utente è già autenticato (es. admin), NON sovrascrivere la sessione.
       const user = await firstValueFrom(this.authService.user$);
       if (!user) {
         await this.authService.loginAnonymous();
@@ -499,10 +856,11 @@ export class AstaPage {
     localStorage.removeItem(STORAGE_KEY);
   }
 
-  /** true se il rilancio custom è valido (> prezzo attuale) */
-  readonly customValida = computed(
-    () => this.customBid() > (this.stato()?.prezzoAttuale ?? 0),
-  );
+  /** true se il rilancio custom è valido (> prezzo attuale + minimo) */
+  readonly customValida = computed(() => {
+    const prezzo = this.stato()?.prezzoAttuale ?? 0;
+    return this.customBid() + 1e-9 >= prezzo + this.minInc();
+  });
 
   async rilancia(incremento: number): Promise<void> {
     await this.eseguiRilancio(incremento);
@@ -521,7 +879,7 @@ export class AstaPage {
       return;
     }
     try {
-      await this.astaService.rilancia(team.id, team.name, incremento);
+      await this.astaService.rilancia(team.id, team.name, incremento, this.mieiGiocatori());
       // Cooldown di 1 secondo: evita doppi click/race tra partecipanti
       this.inCooldown.set(true);
       setTimeout(() => this.inCooldown.set(false), 1000);

@@ -130,10 +130,14 @@ function roleSortKey(ruolo: string): number {
           <mat-icon matPrefix>search</mat-icon>
         </mat-form-field>
 
+        <!-- Filtro multiplo: si possono selezionare più ruoli insieme -->
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Ruolo</mat-label>
-          <mat-select [value]="filterRuolo()" (selectionChange)="filterRuolo.set($event.value)">
-            <mat-option value="">Tutti</mat-option>
+          <mat-label>Ruoli</mat-label>
+          <mat-select
+            [value]="filterRuoli()"
+            (selectionChange)="filterRuoli.set($event.value)"
+            multiple
+          >
             @for (ruolo of ruoliDisponibili(); track ruolo) {
               <mat-option [value]="ruolo">{{ ruolo }}</mat-option>
             }
@@ -149,6 +153,13 @@ function roleSortKey(ruolo: string): number {
             }
           </mat-select>
         </mat-form-field> -->
+
+        <!-- Reset rapido filtri: visibile solo se qualche filtro è attivo -->
+        @if (filterRuoli().length > 0 || search()) {
+          <button matIconButton aria-label="Azzera filtri" class="reset-filters" (click)="azzeraFiltri()">
+            <mat-icon>filter_alt_off</mat-icon>
+          </button>
+        }
       </div>
 
       <div class="rosa-summary">
@@ -162,7 +173,12 @@ function roleSortKey(ruolo: string): number {
         <div class="cards">
           @for (player of filteredPlayers(); track player.id) {
             <div class="player-card" [class.expanded]="expandedId() === player.id">
-              <button type="button" class="card-head" (click)="toggleExpanded(player.id)">
+              <button
+                type="button"
+                class="card-head"
+                [class.is-renewed]="player.acquistoRinnovoSpesa > 0"
+                (click)="toggleExpanded(player.id)"
+              >
                 <span class="chips">
                   @for (r of rolesOf(player); track r) {
                     <span
@@ -186,11 +202,13 @@ function roleSortKey(ruolo: string): number {
                       <span>Speso</span>
                       <strong>{{ player.acquistoRinnovoSpesa | number: '1.2-2' }} €</strong>
                     </div>
-                    <div class="detail">
+                    <!-- Se rinnovato, % e spesa rinnovo si riferiscono alla
+                         prossima stagione: mostrate in grigio -->
+                    <div class="detail" [class.muted]="player.acquistoRinnovoSpesa > 0">
                       <span>Spesa rinnovo</span>
                       <strong>{{ player.prossimaSpesaRinnovo | number: '1.2-2' }} €</strong>
                     </div>
-                    <div class="detail">
+                    <div class="detail" [class.muted]="player.acquistoRinnovoSpesa > 0">
                       <span>% Rinnovo</span>
                       <strong>{{ perc(player.prossimaPercRinnovo) }}</strong>
                     </div>
@@ -199,8 +217,8 @@ function roleSortKey(ruolo: string): number {
                       <strong>{{ player.quotazioneIniziale | number: '1.0-2' }} → {{ player.quotazioneAttuale | number: '1.0-2' }}</strong>
                     </div>
                     <div class="detail">
-                      <span>V.I.</span>
-                      <strong>{{ player.valoreIniziale | number: '1.2-2' }} €</strong>
+                      <span>V.I. → V.A.</span>
+                      <strong>{{ player.valoreIniziale | number: '1.2-2' }} € → {{ player.valoreAttuale | number: '1.2-2' }} €</strong>
                     </div>
                     <div class="detail wide">
                       <span>Contratto</span>
@@ -401,6 +419,11 @@ function roleSortKey(ruolo: string): number {
       min-width: 140px;
     }
 
+    .reset-filters {
+      align-self: center;
+      flex-shrink: 0;
+    }
+
     /* ---------- Chip ruoli (contorno colorato) ---------- */
     .chips {
       display: inline-flex;
@@ -453,6 +476,12 @@ function roleSortKey(ruolo: string): number {
       color: inherit;
     }
 
+    /* Riga evidenziata se il giocatore è rinnovato (soldi spesi > 0):
+       tinta azzurra del tema (primary container) */
+    .card-head.is-renewed {
+      background: var(--mat-sys-primary-container);
+    }
+
     .card-name {
       flex: 1;
       font-weight: 500;
@@ -465,6 +494,12 @@ function roleSortKey(ruolo: string): number {
       font-weight: 700;
       color: var(--mat-sys-primary);
       white-space: nowrap;
+    }
+
+    /* Campi del pannello espanso "muted" quando il giocatore è già
+       rinnovato (% e spesa rinnovo si riferiscono alla prossima stagione) */
+    .detail.muted strong {
+      color: var(--mat-sys-on-surface-variant);
     }
 
     .chevron {
@@ -659,20 +694,21 @@ export class PlayersSection {
     ...(this.isAdmin() ? (['azioni'] as const) : []),
   ]);
 
-  readonly filterRuolo = signal<string>('');
+  /** Ruoli selezionati nel filtro (vuoto = tutti) */
+  readonly filterRuoli = signal<string[]>([]);
   readonly filterContratto = signal<ContractType | ''>('');
   readonly search = signal('');
 
   readonly filteredPlayers = computed(() => {
-    const ruolo = this.filterRuolo();
+    const ruoli = this.filterRuoli();
     const contratto = this.filterContratto();
     const term = normalize(this.search());
 
     return this.players()
       .filter(
         (p) =>
-          // il filtro matcha se il giocatore ha quel ruolo tra i suoi
-          (!ruolo || splitRoles(p.ruolo).includes(ruolo)) &&
+          // il filtro matcha se il giocatore ha ALMENO UNO dei ruoli selezionati
+          (!ruoli.length || splitRoles(p.ruolo).some((r) => ruoli.includes(r))) &&
           (!contratto || p.contractType === contratto) &&
           (!term || normalize(p.name).includes(term)),
       )
@@ -687,13 +723,33 @@ export class PlayersSection {
   );
 
   constructor() {
-    // Auto-selezione della prima squadra disponibile
+    // Auto-selezione: preferisci l'ultima squadra scelta per l'asta
+    // (persistita in localStorage), altrimenti la prima disponibile
     effect(() => {
       const teams = this.teams();
       if (!this.selectedTeamId() && teams.length > 0) {
+        try {
+          const raw = localStorage.getItem('asta.miaSquadra');
+          if (raw) {
+            const salvata = JSON.parse(raw) as Team;
+            const match = teams.find((t) => t.id === salvata.id);
+            if (match) {
+              this.selection.select(match.id);
+              return;
+            }
+          }
+        } catch {
+          // localStorage non disponibile o JSON invalido: fallback sotto
+        }
         this.selection.select(teams[0].id);
       }
     });
+  }
+
+  /** Azzera i filtri ruoli e ricerca */
+  azzeraFiltri(): void {
+    this.filterRuoli.set([]);
+    this.search.set('');
   }
 
   // ------------------------------------------------------------- giocatori
@@ -862,8 +918,38 @@ export class PlayersSection {
     if (!confirmed || !this.selectedTeamId()) {
       return;
     }
+
+    // Chiede se addebitare la rescissione (costo fisso di 1 €)
+    const addebitaRescissione = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialog, {
+          data: {
+            title: 'Rescissione',
+            message:
+              'Addebitare il costo di rescissione di 1,00 € alla voce Rescissioni?',
+            confirmLabel: 'Sì, addebita',
+          },
+          width: '95vw',
+          maxWidth: '400px',
+        })
+        .afterClosed(),
+    );
+
     try {
       await this.teamService.deletePlayer(this.selectedTeamId()!, player.id);
+
+      // Valore rosa aggiornato (senza il giocatore ceduto)
+      const nuovaRosa =
+        Math.round((this.valoreRosa() - (player.valoreAttuale || 0)) * 100) / 100;
+
+      if (addebitaRescissione) {
+        await this.financeService.addRescissione(
+          this.selectedTeamId()!,
+          1,
+          nuovaRosa,
+        );
+      }
+
       this.snackBar.open('Giocatore eliminato', undefined, { duration: 2500 });
     } catch {
       this.snackBar.open('Errore durante l\u2019eliminazione', undefined, { duration: 3000 });

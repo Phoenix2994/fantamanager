@@ -24,6 +24,26 @@ import { TeamService } from './team.service';
 export type ProvenienzaAsta = 'acquistiAstaSettembre' | 'acquistiMercatoInfrasettimanale';
 
 /**
+ * Incremento minimo di rilancio in base al prezzo corrente:
+ * sopra 20 € minimo 0,2 · sopra 50 € minimo 0,5 · sopra 100 € minimo 1 €.
+ */
+export function minIncremento(prezzo: number): number {
+  if (prezzo > 100) {
+    return 1;
+  }
+  if (prezzo > 50) {
+    return 0.5;
+  }
+  if (prezzo > 20) {
+    return 0.2;
+  }
+  return 0.1;
+}
+
+/** Numero massimo di giocatori per squadra */
+export const MAX_GIOCATORI = 28;
+
+/**
  * Gestione dell'asta live.
  *
  * Un unico documento `asta/statoCorrente` condiviso in realtime:
@@ -85,10 +105,18 @@ export class AstaService {
 
   /**
    * Rilancia di `incremento` € per la squadra indicata.
-   * Transaction atomica: verifica che l'asta sia aperta, che la squadra
-   * non sia già l'ultima rilanciante e aggiorna il prezzo.
+   * Transaction atomica con regole:
+   * - asta aperta
+   * - la squadra non è già l'ultima rilanciante
+   * - incremento >= minimo in base al prezzo corrente
+   * - la squadra non ha raggiunto i 28 giocatori
    */
-  async rilancia(teamId: string, teamName: string, incremento: number): Promise<void> {
+  async rilancia(
+    teamId: string,
+    teamName: string,
+    incremento: number,
+    giocatoriSquadra: number,
+  ): Promise<void> {
     await runTransaction(this.firestore, async (tx) => {
       const snap = await tx.get(this.statoRef);
       const stato = snap.data() as AstaStato | undefined;
@@ -97,6 +125,13 @@ export class AstaService {
       }
       if (stato.rilanciatoDaTeamId === teamId) {
         throw new Error('La tua squadra \u00e8 gi\u00e0 l\u2019ultima rilanciante');
+      }
+      if (giocatoriSquadra >= MAX_GIOCATORI) {
+        throw new Error(`Hai gi\u00e0 ${MAX_GIOCATORI} giocatori: non puoi rilanciare`);
+      }
+      const minimo = minIncremento(stato.prezzoAttuale);
+      if (incremento + 1e-9 < minimo) {
+        throw new Error(`Rilancio minimo ${minimo.toFixed(2)} \u20ac`);
       }
       tx.update(this.statoRef, {
         prezzoAttuale: round2(stato.prezzoAttuale + incremento),

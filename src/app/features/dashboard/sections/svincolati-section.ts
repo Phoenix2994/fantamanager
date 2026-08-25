@@ -93,15 +93,26 @@ function splitRoles(ruolo: string): string[] {
         <mat-icon matPrefix>search</mat-icon>
       </mat-form-field>
 
+      <!-- Filtro multiplo: si possono selezionare più ruoli insieme -->
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Ruolo</mat-label>
-        <mat-select [value]="filterRuolo()" (selectionChange)="filterRuolo.set($event.value)">
-          <mat-option value="">Tutti</mat-option>
+        <mat-label>Ruoli</mat-label>
+        <mat-select
+          [value]="filterRuoli()"
+          (selectionChange)="filterRuoli.set($event.value)"
+          multiple
+        >
           @for (ruolo of ruoliDisponibili(); track ruolo) {
             <mat-option [value]="ruolo">{{ ruolo }}</mat-option>
           }
         </mat-select>
       </mat-form-field>
+
+      <!-- Reset rapido filtri: visibile solo se qualche filtro è attivo -->
+      @if (filterRuoli().length > 0 || search()) {
+        <button matIconButton aria-label="Azzera filtri" class="reset-filters" (click)="azzeraFiltri()">
+          <mat-icon>filter_alt_off</mat-icon>
+        </button>
+      }
     </div>
 
     @if (filtered().length === 0) {
@@ -179,6 +190,11 @@ function splitRoles(ruolo: string): string[] {
     .filters mat-form-field {
       flex: 1;
       min-width: 140px;
+    }
+
+    .reset-filters {
+      align-self: center;
+      flex-shrink: 0;
     }
 
     .chip {
@@ -267,7 +283,8 @@ export class SvincolatiSection {
     return s && s.aperta ? s : null;
   });
 
-  readonly filterRuolo = signal<string>('');
+  /** Ruoli selezionati nel filtro (vuoto = tutti) */
+  readonly filterRuoli = signal<string[]>([]);
   readonly search = signal('');
 
   /** Ruoli distinti presenti nella lista, nell'ordine canonico */
@@ -283,13 +300,13 @@ export class SvincolatiSection {
 
   /** Lista filtrata e ordinata per quotazione decrescente */
   readonly filtered = computed(() => {
-    const ruolo = this.filterRuolo();
+    const ruoli = this.filterRuoli();
     const term = normalize(this.search());
     return this.svincolati()
       .filter(
         (p) =>
-          // il filtro matcha se il giocatore ha quel ruolo tra i suoi
-          (!ruolo || splitRoles(p.ruolo).includes(ruolo)) &&
+          // il filtro matcha se il giocatore ha ALMENO UNO dei ruoli selezionati
+          (!ruoli.length || splitRoles(p.ruolo).some((r) => ruoli.includes(r))) &&
           (!term || normalize(p.name).includes(term)),
       )
       .sort((a, b) => b.quotazioneAttuale - a.quotazioneAttuale);
@@ -302,6 +319,12 @@ export class SvincolatiSection {
   /** Ruoli singoli di un giocatore, per i chip */
   rolesOf(player: Svincolato): string[] {
     return splitRoles(player.ruolo);
+  }
+
+  /** Azzera i filtri ruoli e ricerca */
+  azzeraFiltri(): void {
+    this.filterRuoli.set([]);
+    this.search.set('');
   }
 
   /** Apre l'asta live su un giocatore svincolato a caso */
