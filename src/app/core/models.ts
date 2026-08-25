@@ -52,6 +52,12 @@ export interface Player {
   valoreIniziale: number;
   /** V.A. — calcolato = valoreIniziale × (quotazioneAttuale / quotazioneIniziale) */
   valoreAttuale: number;
+  /**
+   * true se il giocatore NON è stato trovato tra le quotazioni di fantacalcio.it
+   * (quindi non risulta in Serie A): evidenziato in rosa nella rosa e
+   * escluso dalle trattative.
+   */
+  fuoriSerieA?: boolean;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }

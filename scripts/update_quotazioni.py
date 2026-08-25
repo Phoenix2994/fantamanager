@@ -282,10 +282,12 @@ def main() -> None:
     updated = []
     matched_quote_idx: set[int] = set()
     not_found_db = []
+    fuori_serie_a = []
     for p in players:
         idx = find_match(p["name"], quotes_norm)
         if idx is None:
             not_found_db.append(p["name"])
+            fuori_serie_a.append(p)
             continue
         matched_quote_idx.add(idx)
         q = quotes_norm[idx]
@@ -332,12 +334,28 @@ def main() -> None:
     # Scrittura quotazioni rose (batch)
     batch = db.batch()
     count = 0
+    # I giocatori matchati nel listone sono ovviamente in Serie A
     for u in updated:
         batch.set(u["ref"], {
             "quotazioneAttuale": u["qa_new"],
             "valoreAttuale": u["va_new"],
             "prossimaSpesaRinnovo": u["spesa_new"],
+            "fuoriSerieA": False,
         }, merge=True)
+        count += 1
+        if count >= 450:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count:
+        batch.commit()
+
+    # Marca i giocatori NON trovati nel listone: fuori Serie A,
+    # così la rosa può evidenziarli e le trattative li escludono
+    batch = db.batch()
+    count = 0
+    for p in fuori_serie_a:
+        batch.set(p["ref"], {"fuoriSerieA": True}, merge=True)
         count += 1
         if count >= 450:
             batch.commit()

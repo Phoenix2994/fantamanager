@@ -171,8 +171,9 @@ function roleSortKey(ruolo: string): number {
       <!-- MOBILE: card espandibili -->
       @if (isMobile()) {
         <div class="cards">
-          @for (player of filteredPlayers(); track player.id) {
-            <div class="player-card" [class.expanded]="expandedId() === player.id">
+                    @for (player of filteredPlayers(); track player.id) {
+            <div class="player-card" [class.expanded]="expandedId() === player.id"
+                 [class.is-fuori-serie-a]="player.fuoriSerieA">
               <button
                 type="button"
                 class="card-head"
@@ -333,8 +334,9 @@ function roleSortKey(ruolo: string): number {
               </ng-container>
             }
 
-            <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
+                        <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns()"
+                [class.is-fuori-serie-a]="row.fuoriSerieA"></tr>
             <tr class="mat-mdc-row" *matNoDataRow>
               <td class="mat-mdc-cell empty-state" [attr.colspan]="displayedColumns().length">
                 Nessun giocatore corrisponde ai filtri.
@@ -454,11 +456,17 @@ function roleSortKey(ruolo: string): number {
       gap: 8px;
     }
 
-    .player-card {
+        .player-card {
       border: 1px solid var(--mat-sys-outline-variant);
       border-radius: 10px;
       background: var(--mat-sys-surface);
       overflow: hidden;
+    }
+
+    /* Giocatore fuori Serie A (non in alcun listone): evidenziazione rosa tenue */
+    .player-card.is-fuori-serie-a,
+    tr.is-fuori-serie-a {
+      background: rgba(252, 185, 203, 0.18);
     }
 
     .card-head {
