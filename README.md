@@ -133,7 +133,34 @@ teams/{teamId}/players/{playerId}           # rose
 teams/{teamId}/loanedPlayers/{loanId}       # ceduti in prestito
 teams/{teamId}/seasonFinance/{season}       # es. "2026-27"
 auditLog/{logId}                            # storico immutabile operazioni
+scambi/{scambioId}                          # trattative di scambio (bozza/confermata)
 ```
+
+### Scambi (`core/scambi-calculator.ts`)
+
+Regola di bilanciamento delle trattative (concordata con la lega):
+
+- totale ceduto dal **pagante** del conguaglio = valore dei suoi giocatori + conguaglio;
+- la parte che risulta più "povera" fa salire i propri giocatori della differenza,
+  ripartita **proporzionalmente alla quotazione attuale** (arrotondamenti a 1 decimale,
+  residuo al giocatore con quotazione più alta);
+- è possibile **vendere un giocatore per una sola cifra** (senza riceverne altri):
+  il suo valore sale alla cifra incassata (se superiore al valore attuale; se
+  inferiore il valore resta invariato).
+
+**Chi può fare cosa**: chiunque può creare una bozza di trattativa (`create`
+aperto nelle rules); solo l'admin (login email/password, non anonimo) può
+**confermare** o eliminare — enforcement lato server con `isAdmin()`.
+
+Alla conferma (solo admin, batch atomico): cambio squadra dei giocatori coinvolti,
+rivalutazione della parte più povera (`valoreIniziale` = nuovo valore,
+`quotazioneIniziale` = `quotazioneAttuale`), `prossimaPercRinnovo` al 60% per tutti,
+conguaglio registrato su `trasferimentiUscita`/`trasferimentiEntrata` con ricalcolo
+completo di tasse/spese/bilancio e valore rosa post-scambio. Ogni operazione è
+registrata nell'auditLog.
+
+> Dopo aver modificato `firestore.rules`: `firebase deploy --only firestore:rules`
+
 
 ### Formule implementate (`core/finance-calculator.ts`)
 

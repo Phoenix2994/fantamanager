@@ -131,6 +131,69 @@ export interface Team {
   updatedAt?: Timestamp | null;
 }
 
+/** Lato di una trattativa di scambio: squadra + giocatori ceduti */
+export interface ScambioSide {
+  teamId: string;
+  playerIds: string[];
+}
+
+export type ScambioStato = 'bozza' | 'confermata';
+
+/**
+ * Trattativa di scambio tra due squadre: scambi/{scambioId}.
+ *
+ * Bilanciamento (interpretazione concordata): il totale ceduto dalla
+ * squadra pagante è (valore giocatori + conguaglio); la parte che risulta
+ * più "povera" vede i propri giocatori rivalutati in su della differenza,
+ * distribuita proporzionalmente alle quotazioni attuali.
+ */
+export interface Scambio {
+  id: string;
+  season: string;
+  squadraA: ScambioSide;
+  squadraB: ScambioSide;
+  /** conguaglio in € (0 = nessun conguaglio) */
+  conguaglio: number;
+  /** squadra che paga il conguaglio; null se conguaglio = 0 */
+  conguaglioPagante: 'A' | 'B' | null;
+  stato: ScambioStato;
+  /**
+   * Fotografia dei dati al momento del salvataggio, per mostrare il
+   * riepilogo nella lista senza leggere le rose di tutte le squadre.
+   */
+  snapshot: ScambioSnapshot;
+  createdAt?: Timestamp | null;
+  createdBy?: string | null;
+  confirmedAt?: Timestamp | null;
+}
+
+/** Giocatore sintetico dentro lo snapshot di una trattativa */
+export interface ScambioPlayerSnapshot {
+  name: string;
+  ruolo: string;
+  valoreAttuale: number;
+}
+
+/** Rivalutazione registrata nello snapshot */
+export interface ScambioRivalutazioneSnapshot {
+  playerId: string;
+  playerName: string;
+  valorePrima: number;
+  valoreDopo: number;
+}
+
+/** Fotografia della trattativa al momento del salvataggio */
+export interface ScambioSnapshot {
+  nomeSquadraA: string;
+  nomeSquadraB: string;
+  giocatoriA: ScambioPlayerSnapshot[];
+  giocatoriB: ScambioPlayerSnapshot[];
+  valoreTotaleA: number;
+  valoreTotaleB: number;
+  rivalutazioni: ScambioRivalutazioneSnapshot[];
+}
+
+
 /** Campi di input manuale del pannello spese societarie */
 export interface SeasonFinanceInputs {
   rinnovi: number;
@@ -220,6 +283,7 @@ export type AuditEntityType =
   | 'player'
   | 'playerLoaned'
   | 'seasonFinance'
+  | 'scambio'
   | 'initial_import';
 export type AuditOperation = 'create' | 'update' | 'delete';
 

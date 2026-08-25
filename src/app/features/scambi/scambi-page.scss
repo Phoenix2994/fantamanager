@@ -1,0 +1,296 @@
+/* ---------- Stili specifici della pagina Scambi ---------- */
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1rem;
+  margin: 0 0 16px;
+
+  mat-icon {
+    color: var(--mat-sys-primary);
+  }
+}
+
+.vuoto {
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0;
+}
+
+.hint {
+  margin: -6px 0 16px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.errore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mat-sys-error, #b3261e);
+  font-weight: 500;
+  margin: 8px 0;
+}
+
+/* ---------- Selettore squadre e giocatori ---------- */
+.squadre-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.picker {
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 8px;
+  padding: 12px;
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 0.95rem;
+  }
+}
+
+.player-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  min-height: 40px;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high, #f5f5f5);
+  }
+
+  &.selected {
+    background: color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
+
+    .nome {
+      font-weight: 600;
+    }
+  }
+
+  .nome {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ruolo {
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .valore {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+}
+
+.totale-lato {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+/* ---------- Conguaglio ---------- */
+.conguaglio-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.conguaglio-input {
+  width: 180px;
+}
+
+.pagatore-toggle {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pagatore-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* ---------- Anteprima ---------- */
+.anteprima {
+  border: 2px solid var(--mat-sys-primary);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--mat-sys-surface-container-lowest, #fafafa);
+
+  &.invalid {
+    border-color: var(--mat-sys-error, #b3261e);
+  }
+
+  h3 {
+    margin: 0 0 12px;
+  }
+}
+
+.anteprima-totali {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.totale-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+
+  strong {
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  small {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .etichetta {
+    font-size: 0.85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.swap-icon {
+  color: var(--mat-sys-primary);
+}
+
+.riv-intro,
+.nota-rinnovo {
+  font-size: 0.9rem;
+  margin: 8px 0;
+}
+
+.riv-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+
+  th,
+  td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  }
+
+  th {
+    font-size: 0.8rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .nuovo-valore {
+    font-weight: 700;
+    color: var(--mat-sys-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.bilanciato {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mat-sys-primary);
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------- Lista trattative ---------- */
+.trattativa-card {
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+
+  &.confermata {
+    opacity: 0.75;
+    background: var(--mat-sys-surface-container-low, #fafafa);
+  }
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.card-sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+
+  .side-name {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .giocatore {
+    display: block;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.card-conguaglio,
+.card-rivalutazioni {
+  font-size: 0.9rem;
+  margin: 8px 0 0;
+}
+
+.riv-chip {
+  display: inline-block;
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin: 2px 4px 2px 0;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}

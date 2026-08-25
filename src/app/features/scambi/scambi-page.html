@@ -1,0 +1,297 @@
+<div class="page">
+  <header class="page-header">
+    <app-nav-menu />
+    <mat-icon class="header-logo" aria-hidden="true">sports_soccer</mat-icon>
+    <h1 class="app-title">Scambi — {{ leagueName }}</h1>
+    <span class="spacer"></span>
+    @if (isAdmin()) {
+      <button matIconButton aria-label="Esci" (click)="logout()">
+        <mat-icon>logout</mat-icon>
+      </button>
+    } @else {
+      <a matButton="tonal" routerLink="/login">
+        <mat-icon>login</mat-icon>
+        Accedi
+      </a>
+    }
+  </header>
+
+  <main class="content">
+    <!-- ---------- Nuova trattativa (aperta a tutti) ---------- -->
+    <section class="panel nuova-trattativa">
+      <h2 class="section-title">
+        <mat-icon>swap_horiz</mat-icon>
+        Nuova trattativa
+      </h2>
+      <p class="hint">
+        Chiunque può preparare una trattativa: verrà salvata come bozza e dovrà
+        essere confermata dall'admin. Puoi anche vendere un giocatore per una
+        cifra, senza riceverne altri: in quel caso il suo valore salirà alla
+        cifra incassata.
+      </p>
+
+        <div class="squadre-grid">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Squadra A</mat-label>
+            <mat-select
+              [value]="squadraAId()"
+              (selectionChange)="squadraChange('A', $event.value)"
+            >
+              @for (team of teams(); track team.id) {
+                <mat-option [value]="team.id">{{ team.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Squadra B</mat-label>
+            <mat-select
+              [value]="squadraBId()"
+              (selectionChange)="squadraChange('B', $event.value)"
+            >
+              @for (team of teams(); track team.id) {
+                <mat-option [value]="team.id">{{ team.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        @if (erroreSquadre(); as err) {
+          <p class="errore">
+            <mat-icon>error_outline</mat-icon>
+            {{ err }}
+          </p>
+        }
+
+        <div class="picker-grid">
+          @for (lato of LATI; track lato) {
+            <div class="picker">
+              <h3>{{ lato === 'A' ? nomeSquadraA() : nomeSquadraB() || ('Squadra ' + lato) }}</h3>
+              @if ((lato === 'A' ? opzioniA() : opzioniB()).length === 0) {
+                <p class="vuoto">Seleziona una squadra per vedere la rosa.</p>
+              } @else {
+                <ul class="player-list">
+                  @for (p of lato === 'A' ? opzioniA() : opzioniB(); track p.id) {
+                    <li>
+                      <label
+                        class="player-row"
+                        [class.selected]="(lato === 'A' ? selezioneA() : selezioneB()).includes(p.id)"
+                      >
+                        <input
+                          type="checkbox"
+                          [checked]="(lato === 'A' ? selezioneA() : selezioneB()).includes(p.id)"
+                          (change)="toggleGiocatore(lato, p.id)"
+                        />
+                        <span class="nome">{{ p.name }}</span>
+                        <span class="ruolo">{{ p.ruolo }}</span>
+                        <span class="valore">{{ p.valoreAttuale | number: '1.0-1' }} €</span>
+                      </label>
+                    </li>
+                  }
+                </ul>
+                <p class="totale-lato">
+                  Selezionati:
+                  {{
+                    (lato === 'A'
+                      ? anteprima().valoreTotaleA
+                      : anteprima().valoreTotaleB) | number: '1.0-2'
+                  }} €
+                </p>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="conguaglio-row">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="conguaglio-input">
+            <mat-label>Conguaglio (€)</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="0.5"
+              [value]="conguaglio()"
+              (input)="conguaglioChange($any($event.target).valueAsNumber)"
+            />
+          </mat-form-field>
+
+          @if ((conguaglio() ?? 0) > 0) {
+            <div class="pagatore-toggle" role="radiogroup" aria-label="Chi paga il conguaglio">
+              @for (lato of LATI; track lato) {
+                <label class="pagatore-opt">
+                  <input
+                    type="radio"
+                    name="pagatore"
+                    [checked]="pagatore() === lato"
+                    (change)="pagatore.set(lato)"
+                  />
+                  Paga {{ lato === 'A' ? nomeSquadraA() : nomeSquadraB() }}
+                </label>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- ---------- Anteprima live ---------- -->
+        <div class="anteprima" [class.invalid]="!!anteprima().errore">
+          <h3>Anteprima dello scambio</h3>
+          @if (anteprima().errore; as err) {
+            <p class="errore">
+              <mat-icon>error_outline</mat-icon>
+              {{ err }}
+            </p>
+          } @else {
+            <div class="anteprima-totali">
+              <div class="totale-box">
+                <span class="etichetta">{{ nomeSquadraA() }} cede</span>
+                <strong>{{ anteprima().totaleEffettivoA | number: '1.0-2' }} €</strong>
+                <small>
+                  giocatori {{ anteprima().valoreTotaleA | number: '1.0-2' }} €
+                  @if ((conguaglio() ?? 0) > 0 && pagatore() === 'A') {
+                    + conguaglio {{ conguaglio() | number: '1.0-2' }} €
+                  }
+                </small>
+              </div>
+              <mat-icon class="swap-icon" aria-hidden="true">swap_horiz</mat-icon>
+              <div class="totale-box">
+                <span class="etichetta">{{ nomeSquadraB() }} cede</span>
+                <strong>{{ anteprima().totaleEffettivoB | number: '1.0-2' }} €</strong>
+                <small>
+                  giocatori {{ anteprima().valoreTotaleB | number: '1.0-2' }} €
+                  @if ((conguaglio() ?? 0) > 0 && pagatore() === 'B') {
+                    + conguaglio {{ conguaglio() | number: '1.0-2' }} €
+                  }
+                </small>
+              </div>
+            </div>
+
+            @if (anteprima().rivalutazioni.length > 0) {
+              <p class="riv-intro">
+                Per pareggiare i conti salgono di valore i giocatori di
+                <strong>{{
+                  anteprima().latoDaRivalutare === 'A' ? nomeSquadraA() : nomeSquadraB()
+                }}</strong>
+                (+{{ anteprima().aumentoComplessivo | number: '1.0-2' }} € totali, ripartiti
+                in proporzione alla quotazione attuale):
+              </p>
+              <table class="riv-table">
+                <thead>
+                  <tr>
+                    <th>Giocatore</th>
+                    <th>V.A. ora</th>
+                    <th>Aumento</th>
+                    <th>Nuovo V.A.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (r of anteprima().rivalutazioni; track r.player.id) {
+                    <tr>
+                      <td>{{ r.player.name }}</td>
+                      <td>{{ r.valorePrima | number: '1.0-1' }} €</td>
+                      <td>+{{ r.aumento | number: '1.0-1' }} €</td>
+                      <td class="nuovo-valore">{{ r.valoreDopo | number: '1.0-1' }} €</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="bilanciato">
+                <mat-icon>check_circle</mat-icon>
+                I valori sono già bilanciati: nessuna rivalutazione necessaria.
+              </p>
+            }
+
+            <p class="nota-rinnovo">
+              Tutti i giocatori coinvolti avranno prossima percentuale di rinnovo al
+              {{ percRinnovoScambio * 100 }}%.
+            </p>
+          }
+        </div>
+
+        <div class="actions">
+          <button
+            matButton="filled"
+            type="button"
+            [disabled]="!!anteprima().errore || !!erroreSquadre()"
+            (click)="salvaBozza()"
+          >
+            <mat-icon>save</mat-icon>
+            Salva bozza trattativa
+          </button>
+        </div>
+      </section>
+
+    <!-- ---------- Elenco trattative ---------- -->
+    <section class="panel lista-trattative">
+      <h2 class="section-title">
+        <mat-icon>history</mat-icon>
+        Trattative
+      </h2>
+
+      @for (s of trattative(); track s.id) {
+        <article class="trattativa-card" [class.confermata]="s.stato === 'confermata'">
+          <header class="card-head">
+            <strong>{{ s.snapshot.nomeSquadraA }} ↔ {{ s.snapshot.nomeSquadraB }}</strong>
+            <mat-chip-set>
+              <mat-chip [highlighted]="s.stato === 'bozza'">
+                {{ s.stato === 'bozza' ? 'Bozza' : 'Confermata' }}
+              </mat-chip>
+            </mat-chip-set>
+          </header>
+
+          <div class="card-sides">
+            <div>
+              <span class="side-name">{{ s.snapshot.nomeSquadraA }}</span>
+              @for (g of s.snapshot.giocatoriA; track g.name) {
+                <span class="giocatore">
+                  {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
+                </span>
+              }
+            </div>
+            <div>
+              <span class="side-name">{{ s.snapshot.nomeSquadraB }}</span>
+              @for (g of s.snapshot.giocatoriB; track g.name) {
+                <span class="giocatore">
+                  {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
+                </span>
+              }
+            </div>
+          </div>
+
+          @if (s.conguaglio > 0) {
+            <p class="card-conguaglio">
+              Conguaglio: {{ s.conguaglio | number: '1.0-2' }} € da
+              {{ s.conguaglioPagante === 'A' ? s.snapshot.nomeSquadraA : s.snapshot.nomeSquadraB }}
+            </p>
+          }
+
+          @if (s.snapshot.rivalutazioni.length > 0) {
+            <p class="card-rivalutazioni">
+              Rivalutazioni previste:
+              @for (r of s.snapshot.rivalutazioni; track r.playerId) {
+                <span class="riv-chip">
+                  {{ r.playerName }} → {{ r.valoreDopo | number: '1.0-1' }} €
+                </span>
+              }
+            </p>
+          }
+
+          @if (isAdmin() && s.stato === 'bozza') {
+            <footer class="card-actions">
+              <button matButton="filled" type="button" (click)="conferma(s)">
+                <mat-icon>check_circle</mat-icon>
+                Conferma
+              </button>
+              <button matButton type="button" (click)="elimina(s)">
+                <mat-icon>delete</mat-icon>
+                Elimina
+              </button>
+            </footer>
+          }
+        </article>
+      } @empty {
+        <p class="vuoto">Nessuna trattativa presente.</p>
+      }
+    </section>
+  </main>
+</div>

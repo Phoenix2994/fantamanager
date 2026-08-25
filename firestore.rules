@@ -4,8 +4,17 @@ rules_version = '2';
 //
 // Modello di accesso:
 //  - LETTURA: aperta a tutti (nessuna autenticazione richiesta)
-//  - SCRITTURA: riservata agli autenticati (= chi ha effettuato il login
-//    con la password condivisa della lega)
+//  - SCRITTURA, risorsa per risorsa:
+//    * isAdmin(): SOLO l'account admin (login email/password condiviso della
+//      lega). Tutti i dati sensibili: rose, finanze, lega, svincolati,
+//      conferma delle trattative di scambio.
+//    * isAuthenticated(): include anche i partecipanti ANONIMI dell'asta.
+//      Usato solo dove serve davvero: rilanci sull'asta e creazione voci
+//      di auditLog.
+//
+// NOTA STORICA: prima dell'introduzione del login anonimo per l'asta,
+// "autenticato" coincideva con "admin"; oggi non più, quindi ogni regola
+// di scrittura distingue esplicitamente i due livelli.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -13,53 +22,67 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Lega e scaglioni fiscali: lettura pubblica,
-    // scrittura solo per gli admin autenticati
-    match /league/{leagueId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
-
-      match /taxBrackets/{bracketId} {
-        allow read: if true;
-        allow write: if isAuthenticated();
-      }
-
-      match /svincolati/{playerId} {
-        allow read: if true;
-        allow write: if isAuthenticated();
-      }
+    // Admin = autenticato con email/password (l'account condiviso della lega).
+    // I login anonimi (partecipanti all'asta) NON sono admin.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'password';
     }
 
-    // Squadre e sottocollezioni (players, loanedPlayers, seasonFinance,
-    // teamFinanceHistory): lettura pubblica, scrittura solo autenticati
-    match /teams/{teamId} {
+    // Lega e sotto-collection (taxBrackets, svincolati): lettura pubblica,
+    // scrittura solo admin (dati lega, rose libere)
+    match /league/{leagueId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
 
       match /{subcollection}/{document=**} {
         allow read: if true;
-        allow write: if isAuthenticated();
+        allow write: if isAdmin();
       }
     }
 
-    // Audit log: immutabile.
-    // - create: consentito ai client autenticati finché le Cloud Functions
-    //   non sono deployate; poi sostituire con:
-    //     allow create: if request.auth.uid == 'UID_CLOUD_FUNCTION';
-    // - update/delete: sempre negato (storico non modificabile)
+    // Squadre e tutte le sottocollezioni annidate (seasons/{stagione}/players,
+    // loanedPlayers, seasonFinance, ...): lettura pubblica, scrittura solo
+    // admin (CRUD giocatori, prestiti, spese societarie).
+    match /teams/{teamId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /{subcollection}/{document=**} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    // Audit log: append-only.
+    // - create: chiunque abbia una sessione (admin o anonimi dell'asta);
+    //   le azioni fatte senza sessione non generano voci (l'AuditService
+    //   non blocca mai l'operazione principale).
+    // - update/delete: SEMPRE negato (storico non modificabile).
     match /auditLog/{logId} {
       allow read: if true;
       allow create: if isAuthenticated();
       allow update, delete: if false;
     }
 
-    // Asta live: lettura pubblica (vista TV),
-    // scrittura solo da utenti autenticati (admin o partecipanti anonimi).
-    // La validazione del prezzo crescente e del divieto di rilanciare
-    // due volte di fila avviene nella transaction client-side.
+    // Asta live: UNICO documento (asta/statoCorrente) usato sia dai rilanci
+    // dei partecipanti (anonimi ma autenticati) sia dall'admin per apertura/
+    // chiusura/assegnazione. Le rules non possono distinguere le due azioni
+    // sul medesimo documento: la scrittura resta ai soli autenticati e la
+    // separazione dei ruoli è garantita dalla UI + transaction client-side
+    // (prezzo solo crescente). Modello "lega tra amici fidati".
     match /asta/{docId} {
       allow read: if true;
       allow write: if isAuthenticated();
+    }
+
+    // Trattative di scambio tra squadre:
+    // - lettura e CREAZIONE bozze: aperte a tutti;
+    // - aggiornamento (= conferma dell'admin) ed eliminazione: solo admin,
+    //   ovvero autenticati con email/password (non i login anonimi dell'asta).
+    match /scambi/{scambioId} {
+      allow read, create: if true;
+      allow update, delete: if isAdmin();
     }
 
     // Configurazioni sensibili (es. hash password future):

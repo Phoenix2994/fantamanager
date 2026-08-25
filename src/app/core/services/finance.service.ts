@@ -18,6 +18,7 @@ import {
   DEFAULT_TAX_BRACKETS,
   EMPTY_FINANCE_INPUTS,
   SeasonFinance,
+  SeasonFinanceComputed,
   SeasonFinanceInputs,
   TaxBracket,
 } from '../models';
@@ -370,7 +371,28 @@ export class FinanceService {
     });
   }
 
+  /**
+   * Prepara (SENZA scrivere) il documento finanze aggiornato con un
+   * trasferimento legato a uno scambio: +importo su trasferimentiUscita
+   * o trasferimentiEntrata, ricalcolando tutti i derivati.
+   * Il chiamante (ScambiService) include il risultato nel batch atomico.
+   */
+  preparaTrasferimento(
+    current: SeasonFinance | undefined,
+    campo: 'trasferimentiUscita' | 'trasferimentiEntrata',
+    importo: number,
+    valoreRosa: number,
+  ): SeasonFinanceInputs & SeasonFinanceComputed {
+    const merged: SeasonFinanceInputs = {
+      ...EMPTY_FINANCE_INPUTS,
+      ...(current ?? {}),
+      [campo]: round2((current?.[campo] ?? 0) + importo),
+    };
+    return { ...merged, ...ricalcolaFinance(merged, this.bracketsCache, valoreRosa, current?.taxMinimumHistoric ?? 0) };
+  }
+
   private financeRef(teamId: string) {
     return doc(this.firestore, `teams/${teamId}/seasonFinance/${environment.season}`);
   }
 }
+
