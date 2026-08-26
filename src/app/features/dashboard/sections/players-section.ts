@@ -67,7 +67,7 @@ import { RenewDialog } from '../dialogs/renew-dialog';
     } @else {
       <div class="filters">
         <!-- Filtro multiplo: si possono selezionare più ruoli insieme -->
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>Ruoli</mat-label>
           <mat-select
             [value]="filterRuoli()"
@@ -80,7 +80,7 @@ import { RenewDialog } from '../dialogs/renew-dialog';
           </mat-select>
         </mat-form-field>
 
-        <!-- <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <!-- <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>Contratto</mat-label>
           <mat-select [value]="filterContratto()" (selectionChange)="filterContratto.set($event.value)">
             <mat-option value="">Tutti</mat-option>

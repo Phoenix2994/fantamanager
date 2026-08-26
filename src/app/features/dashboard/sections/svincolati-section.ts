@@ -65,14 +65,14 @@ interface RosterEntry {
     }
 
     <div class="filters">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-form-field appearance="fill" subscriptSizing="dynamic">
         <mat-label>Cerca giocatore</mat-label>
         <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
         <mat-icon matPrefix>search</mat-icon>
       </mat-form-field>
 
       <!-- Filtro multiplo: si possono selezionare più ruoli insieme -->
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-form-field appearance="fill" subscriptSizing="dynamic">
         <mat-label>Ruoli</mat-label>
         <mat-select
           [value]="filterRuoli()"

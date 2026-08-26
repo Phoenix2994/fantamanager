@@ -23,7 +23,7 @@ import { HistorySection } from '../dashboard/sections/history-section';
       <header class="page-header">
         <app-nav-menu />
         <mat-icon class="header-logo" aria-hidden="true">sports_soccer</mat-icon>
-        <h1 class="app-title">{{ leagueName }}</h1>
+        <h1 class="app-title">Storico</h1>
         <span class="spacer"></span>
         @if (isAdmin()) {
           <button matIconButton aria-label="Esci" (click)="logout()">

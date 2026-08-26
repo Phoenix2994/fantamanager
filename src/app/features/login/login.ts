@@ -32,7 +32,7 @@ import { AuthService } from '../../core/services/auth.service';
         </div>
 
         <form [formGroup]="form" (ngSubmit)="submit()">
-          <mat-form-field appearance="outline" class="full-width">
+          <mat-form-field appearance="fill" class="full-width">
             <mat-label>Password della lega</mat-label>
             <input
               matInput

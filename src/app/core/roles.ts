@@ -7,20 +7,26 @@
 /** Ordine canonico dei ruoli mantra */
 export const ROLE_ORDER = ['Por', 'B', 'Dd', 'Dc', 'Ds', 'M', 'C', 'E', 'W', 'T', 'A', 'Pc'];
 
-/** Colore del bordo/chip per gruppo di ruolo */
+/**
+ * Colore del bordo/chip per gruppo di ruolo. Sono custom property (vedi
+ * styles.scss, --role-*): stessa mappatura ruolo→gruppo, ma la tonalità
+ * effettiva cambia tra tema scuro (di default, più chiara per restare
+ * leggibile su sfondo scuro) e tema chiaro (i colori originali, pensati per
+ * sfondo bianco).
+ */
 export const ROLE_COLORS: Record<string, string> = {
-  Por: '#f9a825',
-  B: '#2e7d32',
-  Dd: '#2e7d32',
-  Dc: '#2e7d32',
-  Ds: '#2e7d32',
-  M: '#508af4',
-  C: '#508af4',
-  E: '#508af4',
-  W: '#6a1b9a',
-  T: '#6a1b9a',
-  A: '#c62828',
-  Pc: '#c62828',
+  Por: 'var(--role-por)',
+  B: 'var(--role-dif)',
+  Dd: 'var(--role-dif)',
+  Dc: 'var(--role-dif)',
+  Ds: 'var(--role-dif)',
+  M: 'var(--role-cen)',
+  C: 'var(--role-cen)',
+  E: 'var(--role-cen)',
+  W: 'var(--role-est)',
+  T: 'var(--role-est)',
+  A: 'var(--role-att)',
+  Pc: 'var(--role-att)',
 };
 
 /** Divide la stringa ruolo composta ("Dd;Dc") nei ruoli singoli */

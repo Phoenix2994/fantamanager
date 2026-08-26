@@ -111,7 +111,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
             <div class="row">
               <span>{{ row.label }}</span>
               @if (editing() && financeForm) {
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="edit-field">
+                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="edit-field">
                   <input matInput type="number" step="0.01" [formControlName]="row.key" />
                 </mat-form-field>
               } @else {
@@ -130,7 +130,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
             <div class="row">
               <span>{{ row.label }}</span>
               @if (editing() && financeForm) {
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="edit-field">
+                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="edit-field">
                   <input matInput type="number" step="0.01" [formControlName]="row.key" />
                 </mat-form-field>
               } @else {
@@ -148,7 +148,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
           <div class="row">
             <span>Soldi versati alla Lega</span>
             @if (editing() && financeForm) {
-              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="edit-field">
+              <mat-form-field appearance="fill" subscriptSizing="dynamic" class="edit-field">
                 <input matInput type="number" step="0.01" formControlName="soldiVersati" />
               </mat-form-field>
             } @else {

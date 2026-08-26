@@ -1,19 +1,56 @@
 @use '@angular/material' as mat;
 
-// Tema Material 3: primary blu, tertiary/arancione (come da spec),
+// Tema Material 3 "Campo": primary verde, tertiary arancione/oro,
 // tipografia Roboto, densità standard.
+//
+// Scuro di default, chiaro disponibile su richiesta: la stessa palette è
+// definita due volte, una per `html` (scuro) e una per `html.light-theme`
+// (chiaro, applicata/tolta da ThemeService). Angular Material genera le
+// custom property `--mat-sys-*` sotto ciascun selettore: quella con
+// specificità maggiore (.light-theme) vince quando la classe è presente.
 html {
-  color-scheme: light;
+  color-scheme: dark;
   @include mat.theme(
     (
       color: (
-        primary: mat.$azure-palette,
+        theme-type: dark,
+        primary: mat.$green-palette,
         tertiary: mat.$orange-palette,
       ),
       typography: Roboto,
       density: 0,
     )
   );
+
+  // Colori dei chip di ruolo (vedi core/roles.ts): schiariti per restare
+  // leggibili sullo sfondo scuro di default.
+  --role-por: #ffca55;
+  --role-dif: #66bb6a;
+  --role-cen: #6fa8ff;
+  --role-est: #ce93d8;
+  --role-att: #ef5350;
+}
+
+html.light-theme {
+  color-scheme: light;
+  @include mat.theme(
+    (
+      color: (
+        theme-type: light,
+        primary: mat.$green-palette,
+        tertiary: mat.$orange-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+
+  // Colori originali, pensati per sfondo chiaro.
+  --role-por: #f9a825;
+  --role-dif: #2e7d32;
+  --role-cen: #508af4;
+  --role-est: #6a1b9a;
+  --role-att: #c62828;
 }
 
 * {
@@ -28,12 +65,43 @@ body {
 body {
   margin: 0;
   font-family: Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: var(--mat-sys-surface-container-lowest, #fafafa);
-  color: var(--mat-sys-on-surface, #1c1b1f);
+  background-color: var(--mat-sys-surface-container-lowest, #101410);
+  color: var(--mat-sys-on-surface, #e2e3dd);
   -webkit-font-smoothing: antialiased;
 }
 
 /* Touch-friendly: target minimi 48px su elementi interattivi comuni */
 button {
   touch-action: manipulation;
+}
+
+/* ---------- Personalità tipografica: titoli in condensato, non solo Roboto ---------- */
+h1,
+h2,
+h3 {
+  font-family: 'Oswald', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- Campi di input: pieni e arrotondati, non il "modulo" di default ----------
+   L'appearance "fill" di Material lascia angoli superiori appena arrotondati e una
+   sottolineatura: qui si arrotonda tutta la forma e si toglie la linea, per un
+   aspetto da app invece che da modulo cartaceo. */
+.mat-mdc-text-field-wrapper.mdc-text-field--filled {
+  border-radius: 14px;
+  background-color: var(--mat-sys-surface-container-high);
+}
+
+.mat-mdc-text-field-wrapper.mdc-text-field--filled:hover {
+  background-color: var(--mat-sys-surface-container-highest);
+}
+
+.mdc-text-field--filled .mdc-line-ripple {
+  display: none;
+}
+
+/* Il pannello opzioni di mat-select segue la stessa scala di angoli */
+.mat-mdc-select-panel {
+  border-radius: 14px !important;
 }

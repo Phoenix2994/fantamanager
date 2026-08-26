@@ -17,6 +17,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { AstaStato, Team } from '../../core/models';
 import { residuoAlleMulte } from '../../core/finance-calculator';
+import { roleColor, splitRoles } from '../../core/roles';
 import {
   AstaStatsPanel,
   estraiAcquistiAsta,
@@ -36,27 +37,12 @@ import { AuthService } from '../../core/services/auth.service';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
+import { environment } from '../../../environments/environment';
 
 const STORAGE_KEY = 'asta.miaSquadra';
 
 /** Incrementi di rilancio disponibili */
 const INCREMENTI = [0.1, 0.2, 0.5, 1] as const;
-
-/** Colore del bordo/chip per gruppo di ruolo */
-const ROLE_COLORS: Record<string, string> = {
-  Por: '#f9a825',
-  B: '#2e7d32',
-  Dd: '#2e7d32',
-  Dc: '#2e7d32',
-  Ds: '#2e7d32',
-  M: '#508af4',
-  C: '#508af4',
-  E: '#508af4',
-  W: '#6a1b9a',
-  T: '#6a1b9a',
-  A: '#c62828',
-  Pc: '#c62828',
-};
 
 /** Statistica di una squadra per il pannello dell'asta */
 type TeamStat = TeamStatAsta;
@@ -87,19 +73,27 @@ type TeamStat = TeamStatAsta;
     NavMenu,
     AstaStatsPanel,
   ],
+  styleUrls: ['../../core/nav/page-shell.scss'],
   template: `
-    <div class="asta-page">
-      <header class="asta-header">
+    <div class="page">
+      <header class="page-header">
         <app-nav-menu />
-        <h1>Asta live</h1>
+        <mat-icon class="header-logo" aria-hidden="true">sports_soccer</mat-icon>
+        <h1 class="app-title">Asta live</h1>
         <span class="spacer"></span>
-        @if (!isAdmin()) {
-          <a matButton routerLink="/login">
-            <mat-icon>admin_panel_settings</mat-icon>
-            Accedi come admin
+        @if (isAdmin()) {
+          <button matIconButton aria-label="Esci" (click)="logout()">
+            <mat-icon>logout</mat-icon>
+          </button>
+        } @else {
+          <a matButton="tonal" routerLink="/login">
+            <mat-icon>login</mat-icon>
+            Accedi
           </a>
         }
       </header>
+
+      <main class="content">
 
       <!-- MOBILE: tab Asta / Statistiche -->
       @if (isMobile()) {
@@ -134,7 +128,7 @@ type TeamStat = TeamStatAsta;
                         }
                       </div>
 
-                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                      <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                         <mat-label>Assegna alla squadra vincitrice</mat-label>
                         <mat-select [value]="assegnaA()" (selectionChange)="assegnaA.set($event.value)">
                           @for (team of teams(); track team.id) {
@@ -143,7 +137,7 @@ type TeamStat = TeamStatAsta;
                         </mat-select>
                       </mat-form-field>
 
-                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                      <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                         <mat-label>Voce di spesa</mat-label>
                         <mat-select [value]="provenienza()" (selectionChange)="provenienza.set($event.value)">
                           <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
@@ -152,7 +146,7 @@ type TeamStat = TeamStatAsta;
                       </mat-form-field>
 
                       <!-- Prezzo prevalorizzato al prezzo corrente, modificabile dall'admin -->
-                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                      <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                         <mat-label>Prezzo di assegnazione (€)</mat-label>
                         <input
                           matInput
@@ -251,7 +245,7 @@ type TeamStat = TeamStatAsta;
                         Il rilancio custom deve superare il prezzo attuale
                       </p>
 
-                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                      <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                         <mat-label>Rilancio custom (€)</mat-label>
                         <input
                           matInput
@@ -349,7 +343,7 @@ type TeamStat = TeamStatAsta;
                   }
                 </div>
 
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                   <mat-label>Assegna alla squadra vincitrice</mat-label>
                   <mat-select [value]="assegnaA()" (selectionChange)="assegnaA.set($event.value)">
                     @for (team of teams(); track team.id) {
@@ -358,7 +352,7 @@ type TeamStat = TeamStatAsta;
                   </mat-select>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                   <mat-label>Voce di spesa</mat-label>
                   <mat-select [value]="provenienza()" (selectionChange)="provenienza.set($event.value)">
                     <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
@@ -367,7 +361,7 @@ type TeamStat = TeamStatAsta;
                 </mat-form-field>
 
                 <!-- Prezzo prevalorizzato al prezzo corrente, modificabile dall'admin -->
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                   <mat-label>Prezzo di assegnazione (€)</mat-label>
                   <input
                     matInput
@@ -468,7 +462,7 @@ type TeamStat = TeamStatAsta;
                   Il rilancio custom deve superare il prezzo attuale
                 </p>
 
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                   <mat-label>Rilancio custom (€)</mat-label>
                   <input
                     matInput
@@ -511,25 +505,17 @@ type TeamStat = TeamStatAsta;
           Apri vista TV
         </a>
       </footer>
+      </main>
     </div>
   `,
   styles: `
-    .asta-page {
+    /* Colonna unica e stretta: qui si segue un'asta live, non si naviga
+       una dashboard — il resto (header, .panel, .empty-state) viene da
+       page-shell.scss, condiviso con le altre pagine a schermo intero. */
+    .content {
       max-width: 560px;
       margin: 0 auto;
       padding: 16px;
-    }
-
-    .asta-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: 1.4rem;
     }
 
     h2 {
@@ -544,10 +530,6 @@ type TeamStat = TeamStatAsta;
       font-size: 1rem;
     }
 
-    .spacer {
-      flex: 1;
-    }
-
     .tab-content {
       padding-top: 16px;
     }
@@ -556,7 +538,6 @@ type TeamStat = TeamStatAsta;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      padding: 16px;
       margin-bottom: 16px;
     }
 
@@ -691,7 +672,12 @@ export class AstaPage {
   private readonly snackBar = inject(MatSnackBar);
   private readonly breakpointObserver = inject(BreakpointObserver);
 
+  readonly leagueName = environment.leagueName;
   readonly incrementi = INCREMENTI;
+
+  async logout(): Promise<void> {
+    await this.authService.logout();
+  }
 
   /** Layout mobile (<640px): tab Asta/Statistiche invece di sezioni impilate */
   readonly isMobile = toSignal(
@@ -953,10 +939,10 @@ export class AstaPage {
   }
 
   rolesOf(ruolo: string): string[] {
-    return ruolo.split(';').map((r) => r.trim()).filter(Boolean);
+    return splitRoles(ruolo);
   }
 
   colorFor(role: string): string {
-    return ROLE_COLORS[role] ?? 'var(--mat-sys-on-surface-variant)';
+    return roleColor(role);
   }
 }

@@ -46,7 +46,7 @@ export interface RenewDialogData {
       </div>
 
       <form [formGroup]="form">
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="fill" class="full-width">
           <mat-label>Nuova % rinnovo</mat-label>
           <input matInput type="number" min="0.01" step="0.001" formControlName="nuovaPerc" />
           <mat-hint>es. 1.45 = 145% — la nuova spesa rinnovo sarà ricalcolata sul V.A.</mat-hint>

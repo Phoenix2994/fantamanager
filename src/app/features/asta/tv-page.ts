@@ -12,22 +12,7 @@ import { combineLatest, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { AstaStato, Team } from '../../core/models';
 import { residuoAlleMulte } from '../../core/finance-calculator';
-
-/** Colore del bordo/chip per gruppo di ruolo */
-const ROLE_COLORS: Record<string, string> = {
-  Por: '#f9a825',
-  B: '#2e7d32',
-  Dd: '#2e7d32',
-  Dc: '#2e7d32',
-  Ds: '#2e7d32',
-  M: '#508af4',
-  C: '#508af4',
-  E: '#508af4',
-  W: '#6a1b9a',
-  T: '#6a1b9a',
-  A: '#c62828',
-  Pc: '#c62828',
-};
+import { roleColor, splitRoles } from '../../core/roles';
 import { AstaService, ProvenienzaAsta } from '../../core/services/asta.service';
 import { AuthService } from '../../core/services/auth.service';
 import { FinanceService } from '../../core/services/finance.service';
@@ -125,7 +110,7 @@ import {
             Controllo asta (admin)
           </h3>
           @if (stato()?.aperta) {
-            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
               <mat-label>Squadra vincitrice</mat-label>
               <mat-select [value]="assegnaA()" (selectionChange)="assegnaA.set($event.value)">
                 @for (team of teams(); track team.id) {
@@ -134,7 +119,7 @@ import {
               </mat-select>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
               <mat-label>Voce di spesa</mat-label>
               <mat-select [value]="provenienza()" (selectionChange)="provenienza.set($event.value)">
                 <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
@@ -377,11 +362,11 @@ export class TvPage {
   }
 
   rolesOf(ruolo: string): string[] {
-    return ruolo.split(';').map((r) => r.trim()).filter(Boolean);
+    return splitRoles(ruolo);
   }
 
   colorFor(role: string): string {
-    return ROLE_COLORS[role] ?? 'var(--mat-sys-on-surface-variant)';
+    return roleColor(role);
   }
 
   async assegnaVincitore(): Promise<void> {

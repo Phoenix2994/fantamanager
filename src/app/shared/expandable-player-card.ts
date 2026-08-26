@@ -56,8 +56,9 @@ import { PlayerDetailGrid } from './player-detail-grid';
   styles: `
     .player-card {
       border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: 10px;
-      background: var(--mat-sys-surface);
+      border-radius: 14px;
+      background: var(--mat-sys-surface-container-low);
+      box-shadow: var(--mat-sys-level1, 0 1px 3px rgba(0, 0, 0, 0.3));
       overflow: hidden;
     }
 
@@ -87,9 +88,12 @@ import { PlayerDetailGrid } from './player-detail-grid';
       padding: 6px 12px;
     }
 
-    /* Riga evidenziata se il giocatore è rinnovato (soldi spesi > 0) */
+    /* Riga evidenziata se il giocatore è rinnovato (soldi spesi > 0): il
+       ruolo "secondary" di Material è la stessa tinta del primary ma
+       desaturata apposta per gli accenti tenui — molto meno acceso del
+       verde vivo usato per bottoni/valori. */
     .card-head.is-renewed {
-      background: var(--mat-sys-primary-container);
+      background: var(--mat-sys-secondary-container);
     }
 
     .chips {

@@ -38,12 +38,12 @@ export interface LoanDialogResult {
 
     <mat-dialog-content>
       <form [formGroup]="form" class="dialog-form">
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="fill">
           <mat-label>Giocatore</mat-label>
           <input matInput formControlName="playerName" />
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="fill">
           <mat-label>Squadra destinataria</mat-label>
           <mat-select formControlName="toTeam">
             @for (name of data.teamNames; track name) {
@@ -52,7 +52,7 @@ export interface LoanDialogResult {
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="fill">
           <mat-label>Tipo di prestito</mat-label>
           <mat-select formControlName="contractType">
             @for (tipo of loanTypes; track tipo) {

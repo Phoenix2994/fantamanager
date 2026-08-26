@@ -65,20 +65,20 @@ export interface ReimborsoDialogResult {
 
       <form [formGroup]="form" class="dialog-form">
         <div class="row">
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>% rimborso</mat-label>
             <input matInput type="number" min="0" step="0.01" formControlName="percRimborso" />
             <mat-hint>es. 0.5 = 50%</mat-hint>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>% indennizzo</mat-label>
             <input matInput type="number" min="0" step="0.01" formControlName="percIndennizzo" />
             <mat-hint>es. 0.2 = 20%</mat-hint>
           </mat-form-field>
         </div>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="fill" class="full-width">
           <mat-label>Indennizzo da richiedere per</mat-label>
           <mat-select formControlName="mese">
             <mat-option value="settembre">Settembre</mat-option>

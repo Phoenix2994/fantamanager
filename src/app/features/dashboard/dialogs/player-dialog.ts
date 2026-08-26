@@ -66,18 +66,18 @@ export interface PlayerDialogResult {
 
     <mat-dialog-content>
       <form [formGroup]="form" class="dialog-form">
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="fill">
           <mat-label>Nome</mat-label>
           <input matInput formControlName="name" />
         </mat-form-field>
 
         <div class="row">
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>Ruolo</mat-label>
             <input matInput formControlName="ruolo" placeholder="es. Dc oppure Dd;Dc" />
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>Contratto</mat-label>
             <mat-select formControlName="contractType">
               @for (tipo of contractTypes; track tipo) {
@@ -88,12 +88,12 @@ export interface PlayerDialogResult {
         </div>
 
         <div class="row">
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>Soldi spesi €</mat-label>
             <input matInput type="number" min="0" step="0.1" formControlName="acquistoRinnovoSpesa" />
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>% prossimo rinnovo</mat-label>
             <input matInput type="number" min="0.01" step="0.001" formControlName="prossimaPercRinnovo" />
             <mat-hint>es. 0.85 = 85%</mat-hint>
@@ -101,7 +101,7 @@ export interface PlayerDialogResult {
         </div>
 
         @if (data.mode === 'create') {
-          <mat-form-field appearance="outline" class="full-width">
+          <mat-form-field appearance="fill" class="full-width">
             <mat-label>Provenienza acquisto</mat-label>
             <mat-select formControlName="provenienza">
               <mat-option value="astaSettembre">Asta di settembre</mat-option>
@@ -114,17 +114,17 @@ export interface PlayerDialogResult {
         }
 
         <div class="row">
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>Q.I.</mat-label>
             <input matInput type="number" min="0" step="0.1" formControlName="quotazioneIniziale" />
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>Q.A.</mat-label>
             <input matInput type="number" min="0" step="0.1" formControlName="quotazioneAttuale" />
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="fill">
             <mat-label>V.I. €</mat-label>
             <input matInput type="number" min="0" step="0.1" formControlName="valoreIniziale" />
           </mat-form-field>

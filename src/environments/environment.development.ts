@@ -23,5 +23,5 @@ export const environment = {
   season: '2026-27',
 
   /** Nome visualizzato della lega nell'header e nel login */
-  leagueName: 'Fantacalcio Manageriale 2026-27',
+  leagueName: 'Fantamanager',
 };

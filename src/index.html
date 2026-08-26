@@ -5,12 +5,24 @@
   <title>Fantacalcio Manageriale 2026-27</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b57d0">
+  <meta name="theme-color" content="#1a1c18">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <script>
+    // Applica subito la preferenza di tema salvata, prima che Angular si
+    // avvii: evita il lampo del tema scuro di default per chi ha scelto
+    // quello chiaro (vedi ThemeService).
+    try {
+      if (localStorage.getItem('fantamanager.tema') === 'chiaro') {
+        document.documentElement.classList.add('light-theme');
+      }
+    } catch (e) {
+      // localStorage non disponibile: resta il tema scuro di default
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Oswald:wght@500;600;700&display=swap"
     rel="stylesheet"
   >
   <link

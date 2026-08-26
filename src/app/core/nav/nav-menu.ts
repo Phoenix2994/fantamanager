@@ -1,10 +1,12 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { ThemeService } from '../services/theme.service';
 
 /** Voce del menù di navigazione principale */
 export interface NavItem {
@@ -36,7 +38,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
  */
 @Component({
   selector: 'app-nav-menu',
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, RouterLink, RouterLinkActive],
+  imports: [
+    MatButtonModule,
+    MatDividerModule,
+    MatIconModule,
+    MatMenuModule,
+    RouterLink,
+    RouterLinkActive,
+  ],
   template: `
     <button
       matIconButton
@@ -58,6 +67,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
           <span>{{ item.label }}</span>
         </button>
       }
+      <mat-divider />
+      <button type="button" mat-menu-item (click)="themeService.toggle()">
+        <mat-icon>{{ themeService.tema() === 'scuro' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+        <span>Tema {{ themeService.tema() === 'scuro' ? 'chiaro' : 'scuro' }}</span>
+      </button>
     </mat-menu>
   `,
   styles: `
@@ -73,6 +87,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 })
 export class NavMenu {
   private readonly authService = inject(AuthService);
+  protected readonly themeService = inject(ThemeService);
 
   private readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
