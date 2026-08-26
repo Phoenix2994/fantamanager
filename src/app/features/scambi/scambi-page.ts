@@ -17,6 +17,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ScambiService } from '../../core/services/scambi.service';
 import { TeamService } from '../../core/services/team.service';
 import { Player, Scambio, Team } from '../../core/models';
+import { roleColor, splitRoles } from '../../core/roles';
 import {
   LatoScambio,
   PERC_RINNOVO_SCAMBIO,
@@ -32,6 +33,17 @@ interface PlayerOption {
   name: string;
   ruolo: string;
   valoreAttuale: number;
+}
+
+/** Riga del riepilogo giocatori coinvolti, mostrata già nell'anteprima */
+interface RiepilogoGiocatore {
+  id: string;
+  name: string;
+  ruolo: string;
+  squadra: string;
+  valoreAttuale: number;
+  valoreFinale: number;
+  rivalutato: boolean;
 }
 
 /**
@@ -132,6 +144,33 @@ export class ScambiPage {
       (this.conguaglio() ?? 0) > 0 ? this.pagatore() : null,
     ),
   );
+
+  /**
+   * Riepilogo di TUTTI i giocatori coinvolti (entrambe le squadre) col loro
+   * valore finale — anche quelli che non cambiano valore, non solo i
+   * rivalutati.
+   */
+  readonly riepilogoGiocatori = computed<RiepilogoGiocatore[]>(() => {
+    const a = this.anteprima();
+    const valoreFinalePerId = new Map(a.rivalutazioni.map((r) => [r.player.id, r.valoreDopo]));
+    const riga = (p: Player, squadra: string): RiepilogoGiocatore => ({
+      id: p.id,
+      name: p.name,
+      ruolo: p.ruolo,
+      squadra,
+      valoreAttuale: p.valoreAttuale,
+      valoreFinale: valoreFinalePerId.get(p.id) ?? p.valoreAttuale,
+      rivalutato: valoreFinalePerId.has(p.id),
+    });
+    return [
+      ...this.giocatoriSelezionati(this.rosterA(), this.selezioneA()).map((p) =>
+        riga(p, this.nomeSquadraA()),
+      ),
+      ...this.giocatoriSelezionati(this.rosterB(), this.selezioneB()).map((p) =>
+        riga(p, this.nomeSquadraB()),
+      ),
+    ];
+  });
 
   async logout(): Promise<void> {
     await this.authService.logout();
@@ -262,6 +301,27 @@ export class ScambiPage {
         );
       }
     });
+  }
+
+  /** Ruoli singoli di una stringa ruolo composta ("M;C"), per i chip */
+  rolesOf(ruolo: string): string[] {
+    return splitRoles(ruolo);
+  }
+
+  /** Colore associato al gruppo di ruolo */
+  colorFor(role: string): string {
+    return roleColor(role);
+  }
+
+  statoLabel(stato: Scambio['stato']): string {
+    switch (stato) {
+      case 'bozza':
+        return 'Bozza';
+      case 'confermata':
+        return 'Confermata';
+      case 'annullata':
+        return 'Annullata';
+    }
   }
 
   elimina(scambio: Scambio): void {

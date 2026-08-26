@@ -1,14 +1,18 @@
-import { Component } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from '../services/auth.service';
 
 /** Voce del menù di navigazione principale */
 export interface NavItem {
   path: string;
   label: string;
   icon: string;
+  /** true se la voce va mostrata solo agli admin loggati */
+  adminOnly?: boolean;
 }
 
 /**
@@ -20,6 +24,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/svincolati', label: 'Svincolati', icon: 'person_search' },
   { path: '/asta', label: 'Asta', icon: 'gavel' },
   { path: '/scambi', label: 'Scambi', icon: 'swap_horiz' },
+  { path: '/storico', label: 'Storico', icon: 'history', adminOnly: true },
 ];
 
 /**
@@ -42,7 +47,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
       <mat-icon>menu</mat-icon>
     </button>
     <mat-menu #menu="matMenu" xPosition="before">
-      @for (item of items; track item.path) {
+      @for (item of items(); track item.path) {
         <button
           type="button"
           mat-menu-item
@@ -67,5 +72,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   `,
 })
 export class NavMenu {
-  protected readonly items = NAV_ITEMS;
+  private readonly authService = inject(AuthService);
+
+  private readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
+
+  /** Voci visibili: quelle admin-only compaiono solo per l'admin loggato */
+  protected readonly items = computed(() =>
+    NAV_ITEMS.filter((item) => !item.adminOnly || this.isAdmin()),
+  );
 }

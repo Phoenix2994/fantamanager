@@ -7,7 +7,6 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -20,10 +19,12 @@ import {
   Team,
 } from '../../../core/models';
 import { calcolaValoreAttuale, round2 } from '../../../core/finance-calculator';
+import { roleColor, roleSortKey, splitRoles } from '../../../core/roles';
 import { AuthService } from '../../../core/services/auth.service';
 import { FinanceService } from '../../../core/services/finance.service';
 import { TeamSelectionService } from '../../../core/services/team-selection.service';
 import { TeamService } from '../../../core/services/team.service';
+import { ExpandablePlayerCard } from '../../../shared/expandable-player-card';
 import { ConfirmDialog } from '../dialogs/confirm-dialog';
 import { LoanDialog } from '../dialogs/loan-dialog';
 import {
@@ -33,56 +34,6 @@ import {
 import { ReimborsoDialog } from '../dialogs/reimborso-dialog';
 import { RenewDialog } from '../dialogs/renew-dialog';
 
-/** Normalizza per la ricerca: minuscole e senza accenti */
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-/** Ordine canonico dei ruoli: usato per ordinamento rosa e filtro */
-const ROLE_ORDER = ['Por', 'B', 'Dd', 'Dc', 'Ds', 'M', 'C', 'E', 'W', 'T', 'A', 'Pc'];
-
-/** Colore del bordo/chip per gruppo di ruolo */
-const ROLE_COLORS: Record<string, string> = {
-  Por: '#f9a825',
-  B: '#2e7d32',
-  Dd: '#2e7d32',
-  Dc: '#2e7d32',
-  Ds: '#2e7d32',
-  M: '#508af4',
-  C: '#508af4',
-  E: '#508af4',
-  W: '#6a1b9a',
-  T: '#6a1b9a',
-  A: '#c62828',
-  Pc: '#c62828',
-};
-
-/** Divide la stringa ruolo composta ("Dd;Dc") nei ruoli singoli */
-function splitRoles(ruolo: string): string[] {
-  return ruolo
-    .split(';')
-    .map((r) => r.trim())
-    .filter(Boolean);
-}
-
-function roleColor(role: string): string {
-  return ROLE_COLORS[role] ?? 'var(--mat-sys-on-surface-variant)';
-}
-
-/** Chiave di ordinamento: posizione del primo ruolo noto del giocatore */
-function roleSortKey(ruolo: string): number {
-  let best = ROLE_ORDER.length;
-  for (const r of splitRoles(ruolo)) {
-    const idx = ROLE_ORDER.indexOf(r);
-    if (idx >= 0 && idx < best) {
-      best = idx;
-    }
-  }
-  return best;
-}
 
 @Component({
   selector: 'app-players-section',
@@ -91,23 +42,14 @@ function roleSortKey(ruolo: string): number {
     MatButtonModule,
     MatFormFieldModule,
     MatIconModule,
-    MatInputModule,
     MatSelectModule,
     MatTableModule,
+    ExpandablePlayerCard,
   ],
   template: `
     <div class="section-header">
       <h2>Rosa</h2>
       <div class="header-actions">
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="team-select">
-          <mat-label>Squadra</mat-label>
-          <mat-select [value]="selectedTeamId() ?? undefined" (selectionChange)="selection.select($event.value)">
-            @for (team of teams(); track team.id) {
-              <mat-option [value]="team.id">{{ team.name }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-
         @if (isAdmin()) {
           <button matButton="tonal" (click)="openAddPlayer()" [disabled]="!selectedTeamId()">
             <mat-icon>person_add</mat-icon>
@@ -124,12 +66,6 @@ function roleSortKey(ruolo: string): number {
       </p>
     } @else {
       <div class="filters">
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Cerca giocatore</mat-label>
-          <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
-          <mat-icon matPrefix>search</mat-icon>
-        </mat-form-field>
-
         <!-- Filtro multiplo: si possono selezionare più ruoli insieme -->
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Ruoli</mat-label>
@@ -155,7 +91,7 @@ function roleSortKey(ruolo: string): number {
         </mat-form-field> -->
 
         <!-- Reset rapido filtri: visibile solo se qualche filtro è attivo -->
-        @if (filterRuoli().length > 0 || search()) {
+        @if (filterRuoli().length > 0) {
           <button matIconButton aria-label="Azzera filtri" class="reset-filters" (click)="azzeraFiltri()">
             <mat-icon>filter_alt_off</mat-icon>
           </button>
@@ -171,81 +107,25 @@ function roleSortKey(ruolo: string): number {
       <!-- MOBILE: card espandibili -->
       @if (isMobile()) {
         <div class="cards">
-                    @for (player of filteredPlayers(); track player.id) {
-            <div class="player-card" [class.expanded]="expandedId() === player.id"
-                 [class.is-fuori-serie-a]="player.fuoriSerieA">
-              <button
-                type="button"
-                class="card-head"
-                [class.is-renewed]="player.acquistoRinnovoSpesa > 0"
-                (click)="toggleExpanded(player.id)"
-              >
-                <span class="chips">
-                  @for (r of rolesOf(player); track r) {
-                    <span
-                      class="chip"
-                      [style.border-color]="colorFor(r)"
-                      [style.color]="colorFor(r)"
-                    >{{ r }}</span>
-                  }
-                </span>
-                <span class="card-name">{{ player.name }}</span>
-                <span class="card-va">{{ player.valoreAttuale | number: '1.2-2' }} €</span>
-                <mat-icon class="chevron">
-                  {{ expandedId() === player.id ? 'expand_less' : 'expand_more' }}
-                </mat-icon>
-              </button>
-
-              @if (expandedId() === player.id) {
-                <div class="card-body">
-                  <div class="detail-grid">
-                    <div class="detail">
-                      <span>Speso</span>
-                      <strong>{{ player.acquistoRinnovoSpesa | number: '1.2-2' }} €</strong>
-                    </div>
-                    <!-- Se rinnovato, % e spesa rinnovo si riferiscono alla
-                         prossima stagione: mostrate in grigio -->
-                    <div class="detail" [class.muted]="player.acquistoRinnovoSpesa > 0">
-                      <span>Spesa rinnovo</span>
-                      <strong>{{ player.prossimaSpesaRinnovo | number: '1.2-2' }} €</strong>
-                    </div>
-                    <div class="detail" [class.muted]="player.acquistoRinnovoSpesa > 0">
-                      <span>% Rinnovo</span>
-                      <strong>{{ perc(player.prossimaPercRinnovo) }}</strong>
-                    </div>
-                    <div class="detail">
-                      <span>Q.I. → Q.A.</span>
-                      <strong>{{ player.quotazioneIniziale | number: '1.0-2' }} → {{ player.quotazioneAttuale | number: '1.0-2' }}</strong>
-                    </div>
-                    <div class="detail">
-                      <span>V.I. → V.A.</span>
-                      <strong>{{ player.valoreIniziale | number: '1.2-2' }} € → {{ player.valoreAttuale | number: '1.2-2' }} €</strong>
-                    </div>
-                    <div class="detail wide">
-                      <span>Contratto</span>
-                      <strong>{{ player.contractType }}</strong>
-                    </div>
-                  </div>
-
-                  @if (isAdmin()) {
-                    <div class="card-actions">
-                      <button matButton="tonal" (click)="openEditPlayer(player)">
-                        <mat-icon>edit</mat-icon> Modifica
-                      </button>
-                      <button matButton="tonal" (click)="openRenewPlayer(player)">
-                        <mat-icon>autorenew</mat-icon> Rinnova
-                      </button>
-                      <button matButton="tonal" (click)="openReimborso(player)">
-                        <mat-icon>currency_exchange</mat-icon> Rimborso
-                      </button>
-                      <button matButton="tonal" (click)="confirmDeletePlayer(player)">
-                        <mat-icon>delete</mat-icon> Elimina
-                      </button>
-                    </div>
-                  }
+          @for (player of filteredPlayers(); track player.id) {
+            <app-expandable-player-card [player]="player">
+              @if (isAdmin()) {
+                <div cardActions class="card-actions">
+                  <button matButton="tonal" (click)="openEditPlayer(player)">
+                    <mat-icon>edit</mat-icon> Modifica
+                  </button>
+                  <button matButton="tonal" (click)="openRenewPlayer(player)">
+                    <mat-icon>autorenew</mat-icon> Rinnova
+                  </button>
+                  <button matButton="tonal" (click)="openReimborso(player)">
+                    <mat-icon>currency_exchange</mat-icon> Rimborso
+                  </button>
+                  <button matButton="tonal" (click)="confirmDeletePlayer(player)">
+                    <mat-icon>delete</mat-icon> Elimina
+                  </button>
                 </div>
               }
-            </div>
+            </app-expandable-player-card>
           } @empty {
             <p class="empty-state">Nessun giocatore corrisponde ai filtri.</p>
           }
@@ -405,10 +285,6 @@ function roleSortKey(ruolo: string): number {
       flex-wrap: wrap;
     }
 
-    .team-select {
-      min-width: 200px;
-    }
-
     .filters {
       display: flex;
       gap: 8px;
@@ -449,98 +325,16 @@ function roleSortKey(ruolo: string): number {
       font-size: 0.68rem;
     }
 
-    /* ---------- Card mobile ---------- */
+    /* ---------- Card mobile (vedi app-expandable-player-card) ---------- */
     .cards {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
 
-        .player-card {
-      border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: 10px;
-      background: var(--mat-sys-surface);
-      overflow: hidden;
-    }
-
-        /* Giocatore fuori Serie A (non in alcun listone): evidenziazione rosa più scura */
-    .player-card.is-fuori-serie-a,
+    /* Giocatore fuori Serie A (non in alcun listone), riga della tabella desktop */
     tr.is-fuori-serie-a {
-      background: rgba(252, 185, 203, 0.40);
-    }
-
-    .card-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      min-height: 52px;
-      padding: 8px 12px;
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      text-align: left;
-      font: inherit;
-      color: inherit;
-    }
-
-    /* Riga evidenziata se il giocatore è rinnovato (soldi spesi > 0):
-       tinta azzurra del tema (primary container) */
-    .card-head.is-renewed {
-      background: var(--mat-sys-primary-container);
-    }
-
-    .card-name {
-      flex: 1;
-      font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .card-va {
-      font-weight: 700;
-      color: var(--mat-sys-primary);
-      white-space: nowrap;
-    }
-
-    /* Campi del pannello espanso "muted" quando il giocatore è già
-       rinnovato (% e spesa rinnovo si riferiscono alla prossima stagione) */
-    .detail.muted strong {
-      color: var(--mat-sys-on-surface-variant);
-    }
-
-    .chevron {
-      color: var(--mat-sys-on-surface-variant);
-    }
-
-    .card-body {
-      padding: 4px 12px 12px;
-      border-top: 1px dashed var(--mat-sys-outline-variant);
-    }
-
-    .detail-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .detail span {
-      display: block;
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      color: var(--mat-sys-on-surface-variant);
-    }
-
-    .detail strong {
-      font-size: 0.85rem;
-      font-weight: 600;
-    }
-
-    .detail.wide {
-      grid-column: 1 / -1;
+      background: rgba(252, 185, 203, 0.4);
     }
 
     .card-actions {
@@ -645,13 +439,6 @@ export class PlayersSection {
     { initialValue: false },
   );
 
-  /** Id della card attualmente espansa (solo una alla volta) */
-  readonly expandedId = signal<string | null>(null);
-
-  toggleExpanded(playerId: string): void {
-    this.expandedId.update((current) => (current === playerId ? null : playerId));
-  }
-
   /** Ruoli SINGOLI distinti nella rosa corrente, nell'ordine canonico */
   readonly ruoliDisponibili = computed(() => {
     const set = new Set<string>();
@@ -705,20 +492,17 @@ export class PlayersSection {
   /** Ruoli selezionati nel filtro (vuoto = tutti) */
   readonly filterRuoli = signal<string[]>([]);
   readonly filterContratto = signal<ContractType | ''>('');
-  readonly search = signal('');
 
   readonly filteredPlayers = computed(() => {
     const ruoli = this.filterRuoli();
     const contratto = this.filterContratto();
-    const term = normalize(this.search());
 
     return this.players()
       .filter(
         (p) =>
           // il filtro matcha se il giocatore ha ALMENO UNO dei ruoli selezionati
           (!ruoli.length || splitRoles(p.ruolo).some((r) => ruoli.includes(r))) &&
-          (!contratto || p.contractType === contratto) &&
-          (!term || normalize(p.name).includes(term)),
+          (!contratto || p.contractType === contratto),
       )
       .sort(
         (a, b) =>
@@ -754,10 +538,9 @@ export class PlayersSection {
     });
   }
 
-  /** Azzera i filtri ruoli e ricerca */
+  /** Azzera il filtro ruoli */
   azzeraFiltri(): void {
     this.filterRuoli.set([]);
-    this.search.set('');
   }
 
   // ------------------------------------------------------------- giocatori
@@ -844,13 +627,10 @@ export class PlayersSection {
       return;
     }
     try {
-      // 1. Aggiorna il giocatore: spesa → soldi spesi, nuova %, ricalcolo
-      await this.teamService.renewPlayer(this.selectedTeamId()!, player, nuovaPerc);
-
-      // 2. Somma ai Rinnovi: % applicata × V.A. del giocatore
-      const rinnovo = await this.financeService.applyRinnovo(
+      // Giocatore + finanze in un unico batch atomico e annullabile
+      const rinnovo = await this.teamService.eseguiRinnovo(
         this.selectedTeamId()!,
-        player,
+        player.id,
         nuovaPerc,
         this.valoreRosa(),
       );
@@ -883,17 +663,14 @@ export class PlayersSection {
       return;
     }
     try {
-      // 1. Rimuove il giocatore dalla rosa
-      await this.teamService.deletePlayer(this.selectedTeamId()!, player.id);
-
-      // 2. Valore rosa aggiornato (senza il giocatore ceduto)
+      // Valore rosa aggiornato (senza il giocatore ceduto)
       const nuovaRosa =
         Math.round((this.valoreRosa() - (player.valoreAttuale || 0)) * 100) / 100;
 
-      // 3. Somma rimborso/indennizzo/rinnovo alle spese e ricalcola tutto
-      const riepilogo = await this.financeService.applyReimborso(
+      // Eliminazione + rimborso/indennizzo in un unico batch atomico e annullabile
+      const riepilogo = await this.teamService.eseguiRimborso(
         this.selectedTeamId()!,
-        player,
+        player.id,
         params,
         nuovaRosa,
       );
@@ -944,19 +721,17 @@ export class PlayersSection {
     );
 
     try {
-      await this.teamService.deletePlayer(this.selectedTeamId()!, player.id);
-
       // Valore rosa aggiornato (senza il giocatore ceduto)
       const nuovaRosa =
         Math.round((this.valoreRosa() - (player.valoreAttuale || 0)) * 100) / 100;
 
-      if (addebitaRescissione) {
-                await this.financeService.addRescissione(
-          this.selectedTeamId()!,
-          1.5,
-          nuovaRosa,
-        );
-      }
+      // Eliminazione + eventuale rescissione in un unico batch atomico e annullabile
+      await this.teamService.eseguiEliminazione(
+        this.selectedTeamId()!,
+        player.id,
+        addebitaRescissione ? 1.5 : 0,
+        nuovaRosa,
+      );
 
       this.snackBar.open('Giocatore eliminato', undefined, { duration: 2500 });
     } catch {

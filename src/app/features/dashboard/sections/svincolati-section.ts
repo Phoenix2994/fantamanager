@@ -1,5 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { combineLatest, of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,44 +10,19 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AstaStato, Svincolato } from '../../../core/models';
+import { AstaStato, Player, Svincolato } from '../../../core/models';
+import { ROLE_ORDER, roleColor, splitRoles } from '../../../core/roles';
 import { AstaService } from '../../../core/services/asta.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { TeamService } from '../../../core/services/team.service';
+import { normalize } from '../../../core/text-utils';
+import { ExpandablePlayerCard } from '../../../shared/expandable-player-card';
 
-/** Normalizza per la ricerca: minuscole e senza accenti */
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-/** Ordine canonico dei ruoli mantra */
-const ROLE_ORDER = ['Por', 'B', 'Dd', 'Dc', 'Ds', 'M', 'C', 'E', 'W', 'T', 'A', 'Pc'];
-
-/** Colore del bordo/chip per gruppo di ruolo */
-const ROLE_COLORS: Record<string, string> = {
-  Por: '#f9a825',
-  B: '#2e7d32',
-  Dd: '#2e7d32',
-  Dc: '#2e7d32',
-  Ds: '#2e7d32',
-  M: '#508af4',
-  C: '#508af4',
-  E: '#508af4',
-  W: '#6a1b9a',
-  T: '#6a1b9a',
-  A: '#c62828',
-  Pc: '#c62828',
-};
-
-/** Divide la stringa ruolo composta ("M;C") nei ruoli singoli */
-function splitRoles(ruolo: string): string[] {
-  return ruolo
-    .split(';')
-    .map((r) => r.trim())
-    .filter(Boolean);
+/** Giocatore di rosa, con il nome della squadra che lo possiede */
+interface RosterEntry {
+  player: Player;
+  teamId: string;
+  teamName: string;
 }
 
 /**
@@ -64,6 +41,7 @@ function splitRoles(ruolo: string): string[] {
     MatInputModule,
     MatSelectModule,
     RouterLink,
+    ExpandablePlayerCard,
   ],
   template: `
     <div class="section-header">
@@ -146,6 +124,26 @@ function splitRoles(ruolo: string): string[] {
         }
       </ul>
     }
+
+    <!-- Ricerca estesa alle rose: compare solo con ricerca o filtro ruoli
+         attivi (la lista sopra resta il "mercato" degli svincolati,
+         sfogliabile senza filtri) -->
+    @if (search() || filterRuoli().length > 0) {
+      <h3>Nelle rose</h3>
+      @if (risultatiRosa().length === 0) {
+        <p class="empty-state">Nessun giocatore di rosa corrisponde alla ricerca.</p>
+      } @else {
+        <div class="cards">
+          @for (r of risultatiRosa(); track r.player.id) {
+            <app-expandable-player-card
+              [player]="r.player"
+              [extraLabel]="r.teamName"
+              [compact]="true"
+            />
+          }
+        </div>
+      }
+    }
   `,
   styles: `
     .section-header {
@@ -159,6 +157,11 @@ function splitRoles(ruolo: string): string[] {
     h2 {
       margin: 0;
       font-size: 1.1rem;
+    }
+
+    h3 {
+      margin: 16px 0 8px;
+      font-size: 0.95rem;
     }
 
     .header-actions {
@@ -223,6 +226,12 @@ function splitRoles(ruolo: string): string[] {
       font-size: 0.875rem;
     }
 
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
     .chips {
       flex-shrink: 0;
       min-width: 36px;
@@ -271,6 +280,29 @@ export class SvincolatiSection {
     initialValue: [] as Svincolato[],
   });
 
+  /**
+   * Tutti i giocatori di tutte le rose, con la squadra proprietaria — usato
+   * solo per la ricerca "Nelle rose" (non per il mercato svincolati sopra).
+   */
+  private readonly rosterEntries = toSignal(
+    this.teamService.teams$.pipe(
+      switchMap((teams) =>
+        teams.length
+          ? combineLatest(
+              teams.map((team) =>
+                this.teamService.players$(team.id).pipe(
+                  map((players) =>
+                    players.map((player) => ({ player, teamId: team.id, teamName: team.name })),
+                  ),
+                ),
+              ),
+            ).pipe(map((perTeam) => perTeam.flat()))
+          : of([] as RosterEntry[]),
+      ),
+    ),
+    { initialValue: [] as RosterEntry[] },
+  );
+
   /** true se l'utente ha effettuato il login come admin (non anonimo) */
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
@@ -312,12 +344,32 @@ export class SvincolatiSection {
       .sort((a, b) => b.quotazioneAttuale - a.quotazioneAttuale);
   });
 
+  /**
+   * Giocatori di rosa che corrispondono a nome e/o ruoli cercati — vuoto se
+   * non c'è alcun filtro attivo (la lista svincolati sopra resta quella di
+   * default).
+   */
+  readonly risultatiRosa = computed(() => {
+    const term = normalize(this.search());
+    const ruoli = this.filterRuoli();
+    if (!term && ruoli.length === 0) {
+      return [];
+    }
+    return this.rosterEntries()
+      .filter(
+        (r) =>
+          normalize(r.player.name).includes(term) &&
+          (!ruoli.length || splitRoles(r.player.ruolo).some((ruolo) => ruoli.includes(ruolo))),
+      )
+      .sort((a, b) => b.player.quotazioneAttuale - a.player.quotazioneAttuale);
+  });
+
   colorFor(role: string): string {
-    return ROLE_COLORS[role] ?? 'var(--mat-sys-on-surface-variant)';
+    return roleColor(role);
   }
 
   /** Ruoli singoli di un giocatore, per i chip */
-  rolesOf(player: Svincolato): string[] {
+  rolesOf(player: { ruolo: string }): string[] {
     return splitRoles(player.ruolo);
   }
 

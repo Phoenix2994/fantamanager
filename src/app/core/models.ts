@@ -137,7 +137,7 @@ export interface ScambioSide {
   playerIds: string[];
 }
 
-export type ScambioStato = 'bozza' | 'confermata';
+export type ScambioStato = 'bozza' | 'confermata' | 'annullata';
 
 /**
  * Trattativa di scambio tra due squadre: scambi/{scambioId}.
@@ -306,4 +306,50 @@ export interface AuditLogEntry {
   valueBefore: unknown;
   valueAfter: unknown;
   changeSummary: string;
+}
+
+/** Tipi di operazione che possono essere annullate (vedi UndoService) */
+export type OperazioneAnnullabile =
+  | 'rinnovo'
+  | 'eliminazione'
+  | 'rimborso'
+  | 'acquistoAsta'
+  | 'scambioConferma';
+
+/**
+ * Stato di un documento Firestore prima dell'operazione, per poterlo
+ * ripristinare esattamente. `before: null` significa che il documento
+ * NON esisteva prima (l'annullamento lo elimina invece di ripristinarlo).
+ */
+export interface DocSnapshot {
+  /** path completo del documento, es. "teams/abc/seasons/2026-27/players/xyz" */
+  path: string;
+  before: Record<string, unknown> | null;
+}
+
+/**
+ * Voce di registro per annullare un'operazione "sensibile": undoLog/{id}.
+ * Scritta nello STESSO batch atomico dell'operazione che descrive, con lo
+ * stato di ogni documento toccato PRIMA della scrittura. `annulla()` in
+ * UndoService ripristina ogni documento al proprio `before` (o lo elimina
+ * se `before` è null).
+ */
+export interface UndoLogEntry {
+  id: string;
+  timestamp: Timestamp | null;
+  tipo: OperazioneAnnullabile;
+  leagueId: string;
+  /** squadre coinvolte, solo per mostrarle nello storico */
+  teamIds: string[];
+  descrizione: string;
+  docs: DocSnapshot[];
+  /**
+   * Solo per tipo 'scambioConferma': id della trattativa, il cui stato va
+   * portato ad 'annullata' (non semplicemente ripristinato a 'bozza').
+   */
+  scambioId?: string;
+  adminId: string;
+  undone: boolean;
+  undoneAt?: Timestamp | null;
+  undoneBy?: string | null;
 }

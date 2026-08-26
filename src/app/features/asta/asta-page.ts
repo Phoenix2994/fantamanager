@@ -16,6 +16,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { AstaStato, Team } from '../../core/models';
+import { residuoAlleMulte } from '../../core/finance-calculator';
 import {
   AstaStatsPanel,
   estraiAcquistiAsta,
@@ -724,12 +725,14 @@ export class AstaPage {
                 combineLatest([
                   this.teamService.players$(team.id),
                   this.financeService.seasonFinance$(team.id),
+                  this.financeService.taxBrackets$,
                 ]).pipe(
-                  map(([players, finance]) => ({
+                  map(([players, finance, brackets]) => ({
                     id: team.id,
                     name: team.name,
                     giocatori: players.length,
                     bilancio: finance?.bilancioSocietarioStagionale ?? 0,
+                    residuoAlleMulte: residuoAlleMulte(finance?.spesaAnnuale ?? 0, brackets),
                     acquisti: estraiAcquistiAsta(players),
                   })),
                 ),

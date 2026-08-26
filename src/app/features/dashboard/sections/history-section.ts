@@ -1,15 +1,46 @@
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
-import { AuditLogEntry } from '../../../core/models';
+import { AuditLogEntry, UndoLogEntry } from '../../../core/models';
 import { AuditService } from '../../../core/services/audit.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { UndoService } from '../../../core/services/undo.service';
+import { ConfirmDialog } from '../dialogs/confirm-dialog';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({
   selector: 'app-history-section',
-  imports: [DatePipe, MatIconModule, MatTableModule],
+  imports: [DatePipe, MatButtonModule, MatIconModule, MatTableModule],
   template: `
+    <h2>Operazioni annullabili</h2>
+
+    @if (undoEntries().length === 0) {
+      <p class="empty-state">Nessuna operazione annullabile registrata finora.</p>
+    } @else {
+      <ul class="undo-list">
+        @for (entry of undoEntries(); track entry.id) {
+          <li class="undo-row" [class.undone]="entry.undone">
+            <div class="undo-testo">
+              <span class="undo-descrizione">{{ entry.descrizione }}</span>
+              <span class="undo-data">{{ entry.timestamp?.toDate() | date: 'dd/MM HH:mm' }}</span>
+            </div>
+            @if (entry.undone) {
+              <span class="undo-badge">Annullata</span>
+            } @else if (isAdmin()) {
+              <button matButton type="button" (click)="annulla(entry)">
+                <mat-icon>undo</mat-icon>
+                Annulla
+              </button>
+            }
+          </li>
+        }
+      </ul>
+    }
+
     <h2>Storico operazioni</h2>
 
     @if (entries().length === 0) {
@@ -111,16 +142,100 @@ import { AuditService } from '../../../core/services/audit.service';
       color: var(--mat-sys-on-surface-variant);
       font-size: 0.875rem;
     }
+
+    .undo-list {
+      list-style: none;
+      margin: 0 0 24px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .undo-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: var(--mat-sys-surface-container-high);
+    }
+
+    .undo-row.undone {
+      opacity: 0.6;
+    }
+
+    .undo-testo {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .undo-descrizione {
+      font-size: 0.8125rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .undo-data {
+      font-size: 0.7rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .undo-badge {
+      font-size: 0.75rem;
+      color: var(--mat-sys-on-surface-variant);
+      white-space: nowrap;
+    }
   `,
 })
 export class HistorySection {
   private readonly auditService = inject(AuditService);
+  private readonly authService = inject(AuthService);
+  private readonly undoService = inject(UndoService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackBar = inject(MatSnackBar);
 
   readonly displayedColumns = ['timestamp', 'entityType', 'operation', 'fieldModified', 'change'] as const;
+
+  readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
   readonly entries = toSignal(this.auditService.recent$(50), {
     initialValue: [] as AuditLogEntry[],
   });
+
+  readonly undoEntries = toSignal(this.undoService.recenti$, {
+    initialValue: [] as UndoLogEntry[],
+  });
+
+  async annulla(entry: UndoLogEntry): Promise<void> {
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        title: 'Annulla operazione',
+        message: `Annullare "${entry.descrizione}"? Ripristina lo stato precedente di tutti i dati coinvolti.`,
+        confirmLabel: 'Annulla operazione',
+      },
+      autoFocus: false,
+    });
+    const confirmed = await new Promise<boolean>((resolve) => {
+      ref.afterClosed().subscribe((result) => resolve(!!result));
+    });
+    if (!confirmed) {
+      return;
+    }
+    try {
+      await this.undoService.annulla(entry);
+      this.snackBar.open('Operazione annullata', undefined, { duration: 3000 });
+    } catch (err) {
+      this.snackBar.open(
+        err instanceof Error ? err.message : 'Errore durante l’annullamento.',
+        'Chiudi',
+        { duration: 4000 },
+      );
+    }
+  }
 
   entityLabel(type: AuditLogEntry['entityType']): string {
     switch (type) {

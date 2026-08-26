@@ -30,6 +30,7 @@ import {
   patchGiocatore,
 } from '../scambi-calculator';
 import { AuditService } from './audit.service';
+import { UndoService } from './undo.service';
 
 /** Input per salvare una bozza di trattativa */
 export interface NuovoScambioInput {
@@ -65,6 +66,7 @@ export class ScambiService {
   private readonly injector = inject(Injector);
   private readonly finance = inject(FinanceService);
   private readonly audit = inject(AuditService);
+  private readonly undo = inject(UndoService);
 
   /** Tutte le trattative, dalla più recente */
   readonly scambi$: Observable<Scambio[]> = collectionData(
@@ -224,6 +226,7 @@ export class ScambiService {
       teamId: string;
       campo: 'trasferimentiUscita' | 'trasferimentiEntrata';
       data: Record<string, unknown>;
+      before: Record<string, unknown> | null;
     }[] = [];
     if (conguaglio > 0 && scambio.conguaglioPagante) {
       const pagatore = scambio.conguaglioPagante === 'A' ? teamIdA : teamIdB;
@@ -243,6 +246,7 @@ export class ScambiService {
             conguaglio,
             pagatore === teamIdA ? rosaNuovaA : rosaNuovaB,
           ) as unknown as Record<string, unknown>,
+          before: (finPagatore as unknown as Record<string, unknown>) ?? null,
         },
         {
           teamId: ricevente,
@@ -253,6 +257,7 @@ export class ScambiService {
             conguaglio,
             ricevente === teamIdA ? rosaNuovaA : rosaNuovaB,
           ) as unknown as Record<string, unknown>,
+          before: (finRicevente as unknown as Record<string, unknown>) ?? null,
         },
       );
     }
@@ -266,7 +271,7 @@ export class ScambiService {
     );
   }
 
-  /** Scrittura atomica: giocatori + finanze + stato trattativa */
+  /** Scrittura atomica: giocatori + finanze + stato trattativa + undoLog */
   private async scriviBatch(
     scambio: Scambio,
     movimenti: { player: Player; fromTeamId: string; toTeamId: string }[],
@@ -274,6 +279,7 @@ export class ScambiService {
       teamId: string;
       campo: 'trasferimentiUscita' | 'trasferimentiEntrata';
       data: Record<string, unknown>;
+      before: Record<string, unknown> | null;
     }[],
     rivalutazioni: import('../scambi-calculator').PlayerRivalutazione[],
     teamIdA: string,
@@ -283,21 +289,29 @@ export class ScambiService {
       rivalutazioni.map((r) => [r.player.id, r] as const),
     );
     const batch = writeBatch(this.firestore);
+    const undoDocs: { path: string; before: Record<string, unknown> | null }[] = [];
 
     for (const m of movimenti) {
       const { id: _id, ...playerData } = m.player;
       const patch = patchGiocatore(m.player, rivalutazioniById.get(m.player.id));
-      batch.set(doc(this.firestore, this.playerPath(m.toTeamId, m.player.id)), {
+      const nuovoRef = doc(this.firestore, this.playerPath(m.toTeamId, m.player.id));
+      const vecchioRef = doc(this.firestore, this.playerPath(m.fromTeamId, m.player.id));
+      batch.set(nuovoRef, {
         ...playerData,
         ...patch,
         updatedAt: serverTimestamp(),
       });
-      batch.delete(doc(this.firestore, this.playerPath(m.fromTeamId, m.player.id)));
+      batch.delete(vecchioRef);
+      // Annullamento: il giocatore torna alla vecchia squadra col vecchio
+      // stato, e sparisce dalla nuova (prima=null perché lì non esisteva).
+      undoDocs.push({ path: vecchioRef.path, before: playerData as Record<string, unknown> });
+      undoDocs.push({ path: nuovoRef.path, before: null });
     }
 
     for (const f of financeUpdates) {
+      const financeRef = doc(this.firestore, this.financePath(f.teamId));
       batch.set(
-        doc(this.firestore, this.financePath(f.teamId)),
+        financeRef,
         {
           ...f.data,
           updatedAt: serverTimestamp(),
@@ -305,11 +319,21 @@ export class ScambiService {
         },
         { merge: true },
       );
+      undoDocs.push({ path: financeRef.path, before: f.before });
     }
 
     batch.update(this.scambioRef(scambio.id), {
       stato: 'confermata',
       confirmedAt: serverTimestamp(),
+    });
+
+    this.undo.registra(batch, {
+      tipo: 'scambioConferma',
+      leagueId: environment.leagueId,
+      teamIds: [teamIdA, teamIdB],
+      descrizione: `Scambio confermato ${scambio.snapshot.nomeSquadraA} ↔ ${scambio.snapshot.nomeSquadraB}`,
+      docs: undoDocs,
+      scambioId: scambio.id,
     });
 
     await batch.commit();

@@ -1,4 +1,10 @@
-import { SeasonFinanceComputed, SeasonFinanceInputs, TaxBracket } from './models';
+import {
+  EMPTY_FINANCE_INPUTS,
+  SeasonFinance,
+  SeasonFinanceComputed,
+  SeasonFinanceInputs,
+  TaxBracket,
+} from './models';
 
 /**
  * Arrotondamento ROUND HALF UP (come ROUND di Excel): le mezze cifre
@@ -66,6 +72,23 @@ const PROSSIMA_PERC_MAP: Record<number, number> = {
 export function prossimaPercentRinnovo(perce: number): number {
  const key = round2(perce);
  return PROSSIMA_PERC_MAP[key] ?? perce;
+}
+
+/** Prima soglia (più bassa) degli scaglioni multa, es. 437.15 € */
+export function primaSogliaMulte(brackets: ReadonlyArray<TaxBracket>): number {
+  return brackets.length ? Math.min(...brackets.map((b) => b.limiteSogliaEuro)) : 0;
+}
+
+/**
+ * Residuo alle multe = prima soglia − imponibile fairplay finanziario
+ * (spesaAnnuale). Positivo finché la squadra resta sotto la prima soglia,
+ * negativo (già in tassazione) altrimenti.
+ */
+export function residuoAlleMulte(
+  spesaAnnuale: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): number {
+  return round2(primaSogliaMulte(brackets) - spesaAnnuale);
 }
 
 /** Valore rosa = somma dei V.A. di tutti i giocatori della squadra */
@@ -177,6 +200,141 @@ export function calcolaBilancioStagionale(
   spesaTotale: number,
 ): number {
   return round2(premi + trasferimentiEntrata - spesaTotale);
+}
+
+/** Parametri dell'operazione di rimborso di un giocatore */
+export interface ReimborsoParams {
+  percRimborso: number;
+  percIndennizzo: number;
+  mese: 'settembre' | 'gennaio';
+}
+
+export interface RiepilogoReimborso {
+  rimborso: number;
+  indennizzo: number;
+}
+
+/** Documento finanze completo, così come va scritto (merge parziale a monte già risolto) */
+type FinanceDoc = SeasonFinanceInputs & SeasonFinanceComputed;
+
+function mergeECalcola(
+  current: SeasonFinance | undefined,
+  patch: Partial<SeasonFinanceInputs>,
+  brackets: ReadonlyArray<TaxBracket>,
+  valoreRosa: number,
+): FinanceDoc {
+  const merged: SeasonFinanceInputs = { ...EMPTY_FINANCE_INPUTS, ...(current ?? {}), ...patch };
+  return { ...merged, ...ricalcolaFinance(merged, brackets, valoreRosa, current?.taxMinimumHistoric ?? 0) };
+}
+
+/**
+ * Prepara (pura, senza I/O) il documento finanze con un rimborso/indennizzo:
+ * - rimborso   = % rimborso   × soldi spesi  → somma ai Rimborsi
+ * - indennizzo = % indennizzo × V.A.         → somma agli Indennizzi
+ *                 di settembre o gennaio (a scelta)
+ */
+export function preparaReimborso(
+  current: SeasonFinance | undefined,
+  player: { acquistoRinnovoSpesa: number; valoreAttuale: number },
+  params: ReimborsoParams,
+  valoreRosaAggiornato: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): { data: FinanceDoc } & RiepilogoReimborso {
+  const rimborso = round2(params.percRimborso * (player.acquistoRinnovoSpesa || 0));
+  const indennizzo = round2(params.percIndennizzo * (player.valoreAttuale || 0));
+
+  const data = mergeECalcola(
+    current,
+    {
+      rimborsi: (current?.rimborsi ?? 0) + rimborso,
+      ...(params.mese === 'settembre'
+        ? { indennizzoSettembre: (current?.indennizzoSettembre ?? 0) + indennizzo }
+        : { indennizzoGennaio: (current?.indennizzoGennaio ?? 0) + indennizzo }),
+    },
+    brackets,
+    valoreRosaAggiornato,
+  );
+
+  return { data, rimborso, indennizzo };
+}
+
+/**
+ * Prepara (pura, senza I/O) il documento finanze con un rinnovo:
+ * rinnovo = % rinnovo applicata × V.A. del giocatore → somma ai Rinnovi.
+ */
+export function preparaRinnovo(
+  current: SeasonFinance | undefined,
+  player: { valoreAttuale: number },
+  nuovaPercRinnovo: number,
+  valoreRosa: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): { data: FinanceDoc; rinnovo: number } {
+  const rinnovo = round1(nuovaPercRinnovo * (player.valoreAttuale || 0));
+  const data = mergeECalcola(
+    current,
+    { rinnovi: (current?.rinnovi ?? 0) + rinnovo },
+    brackets,
+    valoreRosa,
+  );
+  return { data, rinnovo };
+}
+
+/**
+ * Prepara (pura, senza I/O) il documento finanze con un costo di
+ * rescissione (es. 1,50 € fissi all'eliminazione di un giocatore).
+ */
+export function preparaRescissione(
+  current: SeasonFinance | undefined,
+  importo: number,
+  valoreRosa: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): { data: FinanceDoc } {
+  const data = mergeECalcola(
+    current,
+    { rescissioni: (current?.rescissioni ?? 0) + importo },
+    brackets,
+    valoreRosa,
+  );
+  return { data };
+}
+
+/**
+ * Prepara (pura, senza I/O) il documento finanze con un acquisto d'asta:
+ * +importo sulla voce di provenienza (asta sett / infrasettimanale / gen).
+ */
+export function preparaAcquistoAsta(
+  current: SeasonFinance | undefined,
+  campo: 'acquistiAstaSettembre' | 'acquistiMercatoInfrasettimanale' | 'acquistiAstaGennaio',
+  importo: number,
+  valoreRosa: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): { data: FinanceDoc } {
+  const data = mergeECalcola(
+    current,
+    { [campo]: (current?.[campo] ?? 0) + importo },
+    brackets,
+    valoreRosa,
+  );
+  return { data };
+}
+
+/**
+ * Prepara (pura, senza I/O) il documento finanze con un trasferimento
+ * legato a uno scambio: +importo su trasferimentiUscita/trasferimentiEntrata.
+ */
+export function preparaTrasferimento(
+  current: SeasonFinance | undefined,
+  campo: 'trasferimentiUscita' | 'trasferimentiEntrata',
+  importo: number,
+  valoreRosa: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): FinanceDoc {
+  return mergeECalcola(
+    current,
+    { [campo]: round2((current?.[campo] ?? 0) + importo) },
+    brackets,
+    valoreRosa,
+  );
 }
 
 /**

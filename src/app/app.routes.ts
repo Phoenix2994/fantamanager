@@ -38,5 +38,11 @@ export const routes: Routes = [
     path: 'tv',
     loadComponent: () => import('./features/asta/tv-page').then((m) => m.TvPage),
   },
+  {
+    // Storico operazioni a schermo intero (voce del menù, solo admin)
+    path: 'storico',
+    loadComponent: () =>
+      import('./features/storico/storico-page').then((m) => m.StoricoPage),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

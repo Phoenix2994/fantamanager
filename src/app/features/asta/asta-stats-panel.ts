@@ -15,6 +15,8 @@ export interface TeamStatAsta {
   name: string;
   giocatori: number;
   bilancio: number;
+  /** prima soglia scaglioni − imponibile fairplay finanziario (spesaAnnuale) */
+  residuoAlleMulte: number;
   /** giocatori acquistati durante l'asta con il costo di ciascuno */
   acquisti: AcquistoAsta[];
 }
@@ -95,6 +97,10 @@ export function estraiAcquistiAsta(players: Player[]): AcquistoAsta[] {
                   <span>{{ totaleAcquisti(t) | number: '1.2-2' }} €</span>
                 </div>
               }
+              <div class="acquisto residuo" [class.negative]="t.residuoAlleMulte < 0">
+                <span>Residuo alle multe</span>
+                <span>{{ t.residuoAlleMulte | number: '1.2-2' }} €</span>
+              </div>
             </div>
           }
         </div>
@@ -206,6 +212,18 @@ export function estraiAcquistiAsta(players: Player[]): AcquistoAsta[] {
       padding-top: 4px;
       border-top: 1px solid var(--mat-sys-outline-variant);
       font-weight: 700;
+    }
+
+    .acquisto.residuo {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px dashed var(--mat-sys-outline-variant);
+      font-weight: 700;
+      color: var(--mat-sys-primary);
+    }
+
+    .acquisto.residuo.negative {
+      color: var(--mat-sys-error);
     }
 
     .nessun-acquisto {

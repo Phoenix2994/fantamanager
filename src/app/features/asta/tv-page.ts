@@ -11,6 +11,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { combineLatest, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { AstaStato, Team } from '../../core/models';
+import { residuoAlleMulte } from '../../core/finance-calculator';
 
 /** Colore del bordo/chip per gruppo di ruolo */
 const ROLE_COLORS: Record<string, string> = {
@@ -343,12 +344,14 @@ export class TvPage {
                 combineLatest([
                   this.teamService.players$(team.id),
                   this.financeService.seasonFinance$(team.id),
+                  this.financeService.taxBrackets$,
                 ]).pipe(
-                  map(([players, finance]) => ({
+                  map(([players, finance, brackets]) => ({
                     id: team.id,
                     name: team.name,
                     giocatori: players.length,
                     bilancio: finance?.bilancioSocietarioStagionale ?? 0,
+                    residuoAlleMulte: residuoAlleMulte(finance?.spesaAnnuale ?? 0, brackets),
                     acquisti: estraiAcquistiAsta(players),
                   })),
                 ),

@@ -3,22 +3,23 @@ import { Auth } from '@angular/fire/auth';
 import {
   Firestore,
   collection,
-  deleteDoc,
   doc,
   docData,
+  getDoc,
   getDocs,
   runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AstaStato, PlayerInput, Svincolato } from '../models';
-import { round2 } from '../finance-calculator';
+import { AstaStato, PlayerInput, SeasonFinance, Svincolato } from '../models';
+import { calcolaValoreAttuale, calcolaProssimaSpesaRinnovo, round2 } from '../finance-calculator';
 import { AuditService } from './audit.service';
 import { FinanceService } from './finance.service';
-import { TeamService } from './team.service';
+import { UndoService } from './undo.service';
 
 /** Provenienza della spesa per l'assegnazione del giocatore all'asta */
 export type ProvenienzaAsta = 'acquistiAstaSettembre' | 'acquistiMercatoInfrasettimanale';
@@ -61,8 +62,8 @@ export class AstaService {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(Auth);
   private readonly audit = inject(AuditService);
-  private readonly teamService = inject(TeamService);
   private readonly financeService = inject(FinanceService);
+  private readonly undo = inject(UndoService);
 
   private readonly statoRef = doc(this.firestore, 'asta/statoCorrente');
 
@@ -161,10 +162,20 @@ export class AstaService {
   }
 
   /**
-   * Assegna il giocatore alla squadra vincitrice al prezzo corrente:
+   * Assegna il giocatore alla squadra vincitrice al prezzo corrente —
+   * ATOMICO e ANNULLABILE (undoLog):
    * 1. crea il giocatore nella rosa (TITOLO DEFINITIVO)
    * 2. somma la spesa alla voce scelta (asta settembre / infrasettimanale)
-   * 3. chiude l'asta
+   * 3. rimuove il giocatore dagli svincolati
+   * 4. chiude l'asta
+   *
+   * Le quattro scritture avvengono in un unico batch: o l'assegnazione
+   * riesce per intero, o non cambia nulla.
+   *
+   * Nota sull'undo: lo snapshot NON include lo stato dell'asta (punto 4) —
+   * annullare un acquisto riguarda solo giocatore/finanze/svincolato;
+   * riaprire l'asta al momento dell'annullamento potrebbe entrare in
+   * conflitto con un'asta successiva già in corso.
    */
   async assegna(
     teamId: string,
@@ -180,7 +191,42 @@ export class AstaService {
     // Usa il prezzo specificato o quello corrente dell'asta
     const prezzoDaUsare = prezzo ?? stato.prezzoAttuale;
 
-    // 1. Crea il giocatore nella rosa del team vincitore
+    // Valore rosa PRIMA dell'acquisto (serve per il ricalcolo finanze)
+    const playersSnap = await getDocs(
+      collection(this.firestore, `teams/${teamId}/seasons/${environment.season}/players`),
+    );
+    const valoreRosaAttuale =
+      Math.round(
+        playersSnap.docs.reduce((sum, d) => sum + ((d.data()['valoreAttuale'] as number) || 0), 0) *
+          100,
+      ) / 100;
+
+    const valoreAttualeNuovo = calcolaValoreAttuale(prezzoDaUsare, stato.quotazione, stato.quotazione);
+    const nuovaRosa = round2(valoreRosaAttuale + valoreAttualeNuovo);
+
+    const svincolatoRef = doc(
+      this.firestore,
+      `league/${environment.leagueId}/svincolati/${slugify(stato.giocatoreNome)}`,
+    );
+    const financeRef = this.financeService.financeDocRef(teamId);
+    const [financeSnap, svincolatoSnap] = await Promise.all([
+      getDoc(financeRef),
+      getDoc(svincolatoRef),
+    ]);
+    const financeBefore = financeSnap.data() as SeasonFinance | undefined;
+    const svincolatoBefore = svincolatoSnap.data() as Record<string, unknown> | undefined;
+
+    const { data: financeData } = this.financeService.preparaAcquistoAsta(
+      financeBefore,
+      provenienza,
+      prezzoDaUsare,
+      nuovaRosa,
+    );
+
+    // Crea il giocatore nella rosa del team vincitore (ID auto-generato)
+    const playerRef = doc(
+      collection(this.firestore, `teams/${teamId}/seasons/${environment.season}/players`),
+    );
     const input: PlayerInput = {
       name: stato.giocatoreNome,
       ruolo: stato.ruolo,
@@ -193,43 +239,49 @@ export class AstaService {
       quotazioneAttuale: stato.quotazione,
       valoreIniziale: prezzoDaUsare,
     };
-    await this.teamService.addPlayer(teamId, input);
 
-    // 2. Valore rosa aggiornato (rilegge i giocatori appena aggiornati)
-    const playersSnap = await getDocs(
-      collection(this.firestore, `teams/${teamId}/seasons/${environment.season}/players`),
+    const batch = writeBatch(this.firestore);
+    batch.set(playerRef, {
+      ...input,
+      valoreAttuale: valoreAttualeNuovo,
+      prossimaSpesaRinnovo: calcolaProssimaSpesaRinnovo(
+        valoreAttualeNuovo,
+        input.prossimaPercRinnovo,
+      ),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(
+      financeRef,
+      { ...financeData, ...this.financeService.metaScrittura() },
+      { merge: true },
     );
-    const nuovaRosa =
-      Math.round(
-        playersSnap.docs.reduce((sum, d) => sum + ((d.data()['valoreAttuale'] as number) || 0), 0) *
-          100,
-      ) / 100;
+    batch.delete(svincolatoRef);
+    batch.update(this.statoRef, { aperta: false });
 
-    // 3. Somma la spesa alla voce di provenienza scelta
-    await this.financeService.addAcquisto(
-      teamId,
-      provenienza,
-      prezzoDaUsare,
-      nuovaRosa,
-      stato.giocatoreNome,
-    );
-
-    // 4. Rimuove il giocatore dagli svincolati (ID deterministico = slug nome)
-    await deleteDoc(
-      doc(this.firestore, `league/${environment.leagueId}/svincolati/${slugify(stato.giocatoreNome)}`),
-    ).catch(() => {
-      // Se il documento non esiste, ignoriamo l'errore
+    this.undo.registra(batch, {
+      tipo: 'acquistoAsta',
+      leagueId: environment.leagueId,
+      teamIds: [teamId],
+      descrizione: `Acquisto asta: ${stato.giocatoreNome} a ${teamName} per ${prezzoDaUsare} €`,
+      docs: [
+        { path: playerRef.path, before: null },
+        {
+          path: financeRef.path,
+          before: (financeBefore as unknown as Record<string, unknown>) ?? null,
+        },
+        { path: svincolatoRef.path, before: svincolatoBefore ?? null },
+      ],
     });
 
-    // 5. Chiude l'asta
-    await updateDoc(this.statoRef, { aperta: false });
+    await batch.commit();
 
     void this.audit.log({
       leagueId: environment.leagueId,
       teamId,
       adminId: this.auth.currentUser?.uid ?? 'unknown',
       entityType: 'player',
-      entityId: `${teamId}/${stato.giocatoreNome}`,
+      entityId: playerRef.id,
       operation: 'create',
       fieldModified: 'asta',
       valueBefore: null,
@@ -241,7 +293,7 @@ export class AstaService {
   }
 
   private async getStato(): Promise<AstaStato | undefined> {
-    const snap = await import('@angular/fire/firestore').then((m) => m.getDoc(this.statoRef));
+    const snap = await getDoc(this.statoRef);
     return snap.data() as AstaStato | undefined;
   }
 }

@@ -16,25 +16,34 @@
     }
   </header>
 
-  <!-- Desktop (>1024px): 3 colonne sempre visibili -->
+  <!-- Squadra di riferimento: condivisa da tutte le sezioni, sempre visibile
+       qualunque sezione si stia guardando (anche cambiando tab su mobile) -->
+  <div class="team-bar">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="team-select">
+      <mat-label>Squadra</mat-label>
+      <mat-select
+        [value]="selection.selectedTeamId() ?? undefined"
+        (selectionChange)="selection.select($event.value)"
+      >
+        @for (team of teams(); track team.id) {
+          <mat-option [value]="team.id">{{ team.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <!-- Desktop (>1024px): 2 colonne sempre visibili -->
   @if (!isMobile() && !isTablet()) {
     <main class="content desktop">
       <section class="panel">
         <app-players-section />
-        <!--<app-svincolati-section />-->
       </section>
       <section class="panel">
         <app-finance-section />
       </section>
-      <!-- Storico visibile solo agli admin -->
-      @if (isAdmin()) {
-        <section class="panel">
-          <app-history-section />
-        </section>
-      }
     </main>
   } @else if (isTablet()) {
-    <!-- Tablet (640–1024px): giocatori a sinistra, tab spese/storico a destra -->
+    <!-- Tablet (640–1024px): giocatori a sinistra, tab spese/svincolati a destra -->
     <main class="content tablet">
       <section class="panel">
         <app-players-section />
@@ -47,72 +56,25 @@
           <mat-tab label="Svincolati">
             <app-svincolati-section />
           </mat-tab>
-          <!-- Storico visibile solo agli admin -->
-          @if (isAdmin()) {
-            <mat-tab label="Storico">
-              <app-history-section />
-            </mat-tab>
-          }
         </mat-tab-group>
       </section>
     </main>
   } @else {
-    <!-- Mobile (<640px): sezione attiva a schermo pieno + bottom nav -->
+    <!-- Mobile (<640px): tab Giocatori/Spese in alto, sezione a schermo pieno -->
     <main class="content mobile">
-      @switch (activeSection()) {
-        @case ('players') {
+      <mat-tab-group
+        animationDuration="0ms"
+        dynamicHeight
+        [selectedIndex]="mobileTab()"
+        (selectedIndexChange)="mobileTab.set($event)"
+      >
+        <mat-tab label="Giocatori">
           <app-players-section />
-        }
-        @case ('svincolati') {
-          <app-svincolati-section />
-        }
-        @case ('finance') {
+        </mat-tab>
+        <mat-tab label="Spese">
           <app-finance-section />
-        }
-        @case ('history') {
-          <!-- Storico visibile solo agli admin -->
-          @if (isAdmin()) {
-            <app-history-section />
-          }
-        }
-      }
+        </mat-tab>
+      </mat-tab-group>
     </main>
-    <nav class="bottom-nav" aria-label="Navigazione sezioni">
-      <button
-        type="button"
-        [class.active]="activeSection() === 'players'"
-        (click)="selectSection('players')"
-      >
-        <mat-icon>groups</mat-icon>
-        <span>Rosa</span>
-      </button>
-      <!--<button
-        type="button"
-        [class.active]="activeSection() === 'svincolati'"
-        (click)="selectSection('svincolati')"
-      >
-        <mat-icon>person_search</mat-icon>
-        <span>Svincolati</span>
-      </button>-->
-      <button
-        type="button"
-        [class.active]="activeSection() === 'finance'"
-        (click)="selectSection('finance')"
-      >
-        <mat-icon>euro</mat-icon>
-        <span>Spese</span>
-      </button>
-      <!-- Storico visibile solo agli admin -->
-      @if (isAdmin()) {
-        <button
-          type="button"
-          [class.active]="activeSection() === 'history'"
-          (click)="selectSection('history')"
-        >
-          <mat-icon>history</mat-icon>
-          <span>Storico</span>
-        </button>
-      }
-    </nav>
   }
 </div>

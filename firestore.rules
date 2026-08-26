@@ -78,11 +78,24 @@ service cloud.firestore {
 
     // Trattative di scambio tra squadre:
     // - lettura e CREAZIONE bozze: aperte a tutti;
-    // - aggiornamento (= conferma dell'admin) ed eliminazione: solo admin,
-    //   ovvero autenticati con email/password (non i login anonimi dell'asta).
+    // - aggiornamento (= conferma dell'admin): solo admin;
+    // - eliminazione: aperta a tutti MA solo finché è una bozza (stessa
+    //   apertura della creazione — una volta confermata/annullata non è
+    //   più cancellabile da nessuno).
     match /scambi/{scambioId} {
       allow read, create: if true;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if resource.data.stato == 'bozza';
+    }
+
+    // Registro delle operazioni annullabili (rinnovo, rimborso/eliminazione,
+    // acquisto asta, conferma scambio): scritte SOLO come parte del batch
+    // atomico dell'operazione stessa (già admin, vedi sopra), quindi
+    // create/update solo admin. Storico immutabile: nessuna delete.
+    match /undoLog/{logId} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if false;
     }
 
     // Configurazioni sensibili (es. hash password future):

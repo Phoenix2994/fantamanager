@@ -10,6 +10,7 @@ import {
   getDoc,
   serverTimestamp,
   updateDoc,
+  writeBatch,
 } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -23,10 +24,13 @@ import {
   LoanedPlayer,
   Player,
   PlayerInput,
+  SeasonFinance,
   Svincolato,
   Team,
 } from '../models';
 import { AuditService } from './audit.service';
+import { FinanceService, ReimborsoParams, RiepilogoReimborso } from './finance.service';
+import { UndoService } from './undo.service';
 
 /**
  * Accesso realtime ai dati di squadre, giocatori e prestiti.
@@ -45,6 +49,8 @@ export class TeamService {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(Auth);
   private readonly audit = inject(AuditService);
+  private readonly finance = inject(FinanceService);
+  private readonly undo = inject(UndoService);
   /** Necessario per chiamare le API Firebase fuori dal contesto di injection */
   private readonly injector = inject(Injector);
 
@@ -180,73 +186,177 @@ export class TeamService {
     });
   }
 
- /**
- * Rinnova un giocatore:
- * 1. acquistoRinnovoSpesa ← prossimaSpesaRinnovo corrente
- * 2. se la % di rinnovo corrente supera il 100%: valoreIniziale ← spesa
- * del rinnovo e quotazioneIniziale ← quotazioneAttuale (il valore si
- * "blocca" sulla spesa appena sostenuta)
- * 3. prossimaPercRinnovo ← mappatura della nuova percentuale
- * (0.85→1.15, 1.1→1.55, 1.45→2.15, 2.0→2.9; altri valori invariati)
- * 4. ricalcola valoreAttuale e prossimaSpesaRinnovo
- */
- async renewPlayer(teamId: string, player: Player, nuovaPercRinnovo: number): Promise<void> {
- // Il valore si blocca solo se la percentuale CORRENTE supera il 100%
- const bloccaValore = (player.prossimaPercRinnovo || 0) > 1;
- const nuovoValoreIniziale = bloccaValore ? player.prossimaSpesaRinnovo : player.valoreIniziale;
- const nuovaQuotazioneIniziale = bloccaValore
- ? player.quotazioneAttuale
- : player.quotazioneIniziale;
+  /**
+   * Rinnova un giocatore — ATOMICO e ANNULLABILE (undoLog):
+   * 1. acquistoRinnovoSpesa ← prossimaSpesaRinnovo corrente
+   * 2. se la % di rinnovo corrente supera il 100%: valoreIniziale ← spesa
+   *    del rinnovo e quotazioneIniziale ← quotazioneAttuale (il valore si
+   *    "blocca" sulla spesa appena sostenuta)
+   * 3. prossimaPercRinnovo ← mappatura della nuova percentuale
+   * 4. ricalcola valoreAttuale e prossimaSpesaRinnovo
+   * 5. somma ai Rinnovi (finanze) la spesa corrispondente
+   *
+   * Giocatore e finanze si scrivono in un UNICO batch (mai l'uno senza
+   * l'altro), insieme a uno snapshot "prima" nell'undoLog: rilegge
+   * entrambi i documenti freschi da Firestore invece di fidarsi
+   * dell'oggetto passato dalla UI, per evitare letture stantie.
+   */
+  async eseguiRinnovo(
+    teamId: string,
+    playerId: string,
+    nuovaPercRinnovo: number,
+    valoreRosa: number,
+  ): Promise<number> {
+    const playerRef = this.playerRef(teamId, playerId);
+    const financeRef = this.finance.financeDocRef(teamId);
 
- // Prossima percentuale: mappatura fissa, altri casi invariati
- const percProssimoAnno = prossimaPercentRinnovo(nuovaPercRinnovo);
+    const [playerSnap, financeSnap] = await Promise.all([getDoc(playerRef), getDoc(financeRef)]);
+    const playerBefore = playerSnap.data() as Player | undefined;
+    if (!playerBefore) {
+      throw new Error('Il giocatore non è più in rosa.');
+    }
+    const financeBefore = financeSnap.data() as SeasonFinance | undefined;
 
- const nuovoValoreAttuale = calcolaValoreAttuale(
- nuovoValoreIniziale,
- nuovaQuotazioneIniziale,
- player.quotazioneAttuale,
- );
- const nuovaSpesaRinnovo = calcolaProssimaSpesaRinnovo(nuovoValoreAttuale, percProssimoAnno);
+    // Il valore si blocca solo se la percentuale CORRENTE supera il 100%
+    const bloccaValore = (playerBefore.prossimaPercRinnovo || 0) > 1;
+    const nuovoValoreIniziale = bloccaValore
+      ? playerBefore.prossimaSpesaRinnovo
+      : playerBefore.valoreIniziale;
+    const nuovaQuotazioneIniziale = bloccaValore
+      ? playerBefore.quotazioneAttuale
+      : playerBefore.quotazioneIniziale;
 
- await updateDoc(this.playerRef(teamId, player.id), {
- acquistoRinnovoSpesa: player.prossimaSpesaRinnovo,
- valoreIniziale: nuovoValoreIniziale,
- quotazioneIniziale: nuovaQuotazioneIniziale,
- valoreAttuale: nuovoValoreAttuale,
- prossimaPercRinnovo: percProssimoAnno,
- prossimaSpesaRinnovo: nuovaSpesaRinnovo,
- updatedAt: serverTimestamp(),
- });
+    const percProssimoAnno = prossimaPercentRinnovo(nuovaPercRinnovo);
+    const nuovoValoreAttuale = calcolaValoreAttuale(
+      nuovoValoreIniziale,
+      nuovaQuotazioneIniziale,
+      playerBefore.quotazioneAttuale,
+    );
+    const nuovaSpesaRinnovo = calcolaProssimaSpesaRinnovo(nuovoValoreAttuale, percProssimoAnno);
 
- void this.audit.log({
- leagueId: environment.leagueId,
- teamId,
- adminId: this.auth.currentUser?.uid ?? 'unknown',
- entityType: 'player',
- entityId: player.id,
- operation: 'update',
- fieldModified: bloccaValore
- ? 'prossimaPercRinnovo, valoreIniziale, quotazioneIniziale'
- : 'prossimaPercRinnovo',
- valueBefore: {
- prossimaPercRinnovo: player.prossimaPercRinnovo,
- valoreIniziale: player.valoreIniziale,
- quotazioneIniziale: player.quotazioneIniziale,
- },
- valueAfter: {
- prossimaPercRinnovo: percProssimoAnno,
- valoreIniziale: nuovoValoreIniziale,
- quotazioneIniziale: nuovaQuotazioneIniziale,
- },
- changeSummary:
- `Rinnovo ${player.name}: spesa ${player.prossimaSpesaRinnovo} € → soldi spesi` +
- (bloccaValore ? ' (valore bloccato, % > 100%)' : ''),
- });
- }
+    const { data: financeData, rinnovo } = this.finance.preparaRinnovo(
+      financeBefore,
+      { valoreAttuale: playerBefore.valoreAttuale },
+      nuovaPercRinnovo,
+      valoreRosa,
+    );
 
-  /** Elimina un giocatore dalla rosa */
-  async deletePlayer(teamId: string, playerId: string): Promise<void> {
-    await deleteDoc(this.playerRef(teamId, playerId));
+    const batch = writeBatch(this.firestore);
+    batch.update(playerRef, {
+      acquistoRinnovoSpesa: playerBefore.prossimaSpesaRinnovo,
+      valoreIniziale: nuovoValoreIniziale,
+      quotazioneIniziale: nuovaQuotazioneIniziale,
+      valoreAttuale: nuovoValoreAttuale,
+      prossimaPercRinnovo: percProssimoAnno,
+      prossimaSpesaRinnovo: nuovaSpesaRinnovo,
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(financeRef, { ...financeData, ...this.finance.metaScrittura() }, { merge: true });
+
+    this.undo.registra(batch, {
+      tipo: 'rinnovo',
+      leagueId: environment.leagueId,
+      teamIds: [teamId],
+      descrizione: `Rinnovo ${playerBefore.name}: +${rinnovo} € ai rinnovi`,
+      docs: [
+        { path: playerRef.path, before: playerBefore as unknown as Record<string, unknown> },
+        {
+          path: financeRef.path,
+          before: (financeBefore as unknown as Record<string, unknown>) ?? null,
+        },
+      ],
+    });
+
+    await batch.commit();
+
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'player',
+      entityId: playerId,
+      operation: 'update',
+      fieldModified: bloccaValore
+        ? 'prossimaPercRinnovo, valoreIniziale, quotazioneIniziale'
+        : 'prossimaPercRinnovo',
+      valueBefore: {
+        prossimaPercRinnovo: playerBefore.prossimaPercRinnovo,
+        valoreIniziale: playerBefore.valoreIniziale,
+        quotazioneIniziale: playerBefore.quotazioneIniziale,
+      },
+      valueAfter: {
+        prossimaPercRinnovo: percProssimoAnno,
+        valoreIniziale: nuovoValoreIniziale,
+        quotazioneIniziale: nuovaQuotazioneIniziale,
+      },
+      changeSummary:
+        `Rinnovo ${playerBefore.name}: spesa ${playerBefore.prossimaSpesaRinnovo} € → soldi spesi` +
+        (bloccaValore ? ' (valore bloccato, % > 100%)' : ''),
+    });
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'seasonFinance',
+      entityId: `${teamId}/${environment.season}`,
+      operation: 'update',
+      fieldModified: 'rinnovi',
+      valueBefore: { rinnovi: financeBefore?.rinnovi ?? 0 },
+      valueAfter: { rinnovi: financeData.rinnovi, rinnovo, perc: nuovaPercRinnovo },
+      changeSummary: `Rinnovo ${playerBefore.name}: +${rinnovo} € ai rinnovi`,
+    });
+
+    return rinnovo;
+  }
+
+  /**
+   * Rimborso/rescissione completa di un giocatore — ATOMICO e ANNULLABILE:
+   * 1. elimina il giocatore dalla rosa
+   * 2. somma alle spese: rimborso (% × speso) ai Rimborsi, indennizzo
+   *    (% × V.A.) agli Indennizzi sett/gen a scelta
+   * Giocatore (cancellato) e finanze si scrivono in un UNICO batch.
+   */
+  async eseguiRimborso(
+    teamId: string,
+    playerId: string,
+    params: ReimborsoParams,
+    valoreRosaAggiornato: number,
+  ): Promise<RiepilogoReimborso> {
+    const playerRef = this.playerRef(teamId, playerId);
+    const financeRef = this.finance.financeDocRef(teamId);
+
+    const [playerSnap, financeSnap] = await Promise.all([getDoc(playerRef), getDoc(financeRef)]);
+    const playerBefore = playerSnap.data() as Player | undefined;
+    if (!playerBefore) {
+      throw new Error('Il giocatore non è più in rosa.');
+    }
+    const financeBefore = financeSnap.data() as SeasonFinance | undefined;
+
+    const {
+      data: financeData,
+      rimborso,
+      indennizzo,
+    } = this.finance.preparaReimborso(financeBefore, playerBefore, params, valoreRosaAggiornato);
+
+    const batch = writeBatch(this.firestore);
+    batch.delete(playerRef);
+    batch.set(financeRef, { ...financeData, ...this.finance.metaScrittura() }, { merge: true });
+
+    this.undo.registra(batch, {
+      tipo: 'rimborso',
+      leagueId: environment.leagueId,
+      teamIds: [teamId],
+      descrizione: `Rimborso ${playerBefore.name}: +${rimborso} € rimborsi, +${indennizzo} € indennizzi ${params.mese}`,
+      docs: [
+        { path: playerRef.path, before: playerBefore as unknown as Record<string, unknown> },
+        {
+          path: financeRef.path,
+          before: (financeBefore as unknown as Record<string, unknown>) ?? null,
+        },
+      ],
+    });
+
+    await batch.commit();
 
     void this.audit.log({
       leagueId: environment.leagueId,
@@ -256,10 +366,113 @@ export class TeamService {
       entityId: playerId,
       operation: 'delete',
       fieldModified: '*',
-      valueBefore: null,
+      valueBefore: playerBefore,
       valueAfter: null,
-      changeSummary: `Eliminazione giocatore ${playerId}`,
+      changeSummary: `Eliminazione giocatore ${playerBefore.name} (rimborso)`,
     });
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'seasonFinance',
+      entityId: `${teamId}/${environment.season}`,
+      operation: 'update',
+      fieldModified: 'rimborsi, indennizzi',
+      valueBefore: {
+        rimborsi: financeBefore?.rimborsi ?? 0,
+        ...(params.mese === 'settembre'
+          ? { indennizzoSettembre: financeBefore?.indennizzoSettembre ?? 0 }
+          : { indennizzoGennaio: financeBefore?.indennizzoGennaio ?? 0 }),
+      },
+      valueAfter: { rimborso, indennizzo, mese: params.mese },
+      changeSummary:
+        `Rimborso ${playerBefore.name}: +${rimborso} € rimborsi, ` +
+        `+${indennizzo} € indennizzi ${params.mese}`,
+    });
+
+    return { rimborso, indennizzo };
+  }
+
+  /**
+   * Elimina un giocatore dalla rosa, con eventuale costo di rescissione
+   * fisso — ATOMICO e ANNULLABILE. Se `importoRescissione` è 0, le finanze
+   * non vengono toccate (e l'undoLog contiene solo il giocatore).
+   */
+  async eseguiEliminazione(
+    teamId: string,
+    playerId: string,
+    importoRescissione: number,
+    valoreRosaAggiornato: number,
+  ): Promise<void> {
+    const playerRef = this.playerRef(teamId, playerId);
+    const playerSnap = await getDoc(playerRef);
+    const playerBefore = playerSnap.data() as Player | undefined;
+    if (!playerBefore) {
+      throw new Error('Il giocatore non è più in rosa.');
+    }
+
+    const batch = writeBatch(this.firestore);
+    batch.delete(playerRef);
+
+    const docs: { path: string; before: Record<string, unknown> | null }[] = [
+      { path: playerRef.path, before: playerBefore as unknown as Record<string, unknown> },
+    ];
+
+    let financeBefore: SeasonFinance | undefined;
+    if (importoRescissione > 0) {
+      const financeRef = this.finance.financeDocRef(teamId);
+      const financeSnap = await getDoc(financeRef);
+      financeBefore = financeSnap.data() as SeasonFinance | undefined;
+      const { data: financeData } = this.finance.preparaRescissione(
+        financeBefore,
+        importoRescissione,
+        valoreRosaAggiornato,
+      );
+      batch.set(financeRef, { ...financeData, ...this.finance.metaScrittura() }, { merge: true });
+      docs.push({
+        path: financeRef.path,
+        before: (financeBefore as unknown as Record<string, unknown>) ?? null,
+      });
+    }
+
+    this.undo.registra(batch, {
+      tipo: 'eliminazione',
+      leagueId: environment.leagueId,
+      teamIds: [teamId],
+      descrizione:
+        `Eliminazione ${playerBefore.name}` +
+        (importoRescissione > 0 ? ` (rescissione ${importoRescissione} €)` : ''),
+      docs,
+    });
+
+    await batch.commit();
+
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'player',
+      entityId: playerId,
+      operation: 'delete',
+      fieldModified: '*',
+      valueBefore: playerBefore,
+      valueAfter: null,
+      changeSummary: `Eliminazione giocatore ${playerBefore.name}`,
+    });
+    if (importoRescissione > 0) {
+      void this.audit.log({
+        leagueId: environment.leagueId,
+        teamId,
+        adminId: this.auth.currentUser?.uid ?? 'unknown',
+        entityType: 'seasonFinance',
+        entityId: `${teamId}/${environment.season}`,
+        operation: 'update',
+        fieldModified: 'rescissioni',
+        valueBefore: { rescissioni: financeBefore?.rescissioni ?? 0 },
+        valueAfter: { importo: importoRescissione },
+        changeSummary: `Rescissione: +${importoRescissione} € alle rescissioni`,
+      });
+    }
   }
 
   /** Registra un giocatore ceduto in prestito (stagione corrente) */

@@ -30,43 +30,24 @@
         cifra incassata.
       </p>
 
-        <div class="squadre-grid">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Squadra A</mat-label>
-            <mat-select
-              [value]="squadraAId()"
-              (selectionChange)="squadraChange('A', $event.value)"
-            >
-              @for (team of teams(); track team.id) {
-                <mat-option [value]="team.id">{{ team.name }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Squadra B</mat-label>
-            <mat-select
-              [value]="squadraBId()"
-              (selectionChange)="squadraChange('B', $event.value)"
-            >
-              @for (team of teams(); track team.id) {
-                <mat-option [value]="team.id">{{ team.name }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        </div>
-
-        @if (erroreSquadre(); as err) {
-          <p class="errore">
-            <mat-icon>error_outline</mat-icon>
-            {{ err }}
-          </p>
-        }
-
+        <!-- Una card per lato: tendina squadra + rosa subito sotto, così su
+             mobile (dove le due card si impilano) la rosa selezionata
+             compare sempre appena sotto la propria tendina -->
         <div class="picker-grid">
           @for (lato of LATI; track lato) {
             <div class="picker">
-              <h3>{{ lato === 'A' ? nomeSquadraA() : nomeSquadraB() || ('Squadra ' + lato) }}</h3>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Squadra {{ lato }}</mat-label>
+                <mat-select
+                  [value]="lato === 'A' ? squadraAId() : squadraBId()"
+                  (selectionChange)="squadraChange(lato, $event.value)"
+                >
+                  @for (team of teams(); track team.id) {
+                    <mat-option [value]="team.id">{{ team.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+
               @if ((lato === 'A' ? opzioniA() : opzioniB()).length === 0) {
                 <p class="vuoto">Seleziona una squadra per vedere la rosa.</p>
               } @else {
@@ -82,8 +63,16 @@
                           [checked]="(lato === 'A' ? selezioneA() : selezioneB()).includes(p.id)"
                           (change)="toggleGiocatore(lato, p.id)"
                         />
+                        <span class="chips">
+                          @for (r of rolesOf(p.ruolo); track r) {
+                            <span
+                              class="chip small"
+                              [style.border-color]="colorFor(r)"
+                              [style.color]="colorFor(r)"
+                            >{{ r }}</span>
+                          }
+                        </span>
                         <span class="nome">{{ p.name }}</span>
-                        <span class="ruolo">{{ p.ruolo }}</span>
                         <span class="valore">{{ p.valoreAttuale | number: '1.0-1' }} €</span>
                       </label>
                     </li>
@@ -101,6 +90,13 @@
             </div>
           }
         </div>
+
+        @if (erroreSquadre(); as err) {
+          <p class="errore">
+            <mat-icon>error_outline</mat-icon>
+            {{ err }}
+          </p>
+        }
 
         <div class="conguaglio-row">
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="conguaglio-input">
@@ -172,34 +168,52 @@
                   anteprima().latoDaRivalutare === 'A' ? nomeSquadraA() : nomeSquadraB()
                 }}</strong>
                 (+{{ anteprima().aumentoComplessivo | number: '1.0-2' }} € totali, ripartiti
-                in proporzione alla quotazione attuale):
+                in proporzione alla quotazione attuale).
               </p>
-              <table class="riv-table">
-                <thead>
-                  <tr>
-                    <th>Giocatore</th>
-                    <th>V.A. ora</th>
-                    <th>Aumento</th>
-                    <th>Nuovo V.A.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (r of anteprima().rivalutazioni; track r.player.id) {
-                    <tr>
-                      <td>{{ r.player.name }}</td>
-                      <td>{{ r.valorePrima | number: '1.0-1' }} €</td>
-                      <td>+{{ r.aumento | number: '1.0-1' }} €</td>
-                      <td class="nuovo-valore">{{ r.valoreDopo | number: '1.0-1' }} €</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
             } @else {
               <p class="bilanciato">
                 <mat-icon>check_circle</mat-icon>
                 I valori sono già bilanciati: nessuna rivalutazione necessaria.
               </p>
             }
+
+            <!-- Riepilogo di TUTTI i giocatori coinvolti, anche quelli il
+                 cui valore non cambia -->
+            <table class="riv-table">
+              <thead>
+                <tr>
+                  <th>Giocatore</th>
+                  <th>Ruolo</th>
+                  <th>Squadra</th>
+                  <th>V.A. finale</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of riepilogoGiocatori(); track r.id) {
+                  <tr [class.rivalutato]="r.rivalutato">
+                    <td>{{ r.name }}</td>
+                    <td>
+                      <span class="chips">
+                        @for (ruolo of rolesOf(r.ruolo); track ruolo) {
+                          <span
+                            class="chip small"
+                            [style.border-color]="colorFor(ruolo)"
+                            [style.color]="colorFor(ruolo)"
+                          >{{ ruolo }}</span>
+                        }
+                      </span>
+                    </td>
+                    <td>{{ r.squadra }}</td>
+                    <td class="nuovo-valore">
+                      @if (r.rivalutato) {
+                        {{ r.valoreAttuale | number: '1.0-1' }} € →
+                      }
+                      {{ r.valoreFinale | number: '1.0-1' }} €
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
 
             <p class="nota-rinnovo">
               Tutti i giocatori coinvolti avranno prossima percentuale di rinnovo al
@@ -229,12 +243,16 @@
       </h2>
 
       @for (s of trattative(); track s.id) {
-        <article class="trattativa-card" [class.confermata]="s.stato === 'confermata'">
+        <article
+          class="trattativa-card"
+          [class.confermata]="s.stato === 'confermata'"
+          [class.annullata]="s.stato === 'annullata'"
+        >
           <header class="card-head">
             <strong>{{ s.snapshot.nomeSquadraA }} ↔ {{ s.snapshot.nomeSquadraB }}</strong>
             <mat-chip-set>
               <mat-chip [highlighted]="s.stato === 'bozza'">
-                {{ s.stato === 'bozza' ? 'Bozza' : 'Confermata' }}
+                {{ statoLabel(s.stato) }}
               </mat-chip>
             </mat-chip-set>
           </header>
@@ -276,12 +294,14 @@
             </p>
           }
 
-          @if (isAdmin() && s.stato === 'bozza') {
+          @if (s.stato === 'bozza') {
             <footer class="card-actions">
-              <button matButton="filled" type="button" (click)="conferma(s)">
-                <mat-icon>check_circle</mat-icon>
-                Conferma
-              </button>
+              @if (isAdmin()) {
+                <button matButton="filled" type="button" (click)="conferma(s)">
+                  <mat-icon>check_circle</mat-icon>
+                  Conferma
+                </button>
+              }
               <button matButton type="button" (click)="elimina(s)">
                 <mat-icon>delete</mat-icon>
                 Elimina

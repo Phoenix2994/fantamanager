@@ -13,7 +13,16 @@ import {
 import { Observable } from 'rxjs';
 import { map, startWith } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
-import { round1, round2, ricalcolaFinance } from '../finance-calculator';
+import {
+  ReimborsoParams,
+  RiepilogoReimborso,
+  ricalcolaFinance,
+  preparaAcquistoAsta as preparaAcquistoAstaCalc,
+  preparaReimborso as preparaReimborsoCalc,
+  preparaRescissione as preparaRescissioneCalc,
+  preparaRinnovo as preparaRinnovoCalc,
+  preparaTrasferimento as preparaTrasferimentoCalc,
+} from '../finance-calculator';
 import {
   DEFAULT_TAX_BRACKETS,
   EMPTY_FINANCE_INPUTS,
@@ -24,17 +33,7 @@ import {
 } from '../models';
 import { AuditService } from './audit.service';
 
-/** Parametri dell'operazione di rimborso/rescissione di un giocatore */
-export interface ReimborsoParams {
-  percRimborso: number;
-  percIndennizzo: number;
-  mese: 'settembre' | 'gennaio';
-}
-
-export interface RiepilogoReimborso {
-  rimborso: number;
-  indennizzo: number;
-}
+export type { ReimborsoParams, RiepilogoReimborso };
 
 /**
  * Gestione delle spese societarie stagionali e degli scaglioni fiscali.
@@ -131,137 +130,78 @@ export class FinanceService {
     });
   }
 
-  /**
-   * Operazione di rimborso/rescissione di un giocatore:
-   * - rimborso   = % rimborso   × soldi spesi  → somma ai Rimborsi
-   * - indennizzo = % indennizzo × V.A.         → somma agli Indennizzi
-   *                 di settembre o gennaio (a scelta)
-   *
-   * Il chiamante deve aver già rimosso il giocatore dalla rosa e passare
-   * il valore rosa AGGIORNATO (senza il giocatore ceduto).
-   * Ricalcola tutti i derivati (tasse comprese) e registra l'audit.
-   */
-  async applyReimborso(
-    teamId: string,
-    player: {
-      name: string;
-      acquistoRinnovoSpesa: number;
-      valoreAttuale: number;
-    },
-    params: ReimborsoParams,
-    valoreRosaAggiornato: number,
-  ): Promise<RiepilogoReimborso> {
-    const rimborso = round2(params.percRimborso * (player.acquistoRinnovoSpesa || 0));
-    const indennizzo = round2(params.percIndennizzo * (player.valoreAttuale || 0));
-
+  /** Legge il documento finanze corrente (lettura singola, non realtime) */
+  async leggiFinanceCorrente(teamId: string): Promise<SeasonFinance | undefined> {
     const snap = await getDoc(this.financeRef(teamId));
-    const current = snap.data() as SeasonFinance | undefined;
-
-    const merged: SeasonFinanceInputs = {
-      ...EMPTY_FINANCE_INPUTS,
-      ...(current ?? {}),
-      rimborsi: (current?.rimborsi ?? 0) + rimborso,
-      ...(params.mese === 'settembre'
-        ? { indennizzoSettembre: (current?.indennizzoSettembre ?? 0) + indennizzo }
-        : { indennizzoGennaio: (current?.indennizzoGennaio ?? 0) + indennizzo }),
-    };
-
-    const computed = ricalcolaFinance(
-      merged,
-      this.bracketsCache,
-      valoreRosaAggiornato,
-      current?.taxMinimumHistoric ?? 0,
-    );
-
-    await setDoc(
-      this.financeRef(teamId),
-      {
-        ...merged,
-        ...computed,
-        updatedAt: serverTimestamp(),
-        updatedBy: this.auth.currentUser?.uid ?? 'unknown',
-      },
-      { merge: true },
-    );
-
-    void this.audit.log({
-      leagueId: environment.leagueId,
-      teamId,
-      adminId: this.auth.currentUser?.uid ?? 'unknown',
-      entityType: 'seasonFinance',
-      entityId: `${teamId}/${environment.season}`,
-      operation: 'update',
-      fieldModified: 'rimborsi, indennizzi',
-      valueBefore: {
-        rimborsi: current?.rimborsi ?? 0,
-        ...(params.mese === 'settembre'
-          ? { indennizzoSettembre: current?.indennizzoSettembre ?? 0 }
-          : { indennizzoGennaio: current?.indennizzoGennaio ?? 0 }),
-      },
-      valueAfter: { rimborso, indennizzo, mese: params.mese },
-      changeSummary:
-        `Rimborso ${player.name}: +${rimborso} € rimborsi, ` +
-        `+${indennizzo} € indennizzi ${params.mese}`,
-    });
-
-    return { rimborso, indennizzo };
+    return snap.data() as SeasonFinance | undefined;
   }
 
   /**
-   * Operazione di rinnovo di un giocatore:
+   * Prepara (SENZA scrivere) il documento finanze con un rimborso/indennizzo:
+   * - rimborso   = % rimborso   × soldi spesi  → somma ai Rimborsi
+   * - indennizzo = % indennizzo × V.A.         → somma agli Indennizzi
+   *                 di settembre o gennaio (a scelta)
+   * Il chiamante include il risultato nel batch atomico (vedi
+   * TeamService.eseguiRimborso) insieme allo snapshot "prima" per l'undo.
+   */
+  preparaReimborso(
+    current: SeasonFinance | undefined,
+    player: { acquistoRinnovoSpesa: number; valoreAttuale: number },
+    params: ReimborsoParams,
+    valoreRosaAggiornato: number,
+  ): { data: SeasonFinanceInputs & SeasonFinanceComputed } & RiepilogoReimborso {
+    return preparaReimborsoCalc(current, player, params, valoreRosaAggiornato, this.bracketsCache);
+  }
+
+  /**
+   * Prepara (SENZA scrivere) il documento finanze con un rinnovo:
    * rinnovo = % rinnovo applicata × V.A. del giocatore → somma ai Rinnovi.
    * La rosa non cambia: passa il valore rosa corrente.
-   * Ricalcola tutti i derivati (tasse comprese) e registra l'audit.
    */
-  async applyRinnovo(
-    teamId: string,
-    player: { name: string; valoreAttuale: number },
+  preparaRinnovo(
+    current: SeasonFinance | undefined,
+    player: { valoreAttuale: number },
     nuovaPercRinnovo: number,
     valoreRosa: number,
-  ): Promise<number> {
-    const rinnovo = round1(nuovaPercRinnovo * (player.valoreAttuale || 0));
+  ): { data: SeasonFinanceInputs & SeasonFinanceComputed; rinnovo: number } {
+    return preparaRinnovoCalc(current, player, nuovaPercRinnovo, valoreRosa, this.bracketsCache);
+  }
 
-    const snap = await getDoc(this.financeRef(teamId));
-    const current = snap.data() as SeasonFinance | undefined;
+  /**
+   * Prepara (SENZA scrivere) il documento finanze con un costo di
+   * rescissione (es. 1,50 € fissi all'eliminazione di un giocatore).
+   */
+  preparaRescissione(
+    current: SeasonFinance | undefined,
+    importo: number,
+    valoreRosa: number,
+  ): { data: SeasonFinanceInputs & SeasonFinanceComputed } {
+    return preparaRescissioneCalc(current, importo, valoreRosa, this.bracketsCache);
+  }
 
-    const merged: SeasonFinanceInputs = {
-      ...EMPTY_FINANCE_INPUTS,
-      ...(current ?? {}),
-      rinnovi: (current?.rinnovi ?? 0) + rinnovo,
-    };
+  /**
+   * Prepara (SENZA scrivere) il documento finanze con un acquisto d'asta
+   * (stessa logica di `addAcquisto`, ma pura: usata da AstaService per
+   * includere la scrittura in un unico batch atomico con giocatore e
+   * svincolato, con snapshot "prima" per l'undo).
+   */
+  preparaAcquistoAsta(
+    current: SeasonFinance | undefined,
+    campo: 'acquistiAstaSettembre' | 'acquistiMercatoInfrasettimanale' | 'acquistiAstaGennaio',
+    importo: number,
+    valoreRosa: number,
+  ): { data: SeasonFinanceInputs & SeasonFinanceComputed } {
+    return preparaAcquistoAstaCalc(current, campo, importo, valoreRosa, this.bracketsCache);
+  }
 
-    const computed = ricalcolaFinance(
-      merged,
-      this.bracketsCache,
-      valoreRosa,
-      current?.taxMinimumHistoric ?? 0,
-    );
+  /** Metadati di scrittura standard (updatedAt/updatedBy) da unire ai dati preparati sopra */
+  metaScrittura(): { updatedAt: unknown; updatedBy: string } {
+    return { updatedAt: serverTimestamp(), updatedBy: this.auth.currentUser?.uid ?? 'unknown' };
+  }
 
-    await setDoc(
-      this.financeRef(teamId),
-      {
-        ...merged,
-        ...computed,
-        updatedAt: serverTimestamp(),
-        updatedBy: this.auth.currentUser?.uid ?? 'unknown',
-      },
-      { merge: true },
-    );
-
-    void this.audit.log({
-      leagueId: environment.leagueId,
-      teamId,
-      adminId: this.auth.currentUser?.uid ?? 'unknown',
-      entityType: 'seasonFinance',
-      entityId: `${teamId}/${environment.season}`,
-      operation: 'update',
-      fieldModified: 'rinnovi',
-      valueBefore: { rinnovi: current?.rinnovi ?? 0 },
-      valueAfter: { rinnovi: merged.rinnovi, rinnovo, perc: nuovaPercRinnovo },
-      changeSummary: `Rinnovo ${player.name}: +${rinnovo} € ai rinnovi`,
-    });
-
-    return rinnovo;
+  /** Riferimento al documento finanze di una squadra (stagione corrente) */
+  financeDocRef(teamId: string) {
+    return this.financeRef(teamId);
   }
 
   /**
@@ -326,52 +266,6 @@ export class FinanceService {
   }
 
   /**
-   * Somma un importo alla voce Rescissioni (es. costo fisso di rescissione
-   * di 1,50 € all'eliminazione di un giocatore) e ricalcola tutti i derivati.
-   */
-  async addRescissione(teamId: string, importo: number, valoreRosa: number): Promise<void> {
-    const snap = await getDoc(this.financeRef(teamId));
-    const current = snap.data() as SeasonFinance | undefined;
-
-    const merged: SeasonFinanceInputs = {
-      ...EMPTY_FINANCE_INPUTS,
-      ...(current ?? {}),
-      rescissioni: (current?.rescissioni ?? 0) + importo,
-    };
-
-    const computed = ricalcolaFinance(
-      merged,
-      this.bracketsCache,
-      valoreRosa,
-      current?.taxMinimumHistoric ?? 0,
-    );
-
-    await setDoc(
-      this.financeRef(teamId),
-      {
-        ...merged,
-        ...computed,
-        updatedAt: serverTimestamp(),
-        updatedBy: this.auth.currentUser?.uid ?? 'unknown',
-      },
-      { merge: true },
-    );
-
-    void this.audit.log({
-      leagueId: environment.leagueId,
-      teamId,
-      adminId: this.auth.currentUser?.uid ?? 'unknown',
-      entityType: 'seasonFinance',
-      entityId: `${teamId}/${environment.season}`,
-      operation: 'update',
-      fieldModified: 'rescissioni',
-      valueBefore: { rescissioni: current?.rescissioni ?? 0 },
-      valueAfter: { rescissioni: merged.rescissioni, importo },
-      changeSummary: `Rescissione: +${importo} € alle rescissioni`,
-    });
-  }
-
-  /**
    * Prepara (SENZA scrivere) il documento finanze aggiornato con un
    * trasferimento legato a uno scambio: +importo su trasferimentiUscita
    * o trasferimentiEntrata, ricalcolando tutti i derivati.
@@ -383,12 +277,7 @@ export class FinanceService {
     importo: number,
     valoreRosa: number,
   ): SeasonFinanceInputs & SeasonFinanceComputed {
-    const merged: SeasonFinanceInputs = {
-      ...EMPTY_FINANCE_INPUTS,
-      ...(current ?? {}),
-      [campo]: round2((current?.[campo] ?? 0) + importo),
-    };
-    return { ...merged, ...ricalcolaFinance(merged, this.bracketsCache, valoreRosa, current?.taxMinimumHistoric ?? 0) };
+    return preparaTrasferimentoCalc(current, campo, importo, valoreRosa, this.bracketsCache);
   }
 
   private financeRef(teamId: string) {
