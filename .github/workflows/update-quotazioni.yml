@@ -4,7 +4,7 @@ on:
   schedule:
     # 22:00 CET in inverno = 21:00 UTC (nel periodo DST diventa 22:00 CEST).
     # GitHub Actions usa sempre UTC per i cron.
-    - cron: '0 21 * * *'
+    - cron: '0 10 * * *'
   workflow_dispatch: # Permette di lanciarlo manualmente dal tab Actions
 
 permissions:
