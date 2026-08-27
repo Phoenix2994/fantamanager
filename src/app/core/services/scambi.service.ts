@@ -9,11 +9,14 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
+  updateDoc,
+  where,
   writeBatch,
 } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, combineLatest, of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { round2 } from '../finance-calculator';
 import {
@@ -23,6 +26,7 @@ import {
   ScambioSide,
   ScambioSnapshot,
 } from '../models';
+import { AuthService } from './auth.service';
 import { FinanceService } from './finance.service';
 import {
   LatoScambio,
@@ -67,16 +71,64 @@ export class ScambiService {
   private readonly finance = inject(FinanceService);
   private readonly audit = inject(AuditService);
   private readonly undo = inject(UndoService);
+  private readonly authService = inject(AuthService);
 
-  /** Tutte le trattative, dalla più recente */
-  readonly scambi$: Observable<Scambio[]> = collectionData(
-    this.scambiCollection(),
-    { idField: 'id' },
-  ).pipe(
-    map((list) =>
-      (list as Scambio[])
-        .slice()
-        .sort((a, b) => timestampMillis(b.createdAt) - timestampMillis(a.createdAt)),
+  /**
+   * Tutte le trattative visibili, dalla più recente:
+   * - ufficializzata/confermata/annullata: pubbliche, come prima;
+   * - bozza: PRIVATA — visibile solo se si è loggati come una delle due
+   *   squadre coinvolte. Per questo non è più un'unica query: le bozze
+   *   private richiedono due query aggiuntive filtrate su ownerUid
+   *   (le security rules non possono validare una query "list" che si
+   *   appoggi a una get() indiretta, quindi ownerUid è duplicato sul
+   *   documento apposta — vedi ScambioSide in models.ts).
+   */
+  readonly scambi$: Observable<Scambio[]> = runInInjectionContext(this.injector, () =>
+    this.authService.myTeam$.pipe(
+      switchMap((team) => {
+        const pubbliche$ = collectionData(
+          query(
+            this.scambiCollection(),
+            where('stato', 'in', ['ufficializzata', 'confermata', 'annullata']),
+          ),
+          { idField: 'id' },
+        ) as Observable<Scambio[]>;
+
+        const uid = team ? this.auth.currentUser?.uid : undefined;
+        if (!uid) {
+          return pubbliche$;
+        }
+
+        const mieComeA$ = collectionData(
+          query(
+            this.scambiCollection(),
+            where('stato', '==', 'bozza'),
+            where('squadraA.ownerUid', '==', uid),
+          ),
+          { idField: 'id' },
+        ) as Observable<Scambio[]>;
+        const mieComeB$ = collectionData(
+          query(
+            this.scambiCollection(),
+            where('stato', '==', 'bozza'),
+            where('squadraB.ownerUid', '==', uid),
+          ),
+          { idField: 'id' },
+        ) as Observable<Scambio[]>;
+
+        return combineLatest([pubbliche$, mieComeA$, mieComeB$]).pipe(
+          map(([pubbliche, mieA, mieB]) => {
+            const byId = new Map<string, Scambio>();
+            for (const s of [...pubbliche, ...mieA, ...mieB]) {
+              byId.set(s.id, s);
+            }
+            return [...byId.values()];
+          }),
+        );
+      }),
+      map((list) =>
+        list.slice().sort((a, b) => timestampMillis(b.createdAt) - timestampMillis(a.createdAt)),
+      ),
     ),
   );
 
@@ -96,8 +148,17 @@ export class ScambiService {
     return `teams/${teamId}/seasonFinance/${environment.season}`;
   }
 
-  /** Salva una nuova bozza di trattativa */
+  /**
+   * Salva una nuova bozza di trattativa. Richiede di essere loggati come
+   * una delle due squadre coinvolte (controllo anche lato client, oltre
+   * che nelle security rules: qui fallisce prima, con un messaggio chiaro).
+   */
   async saveBozza(input: NuovoScambioInput): Promise<string> {
+    const uid = this.auth.currentUser?.uid;
+    if (!uid || (input.squadraA.ownerUid !== uid && input.squadraB.ownerUid !== uid)) {
+      throw new Error('Devi accedere come una delle due squadre per proporre uno scambio.');
+    }
+
     const ref = await addDoc(this.scambiCollection(), {
       season: environment.season,
       squadraA: input.squadraA,
@@ -131,10 +192,14 @@ export class ScambiService {
     return ref.id;
   }
 
-  /** Elimina una trattativa (solo bozze non ancora confermate) */
+  /**
+   * Elimina una trattativa (solo bozze non ancora ufficializzate). Se il
+   * documento è arrivato fin qui è già garantito che sia una bozza propria
+   * (le security rules non fanno leggere bozze altrui).
+   */
   async elimina(scambio: Scambio): Promise<void> {
     if (scambio.stato !== 'bozza') {
-      throw new Error('Una trattativa confermata non può essere eliminata.');
+      throw new Error('Una trattativa ufficializzata non può essere eliminata.');
     }
     await deleteDoc(this.scambioRef(scambio.id));
 
@@ -153,6 +218,34 @@ export class ScambiService {
   }
 
   /**
+   * Ufficializza una bozza: la rende visibile agli admin per la conferma
+   * finale. Basta che una delle due squadre coinvolte la prema (non serve
+   * il consenso esplicito di entrambe).
+   */
+  async ufficializza(scambio: Scambio): Promise<void> {
+    if (scambio.stato !== 'bozza') {
+      throw new Error('Solo una bozza può essere ufficializzata.');
+    }
+    await updateDoc(this.scambioRef(scambio.id), {
+      stato: 'ufficializzata',
+      ufficializzataAt: serverTimestamp(),
+    });
+
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId: scambio.squadraA.teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'scambio',
+      entityId: scambio.id,
+      operation: 'update',
+      fieldModified: 'stato',
+      valueBefore: { stato: 'bozza' },
+      valueAfter: { stato: 'ufficializzata' },
+      changeSummary: `Trattativa ufficializzata: ${scambio.snapshot.nomeSquadraA} ↔ ${scambio.snapshot.nomeSquadraB}`,
+    });
+  }
+
+  /**
    * CONFERMA dell'admin: esegue lo scambio come operazione atomica.
    *
    * Rilegge TUTTI i dati freschi da Firestore (rose, finanze), ricalcola
@@ -161,8 +254,8 @@ export class ScambiService {
    * passaggio della trattativa a stato "confermata".
    */
   async conferma(scambio: Scambio): Promise<void> {
-    if (scambio.stato !== 'bozza') {
-      throw new Error('Trattativa già confermata.');
+    if (scambio.stato !== 'ufficializzata') {
+      throw new Error('La trattativa deve essere ufficializzata prima di poter essere confermata.');
     }
     const { teamIdA, teamIdB } = this.validaSquadre(scambio);
 

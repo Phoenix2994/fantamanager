@@ -22,11 +22,31 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Admin = autenticato con email/password (l'account condiviso della lega).
-    // I login anonimi (partecipanti all'asta) NON sono admin.
+    // Admin = autenticato con l'account email/password CONDIVISO della lega
+    // (environment.adminEmail — se cambia lì, va cambiato anche qui), OPPURE
+    // un account squadra il cui uid è tra quelli con permessi admin estesi
+    // (environment.legaAdminUids — stesso identico elenco, i due file vanno
+    // tenuti in sync a mano: non c'è un modo per far leggere le rules
+    // dall'environment). Da quando esistono anche gli account squadra
+    // (email/password ma con email diversa), non basta più "autenticato con
+    // password": va verificata anche l'identità, altrimenti ogni squadra
+    // risulterebbe admin.
     function isAdmin() {
       return request.auth != null
-        && request.auth.token.firebase.sign_in_provider == 'password';
+        && request.auth.token.firebase.sign_in_provider == 'password'
+        && (request.auth.token.email == 'admin@fantamanager.app'
+            || request.auth.uid == 'XabixzI9FuhlmlI6ZVUNgZk3aSm2');
+    }
+
+    // Proprietario della squadra teamId: account email/password (diverso da
+    // quello admin) il cui uid è salvato in teams/{teamId}.ownerUid — scritto
+    // SOLO dallo script di provisioning (Admin SDK), mai dal client. A
+    // differenza della scelta squadra in asta (client-side, vedi sotto),
+    // questa è una verifica vera, lato server.
+    function isTeamOwner(teamId) {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'password'
+        && get(/databases/$(database)/documents/teams/$(teamId)).data.ownerUid == request.auth.uid;
     }
 
     // Lega e sotto-collection (taxBrackets, svincolati): lettura pubblica,
@@ -76,16 +96,59 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
-    // Trattative di scambio tra squadre:
-    // - lettura e CREAZIONE bozze: aperte a tutti;
-    // - aggiornamento (= conferma dell'admin): solo admin;
-    // - eliminazione: aperta a tutti MA solo finché è una bozza (stessa
-    //   apertura della creazione — una volta confermata/annullata non è
-    //   più cancellabile da nessuno).
+    // Trattative di scambio tra squadre. Stati: bozza (PRIVATA, solo le due
+    // squadre coinvolte) -> ufficializzata (visibile anche agli admin, che
+    // possono confermarla) -> confermata/annullata (pubbliche, come prima).
+    //
+    // squadraA.ownerUid/squadraB.ownerUid sono una copia di
+    // teams/{id}.ownerUid presa al momento della creazione: le query "list"
+    // (a differenza di un get() su un doc singolo) possono essere validate
+    // dalle rules solo se il filtro corrisponde DIRETTAMENTE a un campo del
+    // documento — da qui la copia, invece di una isTeamOwner() con get()
+    // indiretta (vedi ScambioSide in models.ts).
+    function scambioMioOCoinvolto() {
+      return resource.data.squadraA.ownerUid == request.auth.uid
+        || resource.data.squadraB.ownerUid == request.auth.uid;
+    }
+
     match /scambi/{scambioId} {
-      allow read, create: if true;
-      allow update: if isAdmin();
-      allow delete: if resource.data.stato == 'bozza';
+      allow read: if resource.data.stato != 'bozza' || scambioMioOCoinvolto();
+
+      // Creazione: solo una delle due squadre coinvolte, e solo come bozza.
+      // Verifica che l'ownerUid dichiarato per ciascun lato corrisponda
+      // davvero al proprietario registrato di quella squadra (altrimenti un
+      // client potrebbe dichiarare un ownerUid falso per farsi vedere una
+      // bozza che non gli appartiene).
+      allow create: if request.resource.data.stato == 'bozza'
+        && (isTeamOwner(request.resource.data.squadraA.teamId)
+            || isTeamOwner(request.resource.data.squadraB.teamId))
+        && request.resource.data.squadraA.ownerUid ==
+             get(/databases/$(database)/documents/teams/$(request.resource.data.squadraA.teamId)).data.ownerUid
+        && request.resource.data.squadraB.ownerUid ==
+             get(/databases/$(database)/documents/teams/$(request.resource.data.squadraB.teamId)).data.ownerUid;
+
+      // Aggiornamento: l'admin può tutto (conferma, ecc. — la scrittura vera
+      // avviene nel batch atomico di ScambiService, con teams/finanze già
+      // protetti a parte). Una delle due squadre coinvolte può SOLO
+      // ufficializzare una propria bozza (bozza -> ufficializzata).
+      allow update: if isAdmin()
+        || (resource.data.stato == 'bozza'
+            && request.resource.data.stato == 'ufficializzata'
+            && scambioMioOCoinvolto());
+
+      // Eliminazione: solo una bozza propria (mai una già ufficializzata).
+      allow delete: if resource.data.stato == 'bozza' && scambioMioOCoinvolto();
+    }
+
+    // Valutazioni PRIVATE (stelle 1-3 + note) di una squadra sugli
+    // svincolati — vantaggio competitivo personale, non condiviso: solo la
+    // squadra proprietaria può leggerle o scriverle. Collection separata
+    // apposta (non sotto teams/ o league/, già pubblicamente leggibili da
+    // regole più larghe: nidificarle lì le avrebbe rese pubbliche lo stesso).
+    match /teamNotes/{teamId} {
+      match /{document=**} {
+        allow read, write: if isTeamOwner(teamId);
+      }
     }
 
     // Registro delle operazioni annullabili (rinnovo, rimborso/eliminazione,

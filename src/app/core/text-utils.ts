@@ -5,3 +5,11 @@ export function normalize(value: string): string {
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '');
 }
+
+/** Slug: minuscolo, accent-folding, spazi/simboli → trattini (come lo script Python) */
+export function slugify(value: string): string {
+  return normalize(value)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-');
+}

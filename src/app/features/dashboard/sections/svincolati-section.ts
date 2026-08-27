@@ -1,21 +1,24 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { combineLatest, of } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { combineLatest, firstValueFrom, of } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AstaStato, Player, Svincolato } from '../../../core/models';
+import { AstaStato, Player, Svincolato, Team, ValutazioneSvincolato } from '../../../core/models';
 import { ROLE_ORDER, roleColor, splitRoles } from '../../../core/roles';
 import { AstaService } from '../../../core/services/asta.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { TeamNotesService } from '../../../core/services/team-notes.service';
 import { TeamService } from '../../../core/services/team.service';
 import { normalize } from '../../../core/text-utils';
+import { ConfirmDialog } from '../dialogs/confirm-dialog';
 import { ExpandablePlayerCard } from '../../../shared/expandable-player-card';
 
 /** Giocatore di rosa, con il nome della squadra che lo possiede */
@@ -47,10 +50,21 @@ interface RosterEntry {
     <div class="section-header">
       <div class="header-actions">
         @if (isAdmin()) {
-          <button matButton="tonal" (click)="apriAstaRandom()" [disabled]="filtered().length === 0">
+          <button
+            matButton="tonal"
+            (click)="apriAstaRandom()"
+            [disabled]="candidatiRandom().length === 0"
+            [attr.aria-label]="'Apri asta random — ' + candidatiRandom().length + ' richiamabili'"
+          >
             <mat-icon>casino</mat-icon>
             Apri asta random
           </button>
+          @if (chiamatiCount() > 0) {
+            <button matButton (click)="resetTutteLeChiamate()">
+              <mat-icon>restart_alt</mat-icon>
+              Reset chiamate ({{ chiamatiCount() }})
+            </button>
+          }
         }
         <span class="count">{{ filtered().length }} giocatori</span>
       </div>
@@ -84,8 +98,24 @@ interface RosterEntry {
         </mat-select>
       </mat-form-field>
 
+      <!-- Filtro "solo valutati": ha senso solo per chi ha fatto login come
+           squadra (le stelle sono private, vedi TeamNotesService) -->
+      @if (myTeam()) {
+        <button
+          type="button"
+          matButton="tonal"
+          class="filter-toggle"
+          [class.active]="soloValutati()"
+          [attr.aria-pressed]="soloValutati()"
+          (click)="soloValutati.set(!soloValutati())"
+        >
+          <mat-icon>star</mat-icon>
+          Solo valutati
+        </button>
+      }
+
       <!-- Reset rapido filtri: visibile solo se qualche filtro è attivo -->
-      @if (filterRuoli().length > 0 || search()) {
+      @if (filterRuoli().length > 0 || search() || soloValutati()) {
         <button matIconButton aria-label="Azzera filtri" class="reset-filters" (click)="azzeraFiltri()">
           <mat-icon>filter_alt_off</mat-icon>
         </button>
@@ -100,25 +130,83 @@ interface RosterEntry {
     } @else {
       <ul class="list">
         @for (p of filtered(); track p.id) {
-          <li>
-            <span class="chips">
-              @for (r of rolesOf(p); track r) {
-                <span
-                  class="chip"
-                  [style.border-color]="colorFor(r)"
-                  [style.color]="colorFor(r)"
-                >{{ r }}</span>
+          <li [class.is-chiamato]="p.chiamato">
+            <div class="row">
+              <span class="chips">
+                @for (r of rolesOf(p); track r) {
+                  <span
+                    class="chip"
+                    [style.border-color]="colorFor(r)"
+                    [style.color]="colorFor(r)"
+                  >{{ r }}</span>
+                }
+              </span>
+              <span class="name">{{ p.name }}</span>
+              <span class="team">{{ p.squadra }}</span>
+              <!-- Riepilogo stelle SOLO in lettura: solo le stelle DATE (es.
+                   2/3 → 2 stelle piene, non 2 piene + 1 vuota). La
+                   valutazione vera, con tutte e 3 le stelle visibili per
+                   poterle cambiare, si fa nel pannello sotto. -->
+              @if (myTeam() && stelleDi(p.id) > 0) {
+                <span class="stars-summary" aria-hidden="true">
+                  @for (s of STELLE; track s) {
+                    @if (s <= stelleDi(p.id)) {
+                      <mat-icon class="star-mini">star</mat-icon>
+                    }
+                  }
+                </span>
               }
-            </span>
-            <span class="name">{{ p.name }}</span>
-            <span class="team">{{ p.squadra }}</span>
-            @if (isAdmin()) {
-              <button matButton="tonal" class="auction-btn" (click)="apriAsta(p)">
-                <mat-icon>gavel</mat-icon>
-                Apri asta
-              </button>
+              @if (isAdmin()) {
+                <button matButton="tonal" class="auction-btn" (click)="apriAsta(p)">
+                  <mat-icon>gavel</mat-icon>
+                  Apri asta
+                </button>
+              }
+              <span class="quota">{{ p.quotazioneAttuale | number: '1.0-0' }}</span>
+              <!-- Toggle del pannello valutazione (stelle + nota): solo per
+                   chi ha fatto login come squadra (valutazioni private, vedi
+                   TeamNotesService). Se è presente una nota, la sua icona
+                   sostituisce la freccina di apertura. -->
+              @if (myTeam()) {
+                <button
+                  type="button"
+                  matIconButton
+                  class="panel-toggle"
+                  [attr.aria-label]="pannelloAperto(p.id) ? 'Chiudi valutazione' : 'Apri valutazione'"
+                  (click)="togglePannello(p.id)"
+                >
+                  <mat-icon>{{
+                    notaDi(p.id) ? 'sticky_note_2' : pannelloAperto(p.id) ? 'expand_less' : 'expand_more'
+                  }}</mat-icon>
+                </button>
+              }
+            </div>
+            @if (myTeam(); as squadra) {
+              @if (pannelloAperto(p.id)) {
+                <div class="valutazione-panel">
+                  <span class="stars" role="radiogroup" aria-label="Valutazione">
+                    @for (s of STELLE; track s) {
+                      <button
+                        type="button"
+                        class="star-btn"
+                        [attr.aria-label]="s + ' stelle'"
+                        [attr.aria-pressed]="stelleDi(p.id) >= s"
+                        (click)="toggleStella(squadra.id, p.id, s)"
+                      >
+                        <mat-icon>{{ stelleDi(p.id) >= s ? 'star' : 'star_border' }}</mat-icon>
+                      </button>
+                    }
+                  </span>
+                  <textarea
+                    class="note-input"
+                    placeholder="Nota privata — solo tu la vedi"
+                    rows="2"
+                    [value]="notaDi(p.id)"
+                    (blur)="salvaNota(squadra.id, p.id, $any($event.target).value)"
+                  ></textarea>
+                </div>
+              }
             }
-            <span class="quota">{{ p.quotazioneAttuale | number: '1.0-0' }}</span>
           </li>
         }
       </ul>
@@ -199,6 +287,17 @@ interface RosterEntry {
       flex-shrink: 0;
     }
 
+    .filter-toggle {
+      flex-shrink: 0;
+      align-self: center;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .filter-toggle.active {
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+    }
+
     .chip {
       display: inline-block;
       padding: 2px 8px;
@@ -217,12 +316,80 @@ interface RosterEntry {
     }
 
     .list li {
-      display: flex;
-      align-items: center;
-      gap: 8px;
       padding: 6px 0;
       border-bottom: 1px dashed var(--mat-sys-outline-variant);
       font-size: 0.875rem;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Giocatore già chiamato in asta (a prescindere dall'esito): stessa
+       tinta usata per i giocatori fuori Serie A nella rosa, coerenza visiva
+       tra le due sezioni */
+    .row.is-chiamato {
+      background: rgba(252, 185, 203, 0.4);
+    }
+
+    /* Riepilogo stelle nella riga compatta: sola lettura, più piccolo delle
+       stelle interattive del pannello */
+    .stars-summary {
+      display: inline-flex;
+      flex-shrink: 0;
+      color: var(--mat-sys-tertiary);
+    }
+
+    .star-mini {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+
+    .panel-toggle {
+      flex-shrink: 0;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .valutazione-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 6px 0 8px;
+    }
+
+    .stars {
+      display: inline-flex;
+      flex-shrink: 0;
+    }
+
+    .star-btn {
+      border: none;
+      background: none;
+      padding: 2px;
+      line-height: 0;
+      cursor: pointer;
+      color: var(--mat-sys-tertiary);
+    }
+
+    .star-btn mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    .note-input {
+      width: 100%;
+      resize: vertical;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: var(--mat-sys-surface-container-high);
+      color: var(--mat-sys-on-surface);
+      font: inherit;
+      font-size: 0.82rem;
     }
 
     .cards {
@@ -273,7 +440,11 @@ export class SvincolatiSection {
   private readonly teamService = inject(TeamService);
   private readonly astaService = inject(AstaService);
   private readonly authService = inject(AuthService);
+  private readonly teamNotesService = inject(TeamNotesService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
+
+  readonly STELLE = [1, 2, 3] as const;
 
   readonly svincolati = toSignal(this.teamService.svincolati$, {
     initialValue: [] as Svincolato[],
@@ -305,6 +476,41 @@ export class SvincolatiSection {
   /** true se l'utente ha effettuato il login come admin (non anonimo) */
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
+  /** Squadra di cui l'utente corrente è proprietario, se ha fatto login come squadra */
+  readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
+
+  /**
+   * Valutazioni PRIVATE della propria squadra sugli svincolati (vuoto se non
+   * loggati come squadra). catchError qui è FONDAMENTALE: senza, un errore
+   * sulla lettura (es. permessi Firestore non ancora propagati subito dopo
+   * il login) farebbe fallire il signal in stato di errore — e siccome
+   * viene letto nel template per OGNI riga (stelleDi/notaDi), un solo
+   * errore spaccherebbe il rendering dell'intera lista svincolati, non solo
+   * il pannello valutazione.
+   */
+  private readonly valutazioni = toSignal(
+    toObservable(this.myTeam).pipe(
+      switchMap((team) =>
+        team
+          ? this.teamNotesService.valutazioni$(team.id).pipe(
+              catchError((err) => {
+                console.error('Errore leggendo le valutazioni svincolati:', err);
+                return of([] as ValutazioneSvincolato[]);
+              }),
+            )
+          : of([] as ValutazioneSvincolato[]),
+      ),
+    ),
+    { initialValue: [] as ValutazioneSvincolato[] },
+  );
+
+  private readonly valutazioniMap = computed(
+    () => new Map(this.valutazioni().map((v) => [v.id, v] as const)),
+  );
+
+  /** Id degli svincolati con il pannello valutazione aperto (stato solo UI, non persistito) */
+  private readonly pannelliAperti = signal<ReadonlySet<string>>(new Set());
+
   /** Stato dell'asta: per mostrare il banner quando è aperta */
   private readonly statoAsta = toSignal(this.astaService.stato$, {
     initialValue: undefined as AstaStato | undefined,
@@ -317,6 +523,8 @@ export class SvincolatiSection {
   /** Ruoli selezionati nel filtro (vuoto = tutti) */
   readonly filterRuoli = signal<string[]>([]);
   readonly search = signal('');
+  /** true = mostra solo gli svincolati a cui la propria squadra ha dato almeno una stella */
+  readonly soloValutati = signal(false);
 
   /** Ruoli distinti presenti nella lista, nell'ordine canonico */
   readonly ruoliDisponibili = computed(() => {
@@ -333,15 +541,23 @@ export class SvincolatiSection {
   readonly filtered = computed(() => {
     const ruoli = this.filterRuoli();
     const term = normalize(this.search());
+    const soloValutati = this.soloValutati();
     return this.svincolati()
       .filter(
         (p) =>
           // il filtro matcha se il giocatore ha ALMENO UNO dei ruoli selezionati
           (!ruoli.length || splitRoles(p.ruolo).some((r) => ruoli.includes(r))) &&
-          (!term || normalize(p.name).includes(term)),
+          (!term || normalize(p.name).includes(term)) &&
+          (!soloValutati || this.stelleDi(p.id) > 0),
       )
       .sort((a, b) => b.quotazioneAttuale - a.quotazioneAttuale);
   });
+
+  /** Sottoinsieme di `filtered` non ancora chiamato — il pool del random */
+  readonly candidatiRandom = computed(() => this.filtered().filter((p) => !p.chiamato));
+
+  /** Quanti svincolati (in TUTTA la lista, non solo filtrata) sono segnati "chiamato" */
+  readonly chiamatiCount = computed(() => this.svincolati().filter((p) => p.chiamato).length);
 
   /**
    * Giocatori di rosa che corrispondono a nome e/o ruoli cercati — vuoto se
@@ -367,20 +583,66 @@ export class SvincolatiSection {
     return roleColor(role);
   }
 
+  stelleDi(svincolatoId: string): number {
+    return this.valutazioniMap().get(svincolatoId)?.stelle ?? 0;
+  }
+
+  notaDi(svincolatoId: string): string {
+    return this.valutazioniMap().get(svincolatoId)?.note ?? '';
+  }
+
+  pannelloAperto(svincolatoId: string): boolean {
+    return this.pannelliAperti().has(svincolatoId);
+  }
+
+  togglePannello(svincolatoId: string): void {
+    const aperti = new Set(this.pannelliAperti());
+    if (!aperti.delete(svincolatoId)) {
+      aperti.add(svincolatoId);
+    }
+    this.pannelliAperti.set(aperti);
+  }
+
+  /** Tocca la stessa stella già assegnata per togliere la valutazione */
+  async toggleStella(teamId: string, svincolatoId: string, stelle: number): Promise<void> {
+    const nuove = this.stelleDi(svincolatoId) === stelle ? 0 : stelle;
+    try {
+      await this.teamNotesService.setStelle(teamId, svincolatoId, nuove);
+    } catch {
+      this.snackBar.open('Errore salvando la valutazione', undefined, { duration: 3000 });
+    }
+  }
+
+  async salvaNota(teamId: string, svincolatoId: string, nota: string): Promise<void> {
+    if (nota === this.notaDi(svincolatoId)) {
+      return;
+    }
+    try {
+      await this.teamNotesService.setNota(teamId, svincolatoId, nota);
+    } catch {
+      this.snackBar.open('Errore salvando la nota', undefined, { duration: 3000 });
+    }
+  }
+
   /** Ruoli singoli di un giocatore, per i chip */
   rolesOf(player: { ruolo: string }): string[] {
     return splitRoles(player.ruolo);
   }
 
-  /** Azzera i filtri ruoli e ricerca */
+  /** Azzera i filtri ruoli, ricerca e "solo valutati" */
   azzeraFiltri(): void {
     this.filterRuoli.set([]);
     this.search.set('');
+    this.soloValutati.set(false);
   }
 
-  /** Apre l'asta live su un giocatore svincolato a caso */
+  /**
+   * Pick del random SOLO tra i non ancora chiamati (tra quelli filtrati):
+   * evita di ripescare sempre gli stessi nomi finch\u00e9 non \u00e8 aperta
+   * un'assegnazione o non c'\u00e8 un reset esplicito.
+   */
   async apriAstaRandom(): Promise<void> {
-    const candidati = this.filtered();
+    const candidati = this.candidatiRandom();
     if (candidati.length === 0) {
       return;
     }
@@ -388,8 +650,29 @@ export class SvincolatiSection {
     await this.apriAsta(scelto);
   }
 
-  /** Apre l'asta live sul giocatore scelto */
+  /**
+   * Apre l'asta live sul giocatore scelto (segna anche "chiamato"), previa
+   * conferma: \u00e8 un'azione pubblica e visibile a tutti in tempo reale, va
+   * evitato un click accidentale (soprattutto per il pick da random, dove
+   * il nome scelto non era prevedibile in anticipo).
+   */
   async apriAsta(giocatore: Svincolato): Promise<void> {
+    const confermato = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialog, {
+          data: {
+            title: 'Apri asta',
+            message: `Aprire l'asta su ${giocatore.name}? Sar\u00e0 visibile a tutti, partenza da 0 \u20ac.`,
+            confirmLabel: 'Apri asta',
+          },
+          width: '95vw',
+          maxWidth: '400px',
+        })
+        .afterClosed(),
+    );
+    if (!confermato) {
+      return;
+    }
     try {
       await this.astaService.apriAsta(giocatore);
       this.snackBar.open(`Asta aperta su ${giocatore.name}`, undefined, { duration: 3000 });
@@ -397,6 +680,37 @@ export class SvincolatiSection {
       this.snackBar.open('Errore durante l\u2019apertura dell\u2019asta', undefined, {
         duration: 3000,
       });
+    }
+  }
+
+  /** Reset in blocco di tutti i "chiamato" correnti, previa conferma (tocca pi\u00f9 giocatori insieme) */
+  async resetTutteLeChiamate(): Promise<void> {
+    const n = this.chiamatiCount();
+    const confermato = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialog, {
+          data: {
+            title: 'Reset chiamate',
+            message:
+              `Rendere di nuovo richiamabili dal random tutti i ${n} giocatori ` +
+              'gi\u00e0 chiamati?',
+            confirmLabel: 'Reset',
+          },
+          width: '95vw',
+          maxWidth: '400px',
+        })
+        .afterClosed(),
+    );
+    if (!confermato) {
+      return;
+    }
+    try {
+      await this.astaService.resetTutteLeChiamate();
+      this.snackBar.open('Tutti i giocatori sono di nuovo richiamabili dal random', undefined, {
+        duration: 3000,
+      });
+    } catch {
+      this.snackBar.open('Errore durante il reset', undefined, { duration: 3000 });
     }
   }
 }

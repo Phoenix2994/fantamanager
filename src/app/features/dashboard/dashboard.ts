@@ -6,13 +6,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
-import { RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { Team } from '../../core/models';
-import { AuthService } from '../../core/services/auth.service';
 import { TeamSelectionService } from '../../core/services/team-selection.service';
 import { TeamService } from '../../core/services/team.service';
 import { NavMenu } from '../../core/nav/nav-menu';
+import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { FinanceSection } from './sections/finance-section';
 import { PlayersSection } from './sections/players-section';
 import { SvincolatiSection } from './sections/svincolati-section';
@@ -35,11 +34,11 @@ import { SvincolatiSection } from './sections/svincolati-section';
     MatIconModule,
     MatSelectModule,
     MatTabsModule,
-    RouterLink,
     NavMenu,
     PlayersSection,
     SvincolatiSection,
     FinanceSection,
+    HeaderAuthStatus,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -47,7 +46,6 @@ import { SvincolatiSection } from './sections/svincolati-section';
 export class Dashboard {
   private readonly breakpointObserver = inject(BreakpointObserver);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly authService = inject(AuthService);
   private readonly teamService = inject(TeamService);
 
   /** Soglie coerenti con lo spec: mobile <640, tablet 640–1024, desktop >1024 */
@@ -55,11 +53,6 @@ export class Dashboard {
   private static readonly TABLET_QUERY = '(min-width: 640px) and (max-width: 1023.98px)';
 
   readonly leagueName = environment.leagueName;
-
-  /** true se l'utente ha effettuato il login come admin */
-  readonly isAdmin = toSignal(this.authService.isAdmin$, {
-    initialValue: false,
-  });
 
   readonly isMobile = signal(false);
   readonly isTablet = signal(false);
@@ -80,10 +73,5 @@ export class Dashboard {
         this.isMobile.set(!!breakpoints[Dashboard.MOBILE_QUERY]);
         this.isTablet.set(!!breakpoints[Dashboard.TABLET_QUERY]);
       });
-  }
-
-  /** Logout: la sessione admin termina, l'utente resta come visitatore */
-  async logout(): Promise<void> {
-    await this.authService.logout();
   }
 }

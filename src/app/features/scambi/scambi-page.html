@@ -4,35 +4,38 @@
     <mat-icon class="header-logo" aria-hidden="true">sports_soccer</mat-icon>
     <h1 class="app-title">Scambi</h1>
     <span class="spacer"></span>
-    @if (isAdmin()) {
-      <button matIconButton aria-label="Esci" (click)="logout()">
-        <mat-icon>logout</mat-icon>
-      </button>
-    } @else {
-      <a matButton="tonal" routerLink="/login">
-        <mat-icon>login</mat-icon>
-        Accedi
-      </a>
-    }
+    <app-header-auth-status />
   </header>
 
   <main class="content">
-    <!-- ---------- Nuova trattativa (aperta a tutti) ---------- -->
+    <!-- ---------- Nuova trattativa (richiede login come squadra) ---------- -->
     <section class="panel nuova-trattativa">
       <h2 class="section-title">
         <mat-icon>swap_horiz</mat-icon>
         Nuova trattativa
       </h2>
+
+      @if (!myTeam()) {
+        <p class="hint">
+          Accedi come la tua squadra per proporre uno scambio: la bozza resta
+          visibile solo a te e alla controparte finché non la ufficializzi.
+        </p>
+        <a matButton="tonal" routerLink="/login">
+          <mat-icon>login</mat-icon>
+          Accedi come squadra
+        </a>
+      } @else {
       <p class="hint">
-        Chiunque può preparare una trattativa: verrà salvata come bozza e dovrà
-        essere confermata dall'admin. Puoi anche vendere un giocatore per una
+        La bozza è privata: la vedete solo tu e la controparte, finché uno dei
+        due non preme "Ufficializza". Puoi anche vendere un giocatore per una
         cifra, senza riceverne altri: in quel caso il suo valore salirà alla
         cifra incassata.
       </p>
 
         <!-- Una card per lato: tendina squadra + rosa subito sotto, così su
              mobile (dove le due card si impilano) la rosa selezionata
-             compare sempre appena sotto la propria tendina -->
+             compare sempre appena sotto la propria tendina. Squadra A è
+             bloccata sulla propria (si propone sempre per la propria squadra). -->
         <div class="picker-grid">
           @for (lato of LATI; track lato) {
             <div class="picker">
@@ -40,6 +43,7 @@
                 <mat-label>Squadra {{ lato }}</mat-label>
                 <mat-select
                   [value]="lato === 'A' ? squadraAId() : squadraBId()"
+                  [disabled]="lato === 'A'"
                   (selectionChange)="squadraChange(lato, $event.value)"
                 >
                   @for (team of teams(); track team.id) {
@@ -233,6 +237,7 @@
             Salva bozza trattativa
           </button>
         </div>
+      }
       </section>
 
     <!-- ---------- Elenco trattative ---------- -->
@@ -296,15 +301,20 @@
 
           @if (s.stato === 'bozza') {
             <footer class="card-actions">
-              @if (isAdmin()) {
-                <button matButton="filled" type="button" (click)="conferma(s)">
-                  <mat-icon>check_circle</mat-icon>
-                  Conferma
-                </button>
-              }
+              <button matButton="filled" type="button" (click)="ufficializza(s)">
+                <mat-icon>send</mat-icon>
+                Ufficializza
+              </button>
               <button matButton type="button" (click)="elimina(s)">
                 <mat-icon>delete</mat-icon>
                 Elimina
+              </button>
+            </footer>
+          } @else if (s.stato === 'ufficializzata' && isAdmin()) {
+            <footer class="card-actions">
+              <button matButton="filled" type="button" (click)="conferma(s)">
+                <mat-icon>check_circle</mat-icon>
+                Conferma
               </button>
             </footer>
           }

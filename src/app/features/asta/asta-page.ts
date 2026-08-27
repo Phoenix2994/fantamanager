@@ -15,9 +15,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
-import { AstaStato, Team } from '../../core/models';
+import { AstaStato, Team, ValutazioneSvincolato } from '../../core/models';
 import { residuoAlleMulte } from '../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
+import { slugify } from '../../core/text-utils';
+import { TeamNotesService } from '../../core/services/team-notes.service';
 import {
   AstaStatsPanel,
   estraiAcquistiAsta,
@@ -35,6 +37,7 @@ import {
 } from '../../core/services/asta.service';
 import { AuthService } from '../../core/services/auth.service';
 import { NavMenu } from '../../core/nav/nav-menu';
+import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
 import { environment } from '../../../environments/environment';
@@ -72,6 +75,7 @@ type TeamStat = TeamStatAsta;
     RouterLink,
     NavMenu,
     AstaStatsPanel,
+    HeaderAuthStatus,
   ],
   styleUrls: ['../../core/nav/page-shell.scss'],
   template: `
@@ -81,16 +85,7 @@ type TeamStat = TeamStatAsta;
         <mat-icon class="header-logo" aria-hidden="true">sports_soccer</mat-icon>
         <h1 class="app-title">Asta live</h1>
         <span class="spacer"></span>
-        @if (isAdmin()) {
-          <button matIconButton aria-label="Esci" (click)="logout()">
-            <mat-icon>logout</mat-icon>
-          </button>
-        } @else {
-          <a matButton="tonal" routerLink="/login">
-            <mat-icon>login</mat-icon>
-            Accedi
-          </a>
-        }
+        <app-header-auth-status />
       </header>
 
       <main class="content">
@@ -127,6 +122,25 @@ type TeamStat = TeamStatAsta;
                           <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                         }
                       </div>
+
+                      <!-- Valutazione PRIVATA della propria squadra: solo per chi ha
+                           fatto login come squadra (non per la scelta squadra anonima) -->
+                      @if (myTeam() && valutazioneAttuale(); as v) {
+                        @if (v.stelle > 0 || v.note) {
+                          <div class="mia-valutazione">
+                            @if (v.stelle > 0) {
+                              <span class="stars readonly">
+                                @for (s2 of STELLE; track s2) {
+                                  <mat-icon>{{ v.stelle >= s2 ? 'star' : 'star_border' }}</mat-icon>
+                                }
+                              </span>
+                            }
+                            @if (v.note) {
+                              <p class="nota-privata">{{ v.note }}</p>
+                            }
+                          </div>
+                        }
+                      }
 
                       <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
                         <mat-label>Assegna alla squadra vincitrice</mat-label>
@@ -225,6 +239,25 @@ type TeamStat = TeamStatAsta;
                           <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                         }
                       </div>
+
+                      <!-- Valutazione PRIVATA della propria squadra: solo per chi ha
+                           fatto login come squadra (non per la scelta squadra anonima) -->
+                      @if (myTeam() && valutazioneAttuale(); as v) {
+                        @if (v.stelle > 0 || v.note) {
+                          <div class="mia-valutazione">
+                            @if (v.stelle > 0) {
+                              <span class="stars readonly">
+                                @for (s2 of STELLE; track s2) {
+                                  <mat-icon>{{ v.stelle >= s2 ? 'star' : 'star_border' }}</mat-icon>
+                                }
+                              </span>
+                            }
+                            @if (v.note) {
+                              <p class="nota-privata">{{ v.note }}</p>
+                            }
+                          </div>
+                        }
+                      }
 
                       <div class="bids">
                         @for (inc of incrementi; track inc) {
@@ -589,6 +622,35 @@ type TeamStat = TeamStatAsta;
       color: var(--mat-sys-on-surface-variant);
     }
 
+    .mia-valutazione {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      margin: 8px 0 0;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: var(--mat-sys-secondary-container);
+      text-align: center;
+    }
+
+    .stars.readonly {
+      display: inline-flex;
+      color: var(--mat-sys-tertiary);
+    }
+
+    .stars.readonly mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+    }
+
+    .nota-privata {
+      margin: 0;
+      font-size: 0.85rem;
+      font-style: italic;
+    }
+
     .full-width {
       width: 100%;
     }
@@ -669,15 +731,13 @@ export class AstaPage {
   private readonly authService = inject(AuthService);
   private readonly teamService = inject(TeamService);
   private readonly financeService = inject(FinanceService);
+  private readonly teamNotesService = inject(TeamNotesService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly breakpointObserver = inject(BreakpointObserver);
 
   readonly leagueName = environment.leagueName;
   readonly incrementi = INCREMENTI;
-
-  async logout(): Promise<void> {
-    await this.authService.logout();
-  }
+  readonly STELLE = [1, 2, 3] as const;
 
   /** Layout mobile (<640px): tab Asta/Statistiche invece di sezioni impilate */
   readonly isMobile = toSignal(
@@ -689,6 +749,32 @@ export class AstaPage {
   private readonly dialog = inject(MatDialog);
 
   readonly stato = toSignal(this.astaService.stato$, { initialValue: undefined as AstaStato | undefined });
+
+  /** Squadra di cui l'utente corrente è proprietario, se ha fatto login come squadra */
+  readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
+
+  /** Valutazioni PRIVATE della propria squadra sugli svincolati (vuoto se non loggati come squadra) */
+  private readonly valutazioni = toSignal(
+    toObservable(this.myTeam).pipe(
+      switchMap((team) =>
+        team ? this.teamNotesService.valutazioni$(team.id) : of([] as ValutazioneSvincolato[]),
+      ),
+    ),
+    { initialValue: [] as ValutazioneSvincolato[] },
+  );
+
+  /**
+   * Valutazione della propria squadra sul giocatore attualmente in asta —
+   * stesso id/slug con cui è salvato lo svincolato (vedi AstaService.assegna).
+   */
+  readonly valutazioneAttuale = computed<ValutazioneSvincolato | undefined>(() => {
+    const s = this.stato();
+    if (!s?.aperta) {
+      return undefined;
+    }
+    const id = slugify(s.giocatoreNome);
+    return this.valutazioni().find((v) => v.id === id);
+  });
 
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
 

@@ -44,6 +44,7 @@ Thumbs.db
 
 # Credenziali Firebase (MAI committare!)
 scripts/serviceAccountKey.json
+scripts/team-credentials.local.json
 
 # Snapshot Firestore locali (vanno solo sul branch data-backups)
 /backups

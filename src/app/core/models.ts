@@ -99,6 +99,34 @@ export interface Svincolato {
   squadra: string;
   season: string;
   updatedAt?: Timestamp | null;
+  /**
+   * true se l'asta è già stata aperta su questo giocatore (a prescindere
+   * dall'esito: anche se poi è stata chiusa senza assegnazione). Serve solo
+   * a escluderlo dai pick di "Apri asta random", per non ripescare sempre
+   * gli stessi nomi finché l'admin non fa reset (per-giocatore o in blocco).
+   * Non viene mai toccato se il giocatore risulta assegnato: in quel caso
+   * il documento viene proprio cancellato dagli svincolati.
+   */
+  chiamato?: boolean;
+  chiamatoAt?: Timestamp | null;
+}
+
+/**
+ * Valutazione PRIVATA di una squadra su uno svincolato — vantaggio
+ * competitivo personale, non condiviso: teamNotes/{teamId}/svincolati/{id}.
+ * Collection separata dalla lega (non teams/{teamId}/... né
+ * league/{leagueId}/svincolati/...) apposta: quegli alberi sono già
+ * pubblicamente leggibili da regole più larghe, qui invece deve poterla
+ * leggere/scrivere SOLO la squadra proprietaria (isTeamOwner in
+ * firestore.rules). L'id del documento è lo stesso id dello svincolato
+ * (stesso slug), così non serve un doppio indirizzamento.
+ */
+export interface ValutazioneSvincolato {
+  id: string;
+  /** 1-3, assente/0 = non valutato */
+  stelle: number;
+  note: string;
+  updatedAt?: Timestamp | null;
 }
 
 /**
@@ -127,17 +155,40 @@ export interface Team {
   id: string;
   leagueId: string;
   name: string;
+  /**
+   * uid dell'account Firebase (email/password) di proprietà della squadra
+   * — NON l'admin. Scritto solo dallo script di provisioning (Admin SDK),
+   * mai dal client: le security rules lo usano per verificare "questo
+   * utente è davvero questa squadra" (isTeamOwner in firestore.rules).
+   */
+  ownerUid?: string;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
 
-/** Lato di una trattativa di scambio: squadra + giocatori ceduti */
+/**
+ * Lato di una trattativa di scambio: squadra + giocatori ceduti.
+ * `ownerUid` è una copia di teams/{teamId}.ownerUid presa al momento del
+ * salvataggio: serve SOLO alle security rules, per poter verificare la
+ * privacy delle bozze con una query diretta (`where squadraX.ownerUid ==
+ * request.auth.uid`) invece di una `get()` — le query Firestore non
+ * possono essere validate dalle rules se la condizione richiede una
+ * lettura indiretta. Può essere null se la squadra non ha (ancora) un
+ * account proprietario.
+ */
 export interface ScambioSide {
   teamId: string;
   playerIds: string[];
+  ownerUid: string | null;
 }
 
-export type ScambioStato = 'bozza' | 'confermata' | 'annullata';
+/**
+ * bozza: privata, visibile solo alle due squadre coinvolte (autenticate).
+ * ufficializzata: una delle due squadre l'ha confermata da parte sua —
+ *   ora visibile anche agli admin, che possono confermarla o lasciarla lì.
+ * confermata / annullata: come oggi, pubbliche.
+ */
+export type ScambioStato = 'bozza' | 'ufficializzata' | 'confermata' | 'annullata';
 
 /**
  * Trattativa di scambio tra due squadre: scambi/{scambioId}.
@@ -164,6 +215,7 @@ export interface Scambio {
   snapshot: ScambioSnapshot;
   createdAt?: Timestamp | null;
   createdBy?: string | null;
+  ufficializzataAt?: Timestamp | null;
   confirmedAt?: Timestamp | null;
 }
 

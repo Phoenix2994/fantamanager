@@ -26,7 +26,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/svincolati', label: 'Svincolati', icon: 'person_search' },
   { path: '/asta', label: 'Asta', icon: 'gavel' },
   { path: '/scambi', label: 'Scambi', icon: 'swap_horiz' },
+  { path: '/montepremi', label: 'Montepremi', icon: 'emoji_events' },
   { path: '/storico', label: 'Storico', icon: 'history', adminOnly: true },
+  { path: '/supporto', label: 'Supporto', icon: 'help' },
 ];
 
 /**

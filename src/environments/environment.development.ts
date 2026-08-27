@@ -16,6 +16,15 @@ export const environment = {
    */
   adminEmail: 'admin@fantamanager.app',
 
+  /**
+   * uid Firebase Auth di account squadra con permessi admin ESTESI (oltre
+   * ai propri, come per ogni squadra loggata): stesso trattamento di
+   * adminEmail, solo verificato per uid invece che per email. Aggiornare
+   * anche isAdmin() in firestore.rules se questa lista cambia — i due file
+   * vanno tenuti in sync a mano.
+   */
+  legaAdminUids: ['XabixzI9FuhlmlI6ZVUNgZk3aSm2'] as readonly string[],
+
   /** ID del documento lega in Firestore: league/{leagueId} */
   leagueId: 'main',
 

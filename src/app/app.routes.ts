@@ -44,5 +44,17 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/storico/storico-page').then((m) => m.StoricoPage),
   },
+  {
+    // Ripartizione del montepremi (voce del menù, pubblica)
+    path: 'montepremi',
+    loadComponent: () =>
+      import('./features/montepremi/montepremi-page').then((m) => m.MontepremiPage),
+  },
+  {
+    // Guida alle funzionalità per squadra autenticata (voce del menù, pubblica)
+    path: 'supporto',
+    loadComponent: () =>
+      import('./features/supporto/supporto-page').then((m) => m.SupportoPage),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

@@ -9,7 +9,6 @@ import {
   getDocs,
   runTransaction,
   serverTimestamp,
-  setDoc,
   updateDoc,
   writeBatch,
 } from '@angular/fire/firestore';
@@ -17,6 +16,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AstaStato, PlayerInput, SeasonFinance, Svincolato } from '../models';
 import { calcolaValoreAttuale, calcolaProssimaSpesaRinnovo, round2 } from '../finance-calculator';
+import { slugify } from '../text-utils';
 import { AuditService } from './audit.service';
 import { FinanceService } from './finance.service';
 import { UndoService } from './undo.service';
@@ -75,9 +75,19 @@ export class AstaService {
   /**
    * Apre l'asta su un giocatore svincolato.
    * Il prezzo di partenza è la sua quotazione mantra attuale.
+   * Segna anche il giocatore come "chiamato" (stesso batch, atomico): serve
+   * solo a escluderlo dai pick di "Apri asta random" finché non c'è un
+   * reset esplicito — non ha altro effetto (resta comunque richiamabile a
+   * mano dall'admin in qualunque momento).
    */
   async apriAsta(giocatore: Svincolato): Promise<void> {
-    await setDoc(this.statoRef, {
+    const svincolatoRef = doc(
+      this.firestore,
+      `league/${environment.leagueId}/svincolati/${giocatore.id}`,
+    );
+
+    const batch = writeBatch(this.firestore);
+    batch.set(this.statoRef, {
       aperta: true,
       giocatoreNome: giocatore.name,
       ruolo: giocatore.ruolo,
@@ -89,6 +99,12 @@ export class AstaService {
       rilanciatoDaTeamName: '',
       timestampUltimoRilancio: serverTimestamp(),
     });
+    batch.set(
+      svincolatoRef,
+      { chiamato: true, chiamatoAt: serverTimestamp() },
+      { merge: true },
+    );
+    await batch.commit();
 
     void this.audit.log({
       leagueId: environment.leagueId,
@@ -159,6 +175,27 @@ export class AstaService {
       valueAfter: null,
       changeSummary: 'Chiusura asta senza assegnazione',
     });
+  }
+
+  /**
+   * Reset in blocco: rende di nuovo richiamabili dal random TUTTI i
+   * giocatori attualmente segnati come "chiamato". Un solo batch (i
+   * documenti coinvolti restano ben sotto il limite di 500 scritture di
+   * Firestore, anche con l'intero listone svincolati).
+   */
+  async resetTutteLeChiamate(): Promise<void> {
+    const snap = await getDocs(
+      collection(this.firestore, `league/${environment.leagueId}/svincolati`),
+    );
+    const daResettare = snap.docs.filter((d) => d.data()['chiamato'] === true);
+    if (daResettare.length === 0) {
+      return;
+    }
+    const batch = writeBatch(this.firestore);
+    for (const d of daResettare) {
+      batch.update(d.ref, { chiamato: false, chiamatoAt: null });
+    }
+    await batch.commit();
   }
 
   /**
@@ -296,15 +333,4 @@ export class AstaService {
     const snap = await getDoc(this.statoRef);
     return snap.data() as AstaStato | undefined;
   }
-}
-
-/** Slug del nome: minuscolo, accent-folding, spazi → trattini (come lo script Python) */
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, '-');
 }

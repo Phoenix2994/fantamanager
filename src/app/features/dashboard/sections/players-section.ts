@@ -33,6 +33,7 @@ import {
 } from '../dialogs/player-dialog';
 import { ReimborsoDialog } from '../dialogs/reimborso-dialog';
 import { RenewDialog } from '../dialogs/renew-dialog';
+import { RenewPreviewDialog } from '../dialogs/renew-preview-dialog';
 
 
 @Component({
@@ -48,8 +49,13 @@ import { RenewDialog } from '../dialogs/renew-dialog';
   ],
   template: `
     <div class="section-header">
-      <h2>Rosa</h2>
       <div class="header-actions">
+        @if (canPreviewRinnovi()) {
+          <button matButton="tonal" (click)="openRenewPreview()">
+            <mat-icon>calculate</mat-icon>
+            Anteprima rinnovi
+          </button>
+        }
         @if (isAdmin()) {
           <button matButton="tonal" (click)="openAddPlayer()" [disabled]="!selectedTeamId()">
             <mat-icon>person_add</mat-icon>
@@ -474,6 +480,42 @@ export class PlayersSection {
   /** true se l'utente ha effettuato il login come admin */
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
+  /**
+   * Squadra di cui l'utente corrente è proprietario (myTeam$) INSIEME a un
+   * flag che dice se quell'osservabile ha già emesso almeno una volta.
+   * Serve perché myTeam$ dipende dallo stato di autenticazione di Firebase,
+   * che su una navigazione "fresca" (es. subito dopo il login) può risolversi
+   * un tick DOPO che teams() è già popolato: senza questo flag l'effect di
+   * auto-selezione qui sotto rischia di scegliere la prima squadra della
+   * lista prima ancora di sapere se l'utente ha una squadra propria, e non
+   * ha più occasione di correggersi (vedi guardia sotto). Un solo toSignal
+   * su un solo observable garantisce che valore e flag siano sempre in sync.
+   */
+  private readonly myTeamState = toSignal(
+    this.authService.myTeam$.pipe(map((team) => ({ resolved: true, team }))),
+    { initialValue: { resolved: false, team: null as Team | null } },
+  );
+
+  /** Squadra di cui l'utente corrente è proprietario, se ha fatto login come squadra */
+  readonly myTeam = computed(() => this.myTeamState().team);
+
+  /**
+   * Anteprima aggregata dei rinnovi: utile a chi ha fatto login come
+   * squadra sulla PROPRIA rosa, ma anche all'admin su qualunque rosa stia
+   * guardando (per pianificare più rinnovi prima di eseguirli uno a uno —
+   * resta comunque solo un calcolo, l'esecuzione vera resta sempre admin).
+   */
+  readonly canPreviewRinnovi = computed(() => {
+    if (!this.selectedTeamId()) {
+      return false;
+    }
+    if (this.isAdmin()) {
+      return true;
+    }
+    const mia = this.myTeam();
+    return !!mia && mia.id === this.selectedTeamId();
+  });
+
   /** Colonne della tabella: la colonna azioni compare solo per gli admin */
   readonly displayedColumns = computed(() => [
     'ruolo',
@@ -515,26 +557,34 @@ export class PlayersSection {
   );
 
   constructor() {
-    // Auto-selezione: preferisci l'ultima squadra scelta per l'asta
-    // (persistita in localStorage), altrimenti la prima disponibile
+    // Auto-selezione all'apertura, in ordine di preferenza:
+    // 1. la squadra con cui si è fatto login (account squadra vero);
+    // 2. l'ultima squadra scelta per l'asta (persistita in localStorage);
+    // 3. la prima disponibile.
     effect(() => {
       const teams = this.teams();
-      if (!this.selectedTeamId() && teams.length > 0) {
-        try {
-          const raw = localStorage.getItem('asta.miaSquadra');
-          if (raw) {
-            const salvata = JSON.parse(raw) as Team;
-            const match = teams.find((t) => t.id === salvata.id);
-            if (match) {
-              this.selection.select(match.id);
-              return;
-            }
-          }
-        } catch {
-          // localStorage non disponibile o JSON invalido: fallback sotto
-        }
-        this.selection.select(teams[0].id);
+      const { resolved, team: mia } = this.myTeamState();
+      if (this.selectedTeamId() || teams.length === 0 || !resolved) {
+        return;
       }
+      if (mia) {
+        this.selection.select(mia.id);
+        return;
+      }
+      try {
+        const raw = localStorage.getItem('asta.miaSquadra');
+        if (raw) {
+          const salvata = JSON.parse(raw) as Team;
+          const match = teams.find((t) => t.id === salvata.id);
+          if (match) {
+            this.selection.select(match.id);
+            return;
+          }
+        }
+      } catch {
+        // localStorage non disponibile o JSON invalido: fallback sotto
+      }
+      this.selection.select(teams[0].id);
     });
   }
 
@@ -646,6 +696,28 @@ export class PlayersSection {
   }
 
   /**
+   * Anteprima aggregata del costo di rinnovo: apre il dialog con SOLO i
+   * giocatori non ancora rinnovati quest'anno (acquistoRinnovoSpesa === 0,
+   * stessa condizione usata per l'evidenziazione "già rinnovato" altrove).
+   * Puramente informativo: nessuna scrittura, il rinnovo resta admin.
+   */
+  openRenewPreview(): void {
+    // Nome della squadra di cui è visibile la rosa: per l'admin può essere
+    // una qualunque, per una squadra loggata è già garantita essere la
+    // propria (vedi canPreviewRinnovi).
+    const team = this.teams().find((t) => t.id === this.selectedTeamId());
+    if (!team) {
+      return;
+    }
+    const daRinnovare = this.players().filter((p) => !(p.acquistoRinnovoSpesa > 0));
+    this.dialog.open(RenewPreviewDialog, {
+      data: { teamName: team.name, players: daRinnovare },
+      width: '95vw',
+      maxWidth: '560px',
+    });
+  }
+
+  /**
    * Rimborso/rescissione completa:
    * 1. elimina il giocatore dalla rosa
    * 2. somma alle spese: rimborso (% × speso) ai Rimborsi,
@@ -713,6 +785,7 @@ export class PlayersSection {
             message:
               'Addebitare il costo di rescissione di 1,50 € alla voce Rescissioni?',
             confirmLabel: 'Sì, addebita',
+            cancelLabel: 'No, solo elimina',
           },
           width: '95vw',
           maxWidth: '400px',

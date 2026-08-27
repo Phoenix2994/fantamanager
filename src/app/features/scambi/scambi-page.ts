@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -25,6 +25,7 @@ import {
   calcolaAnteprima,
 } from '../../core/scambi-calculator';
 import { NavMenu } from '../../core/nav/nav-menu';
+import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
 
 /** Giocatore mostrato nel selettore di una trattativa */
@@ -69,6 +70,7 @@ interface RiepilogoGiocatore {
     MatSelectModule,
     RouterLink,
     NavMenu,
+    HeaderAuthStatus,
   ],
   templateUrl: './scambi-page.html',
   styleUrls: ['../../core/nav/page-shell.scss', './scambi-page.scss'],
@@ -89,16 +91,31 @@ export class ScambiPage {
   readonly isAdmin = toSignal(this.authService.isAdmin$, {
     initialValue: false,
   });
+  /** Squadra di cui l'utente corrente è proprietario, se ha fatto login come squadra */
+  readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
   readonly trattative = toSignal(this.scambiService.scambi$, { initialValue: [] as Scambio[] });
 
   // ---------- Stato del form "nuova trattativa" ----------
+  // Chi ha fatto login come squadra propone SEMPRE per la propria: Squadra A
+  // è bloccata sulla propria squadra (vedi effect nel costruttore).
   readonly squadraAId = signal<string | null>(null);
   readonly squadraBId = signal<string | null>(null);
   readonly selezioneA = signal<string[]>([]);
   readonly selezioneB = signal<string[]>([]);
   readonly conguaglio = signal<number | null>(0);
   readonly pagatore = signal<LatoScambio | null>(null);
+
+  constructor() {
+    // Blocca Squadra A sulla propria squadra appena si è loggati: una
+    // trattativa proposta è sempre "la mia squadra contro un'altra".
+    effect(() => {
+      const mia = this.myTeam();
+      if (mia && this.squadraAId() !== mia.id) {
+        this.squadraChange('A', mia.id);
+      }
+    });
+  }
 
   /** Rose realtime delle squadre selezionate */
   readonly rosterA = toSignal(
@@ -172,9 +189,6 @@ export class ScambiPage {
     ];
   });
 
-  async logout(): Promise<void> {
-    await this.authService.logout();
-  }
 
   /** Lato opposto a quello passato */
   altroLato(lato: LatoScambio): LatoScambio {
@@ -234,24 +248,50 @@ export class ScambiPage {
     if (!this.squadraAId() || !this.squadraBId() || this.anteprima().errore) {
       return;
     }
+    if (!this.myTeam()) {
+      this.snackBar.open('Accedi come la tua squadra per proporre uno scambio.', 'Chiudi', {
+        duration: 4000,
+      });
+      return;
+    }
     try {
       await this.scambiService.saveBozza({
-        squadraA: { teamId: this.squadraAId()!, playerIds: [...this.selezioneA()] },
-        squadraB: { teamId: this.squadraBId()!, playerIds: [...this.selezioneB()] },
+        squadraA: {
+          teamId: this.squadraAId()!,
+          playerIds: [...this.selezioneA()],
+          ownerUid: this.ownerUidOf(this.squadraAId()!),
+        },
+        squadraB: {
+          teamId: this.squadraBId()!,
+          playerIds: [...this.selezioneB()],
+          ownerUid: this.ownerUidOf(this.squadraBId()!),
+        },
         conguaglio: this.conguaglio() ?? 0,
         conguaglioPagante: (this.conguaglio() ?? 0) > 0 ? this.pagatore() : null,
         snapshot: this.costruisciSnapshot(),
       });
-      this.snackBar.open('Bozza di trattativa salvata.', 'OK', { duration: 3000 });
+      this.snackBar.open('Bozza salvata — visibile solo a te e alla controparte.', 'OK', {
+        duration: 3500,
+      });
       this.resetForm();
     } catch (err) {
       console.error(err);
-      this.snackBar.open('Errore salvando la trattativa.', 'Chiudi', { duration: 4000 });
+      this.snackBar.open(
+        err instanceof Error ? err.message : 'Errore salvando la trattativa.',
+        'Chiudi',
+        { duration: 4000 },
+      );
     }
   }
 
+  private ownerUidOf(teamId: string): string | null {
+    return this.teams().find((t) => t.id === teamId)?.ownerUid ?? null;
+  }
+
   private resetForm(): void {
-    this.squadraAId.set(null);
+    // Squadra A resta sulla propria squadra se si è loggati (l'effect nel
+    // costruttore la rimetterebbe comunque, ma evita un flash a null).
+    this.squadraAId.set(this.myTeam()?.id ?? null);
     this.squadraBId.set(null);
     this.selezioneA.set([]);
     this.selezioneB.set([]);
@@ -317,10 +357,29 @@ export class ScambiPage {
     switch (stato) {
       case 'bozza':
         return 'Bozza';
+      case 'ufficializzata':
+        return 'Ufficializzata';
       case 'confermata':
         return 'Confermata';
       case 'annullata':
         return 'Annullata';
+    }
+  }
+
+  /** Rende la bozza visibile agli admin per la conferma finale (basta una delle due squadre) */
+  async ufficializza(scambio: Scambio): Promise<void> {
+    try {
+      await this.scambiService.ufficializza(scambio);
+      this.snackBar.open('Trattativa ufficializzata: ora la vedono anche gli admin.', 'OK', {
+        duration: 3500,
+      });
+    } catch (err) {
+      console.error(err);
+      this.snackBar.open(
+        err instanceof Error ? err.message : 'Errore ufficializzando la trattativa.',
+        'Chiudi',
+        { duration: 4000 },
+      );
     }
   }
 
