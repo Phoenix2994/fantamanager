@@ -12,8 +12,17 @@
     <section class="panel nuova-trattativa">
       <h2 class="section-title">
         <mat-icon>swap_horiz</mat-icon>
-        Nuova trattativa
+        {{ editingId() ? 'Modifica trattativa' : 'Nuova trattativa' }}
       </h2>
+
+      @if (editingId()) {
+        <p class="hint editing-hint">
+          <mat-icon>edit</mat-icon>
+          Stai correggendo una bozza esistente: le condizioni (rivalutazioni
+          comprese) si ricalcolano in base a cosa cambi qui sotto.
+          <button matButton type="button" (click)="annullaModifica()">Annulla modifica</button>
+        </p>
+      }
 
       @if (!myTeam()) {
         <p class="hint">
@@ -41,17 +50,28 @@
         <div class="picker-grid">
           @for (lato of LATI; track lato) {
             <div class="picker">
-              <mat-form-field appearance="fill" subscriptSizing="dynamic">
-                <mat-label>Squadra {{ lato }}</mat-label>
-                <mat-select
-                  [value]="lato === 'A' ? squadraAId() : squadraBId()"
-                  (selectionChange)="squadraChange(lato, $event.value)"
-                >
-                  @for (team of teams(); track team.id) {
-                    <mat-option [value]="team.id">{{ team.name }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
+              <div class="picker-header">
+                <app-team-logo
+                  [name]="lato === 'A' ? nomeSquadraA() : nomeSquadraB()"
+                  class="picker-logo"
+                />
+                <mat-form-field appearance="fill" subscriptSizing="dynamic">
+                  <mat-label>Squadra {{ lato }}</mat-label>
+                  <mat-select
+                    [value]="lato === 'A' ? squadraAId() : squadraBId()"
+                    (selectionChange)="squadraChange(lato, $event.value)"
+                  >
+                    @for (team of teams(); track team.id) {
+                      <mat-option [value]="team.id">
+                        <span class="option-row">
+                          <app-team-logo [name]="team.name" class="option-logo" />
+                          {{ team.name }}
+                        </span>
+                      </mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
 
               @if ((lato === 'A' ? opzioniA() : opzioniB()).length === 0) {
                 <p class="vuoto">Seleziona una squadra per vedere la rosa.</p>
@@ -215,7 +235,10 @@
                         }
                         {{ r.valoreFinale | number: '1.0-1' }} €
                       </td>
-                      <td>{{ r.squadra }}</td>
+                      <td class="squadra-cell">
+                        <app-team-logo [name]="r.squadra" class="riv-team-logo" />
+                        {{ r.squadra }}
+                      </td>
                     </tr>
                   }
                 </tbody>
@@ -270,7 +293,7 @@
             (click)="salvaBozza()"
           >
             <mat-icon>save</mat-icon>
-            Salva bozza trattativa
+            {{ editingId() ? 'Salva modifiche' : 'Salva bozza trattativa' }}
           </button>
         </div>
       }
@@ -289,70 +312,98 @@
           [class.confermata]="s.stato === 'confermata'"
           [class.annullata]="s.stato === 'annullata'"
         >
-          <header class="card-head">
-            <strong>{{ s.snapshot.nomeSquadraA }} ↔ {{ s.snapshot.nomeSquadraB }}</strong>
-            <mat-chip-set>
-              <mat-chip [highlighted]="s.stato === 'bozza'">
-                {{ statoLabel(s.stato) }}
-              </mat-chip>
-            </mat-chip-set>
-          </header>
+          <button
+            type="button"
+            class="card-head"
+            [attr.aria-expanded]="espansaChe(s.id)"
+            (click)="toggleTrattativa(s.id)"
+          >
+            <span class="card-head-teams">
+              <app-team-logo [name]="s.snapshot.nomeSquadraA" class="card-team-logo" />
+              <strong>{{ s.snapshot.nomeSquadraA }} ↔ {{ s.snapshot.nomeSquadraB }}</strong>
+              <app-team-logo [name]="s.snapshot.nomeSquadraB" class="card-team-logo" />
+            </span>
+            <span class="card-head-right">
+              <mat-chip-set>
+                <mat-chip [highlighted]="s.stato === 'bozza'">
+                  {{ statoLabel(s.stato) }}
+                </mat-chip>
+              </mat-chip-set>
+              <mat-icon>{{ espansaChe(s.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
+            </span>
+          </button>
 
-          <div class="card-sides">
-            <div>
-              <span class="side-name">{{ s.snapshot.nomeSquadraA }}</span>
-              @for (g of s.snapshot.giocatoriA; track g.name) {
-                <span class="giocatore">
-                  {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
-                </span>
+          @if (espansaChe(s.id)) {
+            <div class="card-body">
+              <div class="card-sides">
+                <div>
+                  <span class="side-name">
+                    <app-team-logo [name]="s.snapshot.nomeSquadraA" class="side-logo" />
+                    {{ s.snapshot.nomeSquadraA }}
+                  </span>
+                  @for (g of s.snapshot.giocatoriA; track g.name) {
+                    <span class="giocatore">
+                      {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
+                    </span>
+                  }
+                </div>
+                <div>
+                  <span class="side-name">
+                    <app-team-logo [name]="s.snapshot.nomeSquadraB" class="side-logo" />
+                    {{ s.snapshot.nomeSquadraB }}
+                  </span>
+                  @for (g of s.snapshot.giocatoriB; track g.name) {
+                    <span class="giocatore">
+                      {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
+                    </span>
+                  }
+                </div>
+              </div>
+
+              @if (s.conguaglio > 0) {
+                <p class="card-conguaglio">
+                  Conguaglio: {{ s.conguaglio | number: '1.0-2' }} € da
+                  {{
+                    s.conguaglioPagante === 'A' ? s.snapshot.nomeSquadraA : s.snapshot.nomeSquadraB
+                  }}
+                </p>
+              }
+
+              @if (s.snapshot.rivalutazioni.length > 0) {
+                <p class="card-rivalutazioni">
+                  Rivalutazioni previste:
+                  @for (r of s.snapshot.rivalutazioni; track r.playerId) {
+                    <span class="riv-chip">
+                      {{ r.playerName }} → {{ r.valoreDopo | number: '1.0-1' }} €
+                    </span>
+                  }
+                </p>
+              }
+
+              @if (s.stato === 'bozza') {
+                <footer class="card-actions">
+                  <button matButton="filled" type="button" (click)="ufficializza(s)">
+                    <mat-icon>send</mat-icon>
+                    Ufficializza
+                  </button>
+                  <button matButton type="button" (click)="modifica(s)">
+                    <mat-icon>edit</mat-icon>
+                    Modifica
+                  </button>
+                  <button matButton type="button" (click)="elimina(s)">
+                    <mat-icon>delete</mat-icon>
+                    Elimina
+                  </button>
+                </footer>
+              } @else if (s.stato === 'ufficializzata' && isAdmin()) {
+                <footer class="card-actions">
+                  <button matButton="filled" type="button" (click)="conferma(s)">
+                    <mat-icon>check_circle</mat-icon>
+                    Conferma
+                  </button>
+                </footer>
               }
             </div>
-            <div>
-              <span class="side-name">{{ s.snapshot.nomeSquadraB }}</span>
-              @for (g of s.snapshot.giocatoriB; track g.name) {
-                <span class="giocatore">
-                  {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
-                </span>
-              }
-            </div>
-          </div>
-
-          @if (s.conguaglio > 0) {
-            <p class="card-conguaglio">
-              Conguaglio: {{ s.conguaglio | number: '1.0-2' }} € da
-              {{ s.conguaglioPagante === 'A' ? s.snapshot.nomeSquadraA : s.snapshot.nomeSquadraB }}
-            </p>
-          }
-
-          @if (s.snapshot.rivalutazioni.length > 0) {
-            <p class="card-rivalutazioni">
-              Rivalutazioni previste:
-              @for (r of s.snapshot.rivalutazioni; track r.playerId) {
-                <span class="riv-chip">
-                  {{ r.playerName }} → {{ r.valoreDopo | number: '1.0-1' }} €
-                </span>
-              }
-            </p>
-          }
-
-          @if (s.stato === 'bozza') {
-            <footer class="card-actions">
-              <button matButton="filled" type="button" (click)="ufficializza(s)">
-                <mat-icon>send</mat-icon>
-                Ufficializza
-              </button>
-              <button matButton type="button" (click)="elimina(s)">
-                <mat-icon>delete</mat-icon>
-                Elimina
-              </button>
-            </footer>
-          } @else if (s.stato === 'ufficializzata' && isAdmin()) {
-            <footer class="card-actions">
-              <button matButton="filled" type="button" (click)="conferma(s)">
-                <mat-icon>check_circle</mat-icon>
-                Conferma
-              </button>
-            </footer>
           }
         </article>
       } @empty {

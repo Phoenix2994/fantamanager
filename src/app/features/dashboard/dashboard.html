@@ -16,8 +16,21 @@
         [value]="selection.selectedTeamId() ?? undefined"
         (selectionChange)="selection.select($event.value)"
       >
+        <mat-select-trigger>
+          @if (squadraSelezionata(); as sq) {
+            <span class="option-row">
+              <app-team-logo [name]="sq.name" class="option-logo" />
+              {{ sq.name }}
+            </span>
+          }
+        </mat-select-trigger>
         @for (team of teams(); track team.id) {
-          <mat-option [value]="team.id">{{ team.name }}</mat-option>
+          <mat-option [value]="team.id">
+            <span class="option-row">
+              <app-team-logo [name]="team.name" class="option-logo" />
+              {{ team.name }}
+            </span>
+          </mat-option>
         }
       </mat-select>
     </mat-form-field>

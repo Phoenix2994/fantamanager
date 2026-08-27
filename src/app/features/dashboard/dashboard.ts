@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,6 +12,7 @@ import { TeamSelectionService } from '../../core/services/team-selection.service
 import { TeamService } from '../../core/services/team.service';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
+import { TeamLogo } from '../../shared/team-logo';
 import { FinanceSection } from './sections/finance-section';
 import { PlayersSection } from './sections/players-section';
 import { SvincolatiSection } from './sections/svincolati-section';
@@ -39,6 +40,7 @@ import { SvincolatiSection } from './sections/svincolati-section';
     SvincolatiSection,
     FinanceSection,
     HeaderAuthStatus,
+    TeamLogo,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -61,6 +63,11 @@ export class Dashboard {
 
   /** Squadra selezionata, condivisa da giocatori/spese/storico */
   readonly selection = inject(TeamSelectionService);
+
+  /** Squadra corrispondente all'id selezionato, per mostrarne il logo nel trigger chiuso della select */
+  readonly squadraSelezionata = computed(() =>
+    this.teams().find((t) => t.id === this.selection.selectedTeamId()),
+  );
 
   /** Tab attiva su mobile: 0 = Giocatori, 1 = Spese */
   readonly mobileTab = signal(0);

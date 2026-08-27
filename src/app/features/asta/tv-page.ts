@@ -22,6 +22,7 @@ import {
   estraiAcquistiAsta,
   TeamStatAsta,
 } from './asta-stats-panel';
+import { TeamLogo } from '../../shared/team-logo';
 
 /**
  * Vista TV dell'asta live (/tv): display in grande aggiornato realtime.
@@ -40,6 +41,7 @@ import {
     MatSelectModule,
     RouterLink,
     AstaStatsPanel,
+    TeamLogo,
   ],
   template: `
     <div class="tv">
@@ -72,6 +74,7 @@ import {
               @if (s.rilanciatoDaTeamName) {
                 <div class="rilancio">
                   <span class="label">Rilancia</span>
+                  <app-team-logo [name]="s.rilanciatoDaTeamName" class="rilancio-logo" />
                   <span class="team">{{ s.rilanciatoDaTeamName }}</span>
                 </div>
               } @else {
@@ -250,6 +253,11 @@ import {
       color: var(--mat-sys-on-surface-variant);
       text-transform: uppercase;
       letter-spacing: 2px;
+    }
+
+    .rilancio-logo {
+      width: clamp(3rem, 8vw, 5.5rem);
+      height: clamp(3rem, 8vw, 5.5rem);
     }
 
     .rilancio .team {

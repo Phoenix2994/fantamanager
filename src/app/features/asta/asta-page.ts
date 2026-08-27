@@ -38,6 +38,7 @@ import {
 import { AuthService } from '../../core/services/auth.service';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
+import { TeamLogo } from '../../shared/team-logo';
 import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
 import { environment } from '../../../environments/environment';
@@ -76,6 +77,7 @@ type TeamStat = TeamStatAsta;
     NavMenu,
     AstaStatsPanel,
     HeaderAuthStatus,
+    TeamLogo,
   ],
   styleUrls: ['../../core/nav/page-shell.scss'],
   template: `
@@ -119,7 +121,7 @@ type TeamStat = TeamStatAsta;
                         }
                         <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                         @if (s.rilanciatoDaTeamName) {
-                          <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
+                          <div class="rilanciante"><app-team-logo [name]="s.rilanciatoDaTeamName" class="rilanciante-logo" />Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                         }
                       </div>
 
@@ -201,6 +203,7 @@ type TeamStat = TeamStatAsta;
                   <div class="team-grid">
                     @for (team of teams(); track team.id) {
                       <button matButton="tonal" class="team-btn" (click)="scegliSquadra(team)">
+                        <app-team-logo [name]="team.name" class="team-btn-logo" />
                         {{ team.name }}
                       </button>
                     }
@@ -211,6 +214,7 @@ type TeamStat = TeamStatAsta;
               @if (miaSquadra(); as squadra) {
                 <mat-card class="panel">
                   <div class="squadra-bar">
+                    <app-team-logo [name]="squadra.name" class="squadra-logo" />
                     <span>Stai rilanciando per:</span>
                     <strong>{{ squadra.name }}</strong>
                     @if (isAdmin()) {
@@ -236,7 +240,7 @@ type TeamStat = TeamStatAsta;
                         }
                         <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                         @if (s.rilanciatoDaTeamName) {
-                          <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
+                          <div class="rilanciante"><app-team-logo [name]="s.rilanciatoDaTeamName" class="rilanciante-logo" />Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                         }
                       </div>
 
@@ -372,7 +376,7 @@ type TeamStat = TeamStatAsta;
                   }
                   <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                   @if (s.rilanciatoDaTeamName) {
-                    <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
+                    <div class="rilanciante"><app-team-logo [name]="s.rilanciatoDaTeamName" class="rilanciante-logo" />Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                   }
                 </div>
 
@@ -436,6 +440,7 @@ type TeamStat = TeamStatAsta;
             <div class="team-grid">
               @for (team of teams(); track team.id) {
                 <button matButton="tonal" class="team-btn" (click)="scegliSquadra(team)">
+                  <app-team-logo [name]="team.name" class="team-btn-logo" />
                   {{ team.name }}
                 </button>
               }
@@ -447,6 +452,7 @@ type TeamStat = TeamStatAsta;
         @if (miaSquadra(); as squadra) {
           <mat-card class="panel">
             <div class="squadra-bar">
+              <app-team-logo [name]="squadra.name" class="squadra-logo" />
               <span>Stai rilanciando per:</span>
               <strong>{{ squadra.name }}</strong>
               @if (isAdmin()) {
@@ -472,7 +478,7 @@ type TeamStat = TeamStatAsta;
                   }
                   <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                   @if (s.rilanciatoDaTeamName) {
-                    <div class="rilanciante">Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
+                    <div class="rilanciante"><app-team-logo [name]="s.rilanciatoDaTeamName" class="rilanciante-logo" />Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                   }
                 </div>
 
@@ -618,8 +624,17 @@ type TeamStat = TeamStatAsta;
     }
 
     .rilanciante {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       font-size: 0.9rem;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .rilanciante-logo {
+      width: 18px;
+      height: 18px;
     }
 
     .mia-valutazione {
@@ -688,6 +703,15 @@ type TeamStat = TeamStatAsta;
     .team-btn {
       min-height: 56px;
       font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .team-btn-logo {
+      width: 24px;
+      height: 24px;
     }
 
     .squadra-bar {
@@ -697,6 +721,11 @@ type TeamStat = TeamStatAsta;
       flex-wrap: wrap;
       font-size: 0.9rem;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .squadra-logo {
+      width: 24px;
+      height: 24px;
     }
 
     .squadra-bar strong {

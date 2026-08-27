@@ -18,6 +18,7 @@ import {
   RiepilogoReimborso,
   ricalcolaFinance,
   preparaAcquistoAsta as preparaAcquistoAstaCalc,
+  preparaAiutoDiStato as preparaAiutoDiStatoCalc,
   preparaReimborso as preparaReimborsoCalc,
   preparaRescissione as preparaRescissioneCalc,
   preparaRinnovo as preparaRinnovoCalc,
@@ -177,6 +178,19 @@ export class FinanceService {
     valoreRosa: number,
   ): { data: SeasonFinanceInputs & SeasonFinanceComputed } {
     return preparaRescissioneCalc(current, importo, valoreRosa, this.bracketsCache);
+  }
+
+  /**
+   * Prepara (SENZA scrivere) il documento finanze con un bonus vinto
+   * all'estrazione degli aiuti di stato (si somma agli indennizzi di
+   * settembre, vedi EstrazioniService).
+   */
+  preparaAiutoDiStato(
+    current: SeasonFinance | undefined,
+    importo: number,
+    valoreRosa: number,
+  ): { data: SeasonFinanceInputs & SeasonFinanceComputed } {
+    return preparaAiutoDiStatoCalc(current, importo, valoreRosa, this.bracketsCache);
   }
 
   /**

@@ -718,10 +718,20 @@ export class PlayersSection {
     if (!team) {
       return;
     }
-    const daRinnovare = this.players().filter((p) => !(p.acquistoRinnovoSpesa > 0));
+    // Stesso ordine della tabella rose (ruolo poi nome), non l'ordine
+    // "grezzo" di Firestore che players() restituisce.
+    const daRinnovare = this.players()
+      .filter((p) => !(p.acquistoRinnovoSpesa > 0))
+      .sort((a, b) => roleSortKey(a.ruolo) - roleSortKey(b.ruolo) || a.name.localeCompare(b.name));
     const bilancioAttuale = this.financeCorrente()?.bilancioSocietarioStagionale ?? 0;
     this.dialog.open(RenewPreviewDialog, {
-      data: { teamName: team.name, players: daRinnovare, bilancioAttuale },
+      data: {
+        teamId: team.id,
+        teamName: team.name,
+        players: daRinnovare,
+        bilancioAttuale,
+        valoreRosa: this.valoreRosa(),
+      },
       width: '95vw',
       maxWidth: '560px',
     });

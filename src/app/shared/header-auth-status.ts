@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { Team } from '../core/models';
 import { AuthService } from '../core/services/auth.service';
+import { TeamLogo } from './team-logo';
 
 /**
  * Stato del login nell'header, uguale su tutte le pagine: mostra chi ha
@@ -17,7 +18,7 @@ import { AuthService } from '../core/services/auth.service';
  */
 @Component({
   selector: 'app-header-auth-status',
-  imports: [MatButtonModule, MatIconModule, MatMenuModule, RouterLink],
+  imports: [MatButtonModule, MatIconModule, MatMenuModule, RouterLink, TeamLogo],
   template: `
     @if (isAdmin()) {
       <button matButton="tonal" [matMenuTriggerFor]="menu">
@@ -26,8 +27,10 @@ import { AuthService } from '../core/services/auth.service';
       </button>
     } @else if (myTeam(); as squadra) {
       <button matButton="tonal" [matMenuTriggerFor]="menu">
-        <mat-icon>shield</mat-icon>
-        <span class="team-name">{{ squadra.name }}</span>
+        <span class="team-btn-content">
+          <app-team-logo [name]="squadra.name" class="header-logo" />
+          <span class="team-name">{{ squadra.name }}</span>
+        </span>
       </button>
     } @else {
       <a matButton="tonal" routerLink="/login">
@@ -44,6 +47,17 @@ import { AuthService } from '../core/services/auth.service';
     </mat-menu>
   `,
   styles: `
+    .team-btn-content {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .header-logo {
+      width: 20px;
+      height: 20px;
+    }
+
     .team-name {
       max-width: 22vw;
       overflow: hidden;

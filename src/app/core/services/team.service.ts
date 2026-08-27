@@ -18,6 +18,7 @@ import {
  calcolaProssimaSpesaRinnovo,
  calcolaValoreAttuale,
  prossimaPercentRinnovo,
+ round2,
 } from '../finance-calculator';
 import {
   LoanContractType,
@@ -307,6 +308,136 @@ export class TeamService {
     });
 
     return rinnovo;
+  }
+
+  /**
+   * Rinnovo MASSIVO di più giocatori in un colpo solo, dall'anteprima
+   * rinnovi lato admin: ogni giocatore viene rinnovato alla PROPRIA
+   * prossima percentuale suggerita (stessa logica di eseguiRinnovo,
+   * incluso il blocco del valore quando la % corrente supera il 100%).
+   *
+   * I rinnovi vengono incatenati in sequenza (non in parallelo) perché
+   * ognuno può alterare il valore rosa totale (caso valore bloccato) e la
+   * tassa progressiva del fairplay finanziario, che nel documento finanze
+   * dipende dal totale rinnovi accumulato fin lì — esattamente come se si
+   * eseguissero i rinnovi singoli uno dopo l'altro. Un solo batch atomico
+   * (tutti i giocatori + un'unica scrittura finanze) e una sola voce di
+   * undo: annullabile in un colpo solo.
+   */
+  async eseguiRinnoviMassivi(
+    teamId: string,
+    playerIds: string[],
+    valoreRosaIniziale: number,
+  ): Promise<{ totale: number; count: number }> {
+    if (playerIds.length === 0) {
+      return { totale: 0, count: 0 };
+    }
+
+    const financeRef = this.finance.financeDocRef(teamId);
+    const refs = playerIds.map((id) => this.playerRef(teamId, id));
+    const [playerSnaps, financeSnap] = await Promise.all([
+      Promise.all(refs.map((ref) => getDoc(ref))),
+      getDoc(financeRef),
+    ]);
+    const financeBefore = financeSnap.data() as SeasonFinance | undefined;
+
+    const batch = writeBatch(this.firestore);
+    const docsUndo: { path: string; before: Record<string, unknown> | null }[] = [];
+    const dettagli: string[] = [];
+
+    let financeCorrente = financeBefore;
+    let valoreRosaCorrente = valoreRosaIniziale;
+    let totale = 0;
+
+    for (let i = 0; i < refs.length; i++) {
+      const playerBefore = playerSnaps[i].data() as Player | undefined;
+      if (!playerBefore) {
+        continue; // giocatore non più in rosa: salta senza bloccare gli altri
+      }
+
+      const nuovaPercRinnovo = playerBefore.prossimaPercRinnovo;
+      const bloccaValore = (playerBefore.prossimaPercRinnovo || 0) > 1;
+      const nuovoValoreIniziale = bloccaValore
+        ? playerBefore.prossimaSpesaRinnovo
+        : playerBefore.valoreIniziale;
+      const nuovaQuotazioneIniziale = bloccaValore
+        ? playerBefore.quotazioneAttuale
+        : playerBefore.quotazioneIniziale;
+
+      const percProssimoAnno = prossimaPercentRinnovo(nuovaPercRinnovo);
+      const nuovoValoreAttuale = calcolaValoreAttuale(
+        nuovoValoreIniziale,
+        nuovaQuotazioneIniziale,
+        playerBefore.quotazioneAttuale,
+      );
+      const nuovaSpesaRinnovo = calcolaProssimaSpesaRinnovo(nuovoValoreAttuale, percProssimoAnno);
+
+      // Il valore rosa che entra nel calcolo della tassa progressiva segue
+      // gli scarti di valore già applicati dai rinnovi precedenti in questo batch
+      valoreRosaCorrente = round2(
+        valoreRosaCorrente + (nuovoValoreAttuale - playerBefore.valoreAttuale),
+      );
+
+      const { data: financeData, rinnovo } = this.finance.preparaRinnovo(
+        financeCorrente,
+        { valoreAttuale: playerBefore.valoreAttuale },
+        nuovaPercRinnovo,
+        valoreRosaCorrente,
+      );
+      financeCorrente = financeData;
+      totale = round2(totale + rinnovo);
+
+      batch.update(refs[i], {
+        acquistoRinnovoSpesa: playerBefore.prossimaSpesaRinnovo,
+        valoreIniziale: nuovoValoreIniziale,
+        quotazioneIniziale: nuovaQuotazioneIniziale,
+        valoreAttuale: nuovoValoreAttuale,
+        prossimaPercRinnovo: percProssimoAnno,
+        prossimaSpesaRinnovo: nuovaSpesaRinnovo,
+        updatedAt: serverTimestamp(),
+      });
+      docsUndo.push({
+        path: refs[i].path,
+        before: playerBefore as unknown as Record<string, unknown>,
+      });
+      dettagli.push(`${playerBefore.name} +${rinnovo} €`);
+    }
+
+    if (docsUndo.length === 0) {
+      return { totale: 0, count: 0 };
+    }
+    const count = docsUndo.length;
+
+    batch.set(financeRef, { ...financeCorrente, ...this.finance.metaScrittura() }, { merge: true });
+    docsUndo.push({
+      path: financeRef.path,
+      before: (financeBefore as unknown as Record<string, unknown>) ?? null,
+    });
+
+    this.undo.registra(batch, {
+      tipo: 'rinnovo',
+      leagueId: environment.leagueId,
+      teamIds: [teamId],
+      descrizione: `Rinnovo massivo di ${count} giocatori: +${totale} € ai rinnovi (${dettagli.join(', ')})`,
+      docs: docsUndo,
+    });
+
+    await batch.commit();
+
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'seasonFinance',
+      entityId: `${teamId}/${environment.season}`,
+      operation: 'update',
+      fieldModified: 'rinnovi',
+      valueBefore: { rinnovi: financeBefore?.rinnovi ?? 0 },
+      valueAfter: { rinnovi: financeCorrente?.rinnovi, totale },
+      changeSummary: `Rinnovo massivo: ${dettagli.join(', ')}`,
+    });
+
+    return { totale, count };
   }
 
   /**

@@ -56,6 +56,17 @@
   width: 100%;
 }
 
+.option-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.option-logo {
+  width: 22px;
+  height: 22px;
+}
+
 /* ---------- Contenuto ---------- */
 .content {
   flex: 1;

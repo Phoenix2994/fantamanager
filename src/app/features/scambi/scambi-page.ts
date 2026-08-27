@@ -27,6 +27,7 @@ import {
 } from '../../core/scambi-calculator';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
+import { TeamLogo } from '../../shared/team-logo';
 import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
 
 /** Giocatore mostrato nel selettore di una trattativa */
@@ -76,6 +77,7 @@ interface RiepilogoGiocatore {
     RouterLink,
     NavMenu,
     HeaderAuthStatus,
+    TeamLogo,
   ],
   templateUrl: './scambi-page.html',
   styleUrls: ['../../core/nav/page-shell.scss', './scambi-page.scss'],
@@ -112,6 +114,12 @@ export class ScambiPage {
   readonly pagatore = signal<LatoScambio | null>(null);
   /** Pannello "Dettagli rinnovo" nell'anteprima: chiuso di default, specie utile su mobile */
   readonly mostraDettagliRinnovo = signal(false);
+
+  /** Id delle trattative espanse nell'elenco: chiuse di default, mostrano solo squadre + stato */
+  readonly trattativeEspanse = signal<Set<string>>(new Set());
+
+  /** Id della bozza in modifica, se il form sta correggendo una bozza esistente invece di crearne una nuova */
+  readonly editingId = signal<string | null>(null);
 
   constructor() {
     // Preseleziona la propria squadra su Squadra A appena si è loggati —
@@ -267,7 +275,7 @@ export class ScambiPage {
     }
   }
 
-  /** Salva la bozza su Firestore con lo snapshot dei dati correnti */
+  /** Salva la bozza (nuova, oppure aggiorna quella in modifica — vedi editingId) */
   async salvaBozza(): Promise<void> {
     if (!this.squadraAId() || !this.squadraBId() || this.anteprima().errore) {
       return;
@@ -278,25 +286,32 @@ export class ScambiPage {
       });
       return;
     }
+    const input = {
+      squadraA: {
+        teamId: this.squadraAId()!,
+        playerIds: [...this.selezioneA()],
+        ownerUid: this.ownerUidOf(this.squadraAId()!),
+      },
+      squadraB: {
+        teamId: this.squadraBId()!,
+        playerIds: [...this.selezioneB()],
+        ownerUid: this.ownerUidOf(this.squadraBId()!),
+      },
+      conguaglio: this.conguaglio() ?? 0,
+      conguaglioPagante: (this.conguaglio() ?? 0) > 0 ? this.pagatore() : null,
+      snapshot: this.costruisciSnapshot(),
+    };
     try {
-      await this.scambiService.saveBozza({
-        squadraA: {
-          teamId: this.squadraAId()!,
-          playerIds: [...this.selezioneA()],
-          ownerUid: this.ownerUidOf(this.squadraAId()!),
-        },
-        squadraB: {
-          teamId: this.squadraBId()!,
-          playerIds: [...this.selezioneB()],
-          ownerUid: this.ownerUidOf(this.squadraBId()!),
-        },
-        conguaglio: this.conguaglio() ?? 0,
-        conguaglioPagante: (this.conguaglio() ?? 0) > 0 ? this.pagatore() : null,
-        snapshot: this.costruisciSnapshot(),
-      });
-      this.snackBar.open('Bozza salvata — visibile solo a te e alla controparte.', 'OK', {
-        duration: 3500,
-      });
+      const editId = this.editingId();
+      if (editId) {
+        await this.scambiService.aggiornaBozza(editId, input);
+        this.snackBar.open('Bozza aggiornata.', 'OK', { duration: 3500 });
+      } else {
+        await this.scambiService.saveBozza(input);
+        this.snackBar.open('Bozza salvata — visibile solo a te e alla controparte.', 'OK', {
+          duration: 3500,
+        });
+      }
       this.resetForm();
     } catch (err) {
       console.error(err);
@@ -308,11 +323,31 @@ export class ScambiPage {
     }
   }
 
+  /** Ricarica una bozza propria nel form per correggerla, senza doverla rifare da zero */
+  modifica(scambio: Scambio): void {
+    this.editingId.set(scambio.id);
+    this.squadraAId.set(scambio.squadraA.teamId);
+    this.squadraBId.set(scambio.squadraB.teamId);
+    this.selezioneA.set([...scambio.squadraA.playerIds]);
+    this.selezioneB.set([...scambio.squadraB.playerIds]);
+    this.conguaglio.set(scambio.conguaglio || 0);
+    this.pagatore.set(scambio.conguaglio > 0 ? scambio.conguaglioPagante : null);
+    // La lista trattative è sotto il form: senza scroll l'utente non
+    // vedrebbe che la modifica è stata caricata
+    document.querySelector('.nuova-trattativa')?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /** Esce dalla modalità modifica senza salvare, tornando a una bozza nuova vuota */
+  annullaModifica(): void {
+    this.resetForm();
+  }
+
   private ownerUidOf(teamId: string): string | null {
     return this.teams().find((t) => t.id === teamId)?.ownerUid ?? null;
   }
 
   private resetForm(): void {
+    this.editingId.set(null);
     // Squadra A resta sulla propria squadra se si è loggati (l'effect nel
     // costruttore la rimetterebbe comunque, ma evita un flash a null).
     this.squadraAId.set(this.myTeam()?.id ?? null);
@@ -375,6 +410,21 @@ export class ScambiPage {
   /** Colore associato al gruppo di ruolo */
   colorFor(role: string): string {
     return roleColor(role);
+  }
+
+  /** true se la trattativa è espansa nell'elenco (mostra i dettagli sotto la riga) */
+  espansaChe(id: string): boolean {
+    return this.trattativeEspanse().has(id);
+  }
+
+  toggleTrattativa(id: string): void {
+    const next = new Set(this.trattativeEspanse());
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.trattativeEspanse.set(next);
   }
 
   statoLabel(stato: Scambio['stato']): string {

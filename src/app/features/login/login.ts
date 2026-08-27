@@ -14,6 +14,7 @@ import { Team } from '../../core/models';
 import { AuthService, teamLoginEmail } from '../../core/services/auth.service';
 import { TeamSelectionService } from '../../core/services/team-selection.service';
 import { TeamService } from '../../core/services/team.service';
+import { TeamLogo } from '../../shared/team-logo';
 
 type Modalita = 'admin' | 'squadra';
 
@@ -28,6 +29,7 @@ type Modalita = 'admin' | 'squadra';
     MatIconModule,
     MatInputModule,
     MatSelectModule,
+    TeamLogo,
   ],
   template: `
     <div class="login-wrapper">
@@ -93,7 +95,12 @@ type Modalita = 'admin' | 'squadra';
               <mat-label>Squadra</mat-label>
               <mat-select formControlName="teamId">
                 @for (team of teams(); track team.id) {
-                  <mat-option [value]="team.id">{{ team.name }}</mat-option>
+                  <mat-option [value]="team.id">
+                    <span class="option-row">
+                      <app-team-logo [name]="team.name" class="option-logo" />
+                      {{ team.name }}
+                    </span>
+                  </mat-option>
                 }
               </mat-select>
               @if (squadraForm.controls.teamId.hasError('required')) {
@@ -206,6 +213,17 @@ type Modalita = 'admin' | 'squadra';
     .submit-btn {
       height: 48px;
       margin-top: 8px;
+    }
+
+    .option-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .option-logo {
+      width: 22px;
+      height: 22px;
     }
   `,
 })

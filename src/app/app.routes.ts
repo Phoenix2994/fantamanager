@@ -51,6 +51,12 @@ export const routes: Routes = [
       import('./features/montepremi/montepremi-page').then((m) => m.MontepremiPage),
   },
   {
+    // Estrazioni di lega: gironi di Coppa e aiuti di stato (voce del menù, solo admin)
+    path: 'estrazioni',
+    loadComponent: () =>
+      import('./features/estrazioni/estrazioni-page').then((m) => m.EstrazioniPage),
+  },
+  {
     // Regolamento ufficiale della lega, per capitolo (voce del menù, pubblica)
     path: 'regolamento',
     loadComponent: () =>

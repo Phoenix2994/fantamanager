@@ -129,12 +129,25 @@ service cloud.firestore {
 
       // Aggiornamento: l'admin può tutto (conferma, ecc. — la scrittura vera
       // avviene nel batch atomico di ScambiService, con teams/finanze già
-      // protetti a parte). Una delle due squadre coinvolte può SOLO
-      // ufficializzare una propria bozza (bozza -> ufficializzata).
+      // protetti a parte). Una delle due squadre coinvolte può:
+      // - ufficializzare una propria bozza (bozza -> ufficializzata);
+      // - MODIFICARE una propria bozza restando bozza (giocatori, conguaglio,
+      //   squadre coinvolte), con la stessa verifica anti-frode sugli
+      //   ownerUid dichiarati usata in creazione — così non si può correggere
+      //   una bozza spacciandola per un'altra squadra.
       allow update: if isAdmin()
         || (resource.data.stato == 'bozza'
             && request.resource.data.stato == 'ufficializzata'
-            && scambioMioOCoinvolto());
+            && scambioMioOCoinvolto())
+        || (resource.data.stato == 'bozza'
+            && request.resource.data.stato == 'bozza'
+            && scambioMioOCoinvolto()
+            && (isTeamOwner(request.resource.data.squadraA.teamId)
+                || isTeamOwner(request.resource.data.squadraB.teamId))
+            && request.resource.data.squadraA.ownerUid ==
+                 get(/databases/$(database)/documents/teams/$(request.resource.data.squadraA.teamId)).data.ownerUid
+            && request.resource.data.squadraB.ownerUid ==
+                 get(/databases/$(database)/documents/teams/$(request.resource.data.squadraB.teamId)).data.ownerUid);
 
       // Eliminazione: solo una bozza propria (mai una già ufficializzata).
       allow delete: if resource.data.stato == 'bozza' && scambioMioOCoinvolto();

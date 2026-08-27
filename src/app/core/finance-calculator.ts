@@ -299,6 +299,27 @@ export function preparaRescissione(
 }
 
 /**
+ * Prepara (pura, senza I/O) il documento finanze con un bonus vinto
+ * all'estrazione degli "aiuti di stato" (Regolamento cap. 6): si somma
+ * agli indennizzi di settembre, come un indennizzo qualunque (spendibile
+ * solo alla prima asta successiva).
+ */
+export function preparaAiutoDiStato(
+  current: SeasonFinance | undefined,
+  importo: number,
+  valoreRosa: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): { data: FinanceDoc } {
+  const data = mergeECalcola(
+    current,
+    { indennizzoSettembre: (current?.indennizzoSettembre ?? 0) + importo },
+    brackets,
+    valoreRosa,
+  );
+  return { data };
+}
+
+/**
  * Prepara (pura, senza I/O) il documento finanze con un acquisto d'asta:
  * +importo sulla voce di provenienza (asta sett / infrasettimanale / gen).
  */

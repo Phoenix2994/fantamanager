@@ -24,6 +24,26 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.editing-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
+  color: var(--mat-sys-on-surface);
+
+  mat-icon {
+    color: var(--mat-sys-primary);
+    flex-shrink: 0;
+  }
+
+  button {
+    margin-left: auto;
+  }
+}
+
 .errore {
   display: flex;
   align-items: center;
@@ -50,6 +70,34 @@
   mat-form-field {
     width: 100%;
   }
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  mat-form-field {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.picker-logo {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.option-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.option-logo {
+  width: 22px;
+  height: 22px;
 }
 
 /* ---------- Chip ruoli (contorno colorato, coerente con le altre pagine) ---------- */
@@ -240,6 +288,17 @@
   }
 }
 
+.squadra-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.riv-team-logo {
+  width: 18px;
+  height: 18px;
+}
+
 /* ---------- Pannello a scomparsa "Dettagli rinnovo" ---------- */
 .dettagli-rinnovo-toggle {
   display: flex;
@@ -352,7 +411,57 @@
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.card-head-teams {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.card-team-logo {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.card-head-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+
+  mat-icon {
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.card-body {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--mat-sys-outline-variant, #e0e0e0);
+}
+
+.side-logo {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .card-sides {
@@ -361,7 +470,9 @@
   gap: 8px;
 
   .side-name {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 0.85rem;
     font-weight: 600;
     margin-bottom: 4px;

@@ -193,6 +193,46 @@ export class ScambiService {
   }
 
   /**
+   * Aggiorna una bozza ESISTENTE (resta bozza): giocatori, conguaglio e/o
+   * squadre coinvolte possono cambiare — utile per correggere una
+   * trattativa senza doverla eliminare e ricreare da zero. Richiede di
+   * essere stati coinvolti nella bozza originale (le security rules
+   * verificano anche lato server sia questo sia gli ownerUid dichiarati).
+   */
+  async aggiornaBozza(scambioId: string, input: NuovoScambioInput): Promise<void> {
+    const uid = this.auth.currentUser?.uid;
+    if (!uid || (input.squadraA.ownerUid !== uid && input.squadraB.ownerUid !== uid)) {
+      throw new Error('Devi accedere come una delle due squadre per modificare questo scambio.');
+    }
+
+    await updateDoc(this.scambioRef(scambioId), {
+      squadraA: input.squadraA,
+      squadraB: input.squadraB,
+      conguaglio: input.conguaglio,
+      conguaglioPagante: input.conguaglioPagante,
+      snapshot: input.snapshot,
+      updatedAt: serverTimestamp(),
+    });
+
+    void this.audit.log({
+      leagueId: environment.leagueId,
+      teamId: input.squadraA.teamId,
+      adminId: this.auth.currentUser?.uid ?? 'unknown',
+      entityType: 'scambio',
+      entityId: scambioId,
+      operation: 'update',
+      fieldModified: 'squadraA, squadraB, conguaglio, snapshot',
+      valueBefore: null,
+      valueAfter: {
+        squadraA: input.snapshot.nomeSquadraA,
+        squadraB: input.snapshot.nomeSquadraB,
+        conguaglio: input.conguaglio,
+      },
+      changeSummary: `Bozza modificata: ${input.snapshot.nomeSquadraA} ↔ ${input.snapshot.nomeSquadraB}`,
+    });
+  }
+
+  /**
    * Elimina una trattativa (solo bozze non ancora ufficializzate). Se il
    * documento è arrivato fin qui è già garantito che sia una bozza propria
    * (le security rules non fanno leggere bozze altrui).
