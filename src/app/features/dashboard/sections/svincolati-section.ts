@@ -45,7 +45,6 @@ interface RosterEntry {
   ],
   template: `
     <div class="section-header">
-      <h2>Svincolati</h2>
       <div class="header-actions">
         @if (isAdmin()) {
           <button matButton="tonal" (click)="apriAstaRandom()" [disabled]="filtered().length === 0">

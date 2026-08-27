@@ -82,10 +82,12 @@ import { PlayerDetailGrid } from './player-detail-grid';
       color: inherit;
     }
 
-    /* Variante compatta: stessa altezza di una riga di lista semplice */
+    /* Variante compatta: stessa altezza E stessa dimensione del testo di
+       una riga di lista semplice (es. gli svincolati in cima alla pagina) */
     .card-head.compact {
       min-height: 0;
       padding: 6px 12px;
+      font-size: 0.875rem;
     }
 
     /* Riga evidenziata se il giocatore è rinnovato (soldi spesi > 0): il
