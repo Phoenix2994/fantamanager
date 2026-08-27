@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { environment } from '../../../environments/environment';
@@ -147,7 +147,7 @@ const SEZIONI: readonly SezioneSupporto[] = [
         icona: 'edit_note',
         titolo: 'Proponi una trattativa',
         descrizione:
-          'Nel modulo "Nuova trattativa" la Squadra A è già bloccata sulla tua. Sul telefono le due rose (la tua e quella della controparte) appaiono impilate, una sotto l’altra sotto la rispettiva tendina: scorri per vederle entrambe e scegli i giocatori coinvolti da ciascuna.',
+          'Nel modulo "Nuova trattativa" la Squadra A parte già precompilata sulla tua — puoi comunque cambiarla, basta che almeno una delle due resti la tua squadra. Sul telefono le due rose (la tua e quella della controparte) appaiono impilate, una sotto l’altra sotto la rispettiva tendina: scorri per vederle entrambe e scegli i giocatori coinvolti da ciascuna.',
       },
       {
         icona: 'visibility_off',
@@ -243,47 +243,59 @@ const SEZIONI: readonly SezioneSupporto[] = [
 
         @for (sezione of sezioni; track sezione.titolo) {
           <section class="group">
-            <h2><mat-icon>{{ sezione.icona }}</mat-icon> {{ sezione.titolo }}</h2>
-            @if (sezione.intro) {
-              <p class="intro">{{ sezione.intro }}</p>
-            }
-            @if (sezione.funzionalita.length > 0) {
-              <ul class="capabilities">
-                @for (f of sezione.funzionalita; track f.titolo) {
-                  <li>
-                    <mat-icon class="cap-icon">{{ f.icona }}</mat-icon>
-                    <div>
-                      <strong>{{ f.titolo }}</strong>
-                      <p>{{ f.descrizione }}</p>
-                      @if (f.scaglioni; as scaglioni) {
-                        <div class="scaglioni-scroll">
-                          <table class="scaglioni">
-                            <thead>
-                              <tr>
-                                <th>Scaglione</th>
-                                <th>Sopra €</th>
-                                <th>Aliquota</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              @for (s of scaglioni; track s.soglia; let i = $index) {
-                                <tr>
-                                  <td>{{ i + 1 }}°</td>
-                                  <td>{{ s.soglia | number: '1.2-2' }}</td>
-                                  <td>{{ s.aliquota * 100 | number: '1.0-0' }}%</td>
-                                </tr>
-                              }
-                            </tbody>
-                          </table>
-                        </div>
-                      }
-                      @if (f.esempio) {
-                        <p class="esempio">{{ f.esempio }}</p>
-                      }
-                    </div>
-                  </li>
+            <button
+              type="button"
+              class="cap-head"
+              [attr.aria-expanded]="apertaChe(sezione.titolo)"
+              (click)="toggleSezione(sezione.titolo)"
+            >
+              <h2><mat-icon>{{ sezione.icona }}</mat-icon> {{ sezione.titolo }}</h2>
+              <mat-icon class="chevron">{{ apertaChe(sezione.titolo) ? 'expand_less' : 'expand_more' }}</mat-icon>
+            </button>
+            @if (apertaChe(sezione.titolo)) {
+              <div class="cap-body">
+                @if (sezione.intro) {
+                  <p class="intro">{{ sezione.intro }}</p>
                 }
-              </ul>
+                @if (sezione.funzionalita.length > 0) {
+                  <ul class="capabilities">
+                    @for (f of sezione.funzionalita; track f.titolo) {
+                      <li>
+                        <mat-icon class="cap-icon">{{ f.icona }}</mat-icon>
+                        <div>
+                          <strong>{{ f.titolo }}</strong>
+                          <p>{{ f.descrizione }}</p>
+                          @if (f.scaglioni; as scaglioni) {
+                            <div class="scaglioni-scroll">
+                              <table class="scaglioni">
+                                <thead>
+                                  <tr>
+                                    <th>Scaglione</th>
+                                    <th>Sopra €</th>
+                                    <th>Aliquota</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (s of scaglioni; track s.soglia; let i = $index) {
+                                    <tr>
+                                      <td>{{ i + 1 }}°</td>
+                                      <td>{{ s.soglia | number: '1.2-2' }}</td>
+                                      <td>{{ s.aliquota * 100 | number: '1.0-0' }}%</td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          }
+                          @if (f.esempio) {
+                            <p class="esempio">{{ f.esempio }}</p>
+                          }
+                        </div>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
             }
           </section>
         }
@@ -302,7 +314,44 @@ const SEZIONI: readonly SezioneSupporto[] = [
       border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
       border-radius: 16px;
       box-shadow: var(--mat-sys-level1, 0 1px 3px rgba(0, 0, 0, 0.3));
+      overflow: hidden;
+    }
+
+    .intro-group {
       padding: 16px;
+    }
+
+    .cap-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 16px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      color: inherit;
+    }
+
+    .cap-head[aria-expanded='true'] {
+      background: var(--mat-sys-surface-container-high);
+    }
+
+    .chevron {
+      flex-shrink: 0;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .cap-body {
+      padding: 4px 16px 16px;
+      border-top: 1px dashed var(--mat-sys-outline-variant);
+    }
+
+    .cap-body .intro:first-child {
+      margin-top: 10px;
     }
 
     h2 {
@@ -311,6 +360,10 @@ const SEZIONI: readonly SezioneSupporto[] = [
       gap: 8px;
       margin: 0 0 10px;
       font-size: 1.05rem;
+    }
+
+    .cap-head h2 {
+      margin: 0;
     }
 
     h2 mat-icon {
@@ -440,4 +493,19 @@ const SEZIONI: readonly SezioneSupporto[] = [
 export class SupportoPage {
   readonly leagueName = environment.leagueName;
   readonly sezioni = SEZIONI;
+
+  /** Sezioni aperte (stato solo UI, tutte chiuse all'apertura della pagina) */
+  private readonly aperte = signal<ReadonlySet<string>>(new Set());
+
+  apertaChe(titolo: string): boolean {
+    return this.aperte().has(titolo);
+  }
+
+  toggleSezione(titolo: string): void {
+    const next = new Set(this.aperte());
+    if (!next.delete(titolo)) {
+      next.add(titolo);
+    }
+    this.aperte.set(next);
+  }
 }

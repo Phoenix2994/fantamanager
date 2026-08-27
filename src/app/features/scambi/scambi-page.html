@@ -34,8 +34,10 @@
 
         <!-- Una card per lato: tendina squadra + rosa subito sotto, così su
              mobile (dove le due card si impilano) la rosa selezionata
-             compare sempre appena sotto la propria tendina. Squadra A è
-             bloccata sulla propria (si propone sempre per la propria squadra). -->
+             compare sempre appena sotto la propria tendina. Squadra A parte
+             precompilata sulla propria (comodo punto di partenza), ma resta
+             modificabile: basta che almeno un lato resti la propria squadra
+             (vedi errore sotto). -->
         <div class="picker-grid">
           @for (lato of LATI; track lato) {
             <div class="picker">
@@ -43,7 +45,6 @@
                 <mat-label>Squadra {{ lato }}</mat-label>
                 <mat-select
                   [value]="lato === 'A' ? squadraAId() : squadraBId()"
-                  [disabled]="lato === 'A'"
                   (selectionChange)="squadraChange(lato, $event.value)"
                 >
                   @for (team of teams(); track team.id) {
@@ -183,46 +184,81 @@
 
             <!-- Riepilogo di TUTTI i giocatori coinvolti, anche quelli il
                  cui valore non cambia -->
-            <table class="riv-table">
-              <thead>
-                <tr>
-                  <th>Giocatore</th>
-                  <th>Ruolo</th>
-                  <th>Squadra</th>
-                  <th>V.A. finale</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (r of riepilogoGiocatori(); track r.id) {
-                  <tr [class.rivalutato]="r.rivalutato">
-                    <td>{{ r.name }}</td>
-                    <td>
-                      <span class="chips">
-                        @for (ruolo of rolesOf(r.ruolo); track ruolo) {
-                          <span
-                            class="chip small"
-                            [style.border-color]="colorFor(ruolo)"
-                            [style.color]="colorFor(ruolo)"
-                          >{{ ruolo }}</span>
-                        }
-                      </span>
-                    </td>
-                    <td>{{ r.squadra }}</td>
-                    <td class="nuovo-valore">
-                      @if (r.rivalutato) {
-                        {{ r.valoreAttuale | number: '1.0-1' }} € →
-                      }
-                      {{ r.valoreFinale | number: '1.0-1' }} €
-                    </td>
+            <div class="riv-table-scroll">
+              <table class="riv-table">
+                <thead>
+                  <tr>
+                    <th>Giocatore</th>
+                    <th>Ruolo</th>
+                    <th>V.A. finale</th>
+                    <th>Squadra</th>
                   </tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (r of riepilogoGiocatori(); track r.id) {
+                    <tr [class.rivalutato]="r.rivalutato">
+                      <td>{{ r.name }}</td>
+                      <td>
+                        <span class="chips">
+                          @for (ruolo of rolesOf(r.ruolo); track ruolo) {
+                            <span
+                              class="chip small"
+                              [style.border-color]="colorFor(ruolo)"
+                              [style.color]="colorFor(ruolo)"
+                            >{{ ruolo }}</span>
+                          }
+                        </span>
+                      </td>
+                      <td class="nuovo-valore">
+                        @if (r.rivalutato) {
+                          {{ r.valoreAttuale | number: '1.0-1' }} € →
+                        }
+                        {{ r.valoreFinale | number: '1.0-1' }} €
+                      </td>
+                      <td>{{ r.squadra }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
 
-            <p class="nota-rinnovo">
-              Tutti i giocatori coinvolti avranno prossima percentuale di rinnovo al
-              {{ percRinnovoScambio * 100 }}%.
-            </p>
+            <!-- Pannello "Dettagli rinnovo" temporaneamente nascosto su
+                 richiesta: codice lasciato pronto per essere riattivato. -->
+            @if (false) {
+              <button
+                type="button"
+                class="dettagli-rinnovo-toggle"
+                [attr.aria-expanded]="mostraDettagliRinnovo()"
+                (click)="mostraDettagliRinnovo.set(!mostraDettagliRinnovo())"
+              >
+                <mat-icon>{{ mostraDettagliRinnovo() ? 'expand_less' : 'expand_more' }}</mat-icon>
+                Dettagli rinnovo
+              </button>
+            }
+            @if (false && mostraDettagliRinnovo()) {
+              <div class="dettagli-rinnovo-panel">
+                <p class="nota-rinnovo">
+                  Dopo lo scambio, tutti i giocatori coinvolti ripartono dalla
+                  prima percentuale di rinnovo ({{ percRinnovoScambio * 100 }}%)
+                  — indipendentemente da quanti rinnovi avessero già fatto
+                  prima.
+                </p>
+                <ul class="rinnovo-list">
+                  @for (r of riepilogoGiocatori(); track r.id) {
+                    <li>
+                      <mat-icon
+                        class="rinnovato-icon"
+                        [class.si]="r.giaRinnovato"
+                        [attr.aria-label]="r.giaRinnovato ? 'Già rinnovato' : 'Non ancora rinnovato'"
+                      >{{ r.giaRinnovato ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                      <span class="nome">{{ r.name }}</span>
+                      <span class="stato">{{ r.giaRinnovato ? 'già rinnovato' : 'da rinnovare' }}</span>
+                      <span class="spesa">{{ r.prossimaSpesaRinnovo | number: '1.0-2' }} €</span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
           }
         </div>
 

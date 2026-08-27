@@ -28,6 +28,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/scambi', label: 'Scambi', icon: 'swap_horiz' },
   { path: '/montepremi', label: 'Montepremi', icon: 'emoji_events' },
   { path: '/storico', label: 'Storico', icon: 'history', adminOnly: true },
+  { path: '/regolamento', label: 'Regolamento', icon: 'menu_book' },
   { path: '/supporto', label: 'Supporto', icon: 'help' },
 ];
 

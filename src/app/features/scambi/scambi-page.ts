@@ -17,6 +17,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ScambiService } from '../../core/services/scambi.service';
 import { TeamService } from '../../core/services/team.service';
 import { Player, Scambio, Team } from '../../core/models';
+import { calcolaProssimaSpesaRinnovo } from '../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
 import {
   LatoScambio,
@@ -45,6 +46,10 @@ interface RiepilogoGiocatore {
   valoreAttuale: number;
   valoreFinale: number;
   rivalutato: boolean;
+  /** true se il giocatore ha già speso soldi quest'anno (acquisto o rinnovo) */
+  giaRinnovato: boolean;
+  /** Costo per rinnovarlo DOPO lo scambio, al valore finale e alla percentuale resettata (60%) */
+  prossimaSpesaRinnovo: number;
 }
 
 /**
@@ -105,13 +110,19 @@ export class ScambiPage {
   readonly selezioneB = signal<string[]>([]);
   readonly conguaglio = signal<number | null>(0);
   readonly pagatore = signal<LatoScambio | null>(null);
+  /** Pannello "Dettagli rinnovo" nell'anteprima: chiuso di default, specie utile su mobile */
+  readonly mostraDettagliRinnovo = signal(false);
 
   constructor() {
-    // Blocca Squadra A sulla propria squadra appena si è loggati: una
-    // trattativa proposta è sempre "la mia squadra contro un'altra".
+    // Preseleziona la propria squadra su Squadra A appena si è loggati —
+    // solo un punto di partenza comodo, NON un blocco: si può comunque
+    // cambiarla (basta che almeno un lato resti la propria squadra al
+    // salvataggio, vedi erroreSquadre()). Il guard "solo se non è ancora
+    // stato scelto nulla" evita di sovrascrivere una scelta successiva
+    // dell'utente ad ogni ricalcolo dell'effect.
     effect(() => {
       const mia = this.myTeam();
-      if (mia && this.squadraAId() !== mia.id) {
+      if (mia && !this.squadraAId()) {
         this.squadraChange('A', mia.id);
       }
     });
@@ -147,9 +158,17 @@ export class ScambiPage {
     if (!this.squadraAId() || !this.squadraBId()) {
       return null;
     }
-    return this.squadraAId() === this.squadraBId()
-      ? 'Le due squadre devono essere diverse.'
-      : null;
+    if (this.squadraAId() === this.squadraBId()) {
+      return 'Le due squadre devono essere diverse.';
+    }
+    // Chi ha fatto login come squadra può proporre solo trattative in cui
+    // almeno un lato è la propria squadra — stesso vincolo verificato dalle
+    // security rules alla creazione della bozza (vedi firestore.rules).
+    const mia = this.myTeam();
+    if (mia && this.squadraAId() !== mia.id && this.squadraBId() !== mia.id) {
+      return 'Una delle due squadre deve essere la tua.';
+    }
+    return null;
   });
 
   /** Anteprima live della trattativa corrente */
@@ -170,15 +189,20 @@ export class ScambiPage {
   readonly riepilogoGiocatori = computed<RiepilogoGiocatore[]>(() => {
     const a = this.anteprima();
     const valoreFinalePerId = new Map(a.rivalutazioni.map((r) => [r.player.id, r.valoreDopo]));
-    const riga = (p: Player, squadra: string): RiepilogoGiocatore => ({
-      id: p.id,
-      name: p.name,
-      ruolo: p.ruolo,
-      squadra,
-      valoreAttuale: p.valoreAttuale,
-      valoreFinale: valoreFinalePerId.get(p.id) ?? p.valoreAttuale,
-      rivalutato: valoreFinalePerId.has(p.id),
-    });
+    const riga = (p: Player, squadra: string): RiepilogoGiocatore => {
+      const valoreFinale = valoreFinalePerId.get(p.id) ?? p.valoreAttuale;
+      return {
+        id: p.id,
+        name: p.name,
+        ruolo: p.ruolo,
+        squadra,
+        valoreAttuale: p.valoreAttuale,
+        valoreFinale,
+        rivalutato: valoreFinalePerId.has(p.id),
+        giaRinnovato: p.acquistoRinnovoSpesa > 0,
+        prossimaSpesaRinnovo: calcolaProssimaSpesaRinnovo(valoreFinale, this.percRinnovoScambio),
+      };
+    };
     return [
       ...this.giocatoriSelezionati(this.rosterA(), this.selezioneA()).map((p) =>
         riga(p, this.nomeSquadraA()),

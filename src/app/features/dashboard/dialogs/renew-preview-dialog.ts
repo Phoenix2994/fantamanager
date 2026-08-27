@@ -5,13 +5,15 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { Player } from '../../../core/models';
-import { calcolaProssimaSpesaRinnovo } from '../../../core/finance-calculator';
+import { calcolaProssimaSpesaRinnovo, round2 } from '../../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../../core/roles';
 
 export interface RenewPreviewDialogData {
   teamName: string;
   /** Solo i giocatori NON ancora rinnovati quest'anno (acquistoRinnovoSpesa === 0) */
   players: Player[];
+  /** Bilancio societario stagionale ATTUALE della squadra, prima di questi rinnovi */
+  bilancioAttuale: number;
 }
 
 /**
@@ -66,6 +68,17 @@ export interface RenewPreviewDialogData {
         <div class="totale">
           <span>{{ selezionati().size }} giocatori selezionati</span>
           <strong>{{ totale() | number: '1.2-2' }} €</strong>
+        </div>
+
+        <div class="bilancio">
+          <div class="riga">
+            <span>Bilancio stagionale attuale</span>
+            <strong>{{ data.bilancioAttuale | number: '1.2-2' }} €</strong>
+          </div>
+          <div class="riga">
+            <span>Bilancio dopo questi rinnovi</span>
+            <strong [class.negativo]="bilancioDopo() < 0">{{ bilancioDopo() | number: '1.2-2' }} €</strong>
+          </div>
         </div>
       }
     </mat-dialog-content>
@@ -165,6 +178,32 @@ export interface RenewPreviewDialogData {
       font-size: 1.15rem;
       color: var(--mat-sys-primary);
     }
+
+    .bilancio {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px dashed var(--mat-sys-outline-variant);
+      font-size: 0.85rem;
+    }
+
+    .bilancio .riga {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .bilancio span {
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .bilancio .negativo {
+      color: var(--mat-sys-error);
+    }
   `,
 })
 export class RenewPreviewDialog {
@@ -178,6 +217,9 @@ export class RenewPreviewDialog {
       .filter((p) => set.has(p.id))
       .reduce((sum, p) => sum + this.costoRinnovo(p), 0);
   });
+
+  /** Bilancio stagionale se si eseguissero DAVVERO tutti i rinnovi selezionati: sono un costo, quindi lo riducono */
+  readonly bilancioDopo = computed(() => round2(this.data.bilancioAttuale - this.totale()));
 
   toggle(playerId: string): void {
     const next = new Set(this.selezionati());

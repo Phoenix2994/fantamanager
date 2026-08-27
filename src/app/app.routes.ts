@@ -51,6 +51,12 @@ export const routes: Routes = [
       import('./features/montepremi/montepremi-page').then((m) => m.MontepremiPage),
   },
   {
+    // Regolamento ufficiale della lega, per capitolo (voce del menù, pubblica)
+    path: 'regolamento',
+    loadComponent: () =>
+      import('./features/regolamento/regolamento-page').then((m) => m.RegolamentoPage),
+  },
+  {
     // Guida alle funzionalità per squadra autenticata (voce del menù, pubblica)
     path: 'supporto',
     loadComponent: () =>

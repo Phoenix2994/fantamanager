@@ -16,6 +16,7 @@ import {
   ContractType,
   LoanedPlayer,
   Player,
+  SeasonFinance,
   Team,
 } from '../../../core/models';
 import { calcolaValoreAttuale, round2 } from '../../../core/finance-calculator';
@@ -477,6 +478,14 @@ export class PlayersSection {
     { initialValue: [] as LoanedPlayer[] },
   );
 
+  /** Finanze stagionali della squadra selezionata — serve solo per il bilancio in Anteprima rinnovi */
+  readonly financeCorrente = toSignal(
+    toObservable(this.selectedTeamId).pipe(
+      switchMap((id) => (id ? this.financeService.seasonFinance$(id) : of(undefined))),
+    ),
+    { initialValue: undefined as SeasonFinance | undefined },
+  );
+
   /** true se l'utente ha effettuato il login come admin */
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
 
@@ -710,8 +719,9 @@ export class PlayersSection {
       return;
     }
     const daRinnovare = this.players().filter((p) => !(p.acquistoRinnovoSpesa > 0));
+    const bilancioAttuale = this.financeCorrente()?.bilancioSocietarioStagionale ?? 0;
     this.dialog.open(RenewPreviewDialog, {
-      data: { teamName: team.name, players: daRinnovare },
+      data: { teamName: team.name, players: daRinnovare, bilancioAttuale },
       width: '95vw',
       maxWidth: '560px',
     });
