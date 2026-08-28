@@ -35,7 +35,7 @@ type Modalita = 'admin' | 'squadra';
     <div class="login-wrapper">
       <mat-card class="login-card">
         <div class="logo-row">
-          <mat-icon class="logo" aria-hidden="true">sports_soccer</mat-icon>
+          <img src="icons/logo-emblema.png" class="logo" alt="" />
           <h1>{{ leagueName }}</h1>
           <p class="subtitle">
             La consultazione è libera — accedi solo per gestire i dati (admin)

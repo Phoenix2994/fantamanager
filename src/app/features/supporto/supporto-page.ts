@@ -201,7 +201,7 @@ const SEZIONI: readonly SezioneSupporto[] = [
     <div class="page">
       <header class="page-header">
         <app-nav-menu />
-        <mat-icon class="header-logo" aria-hidden="true">sports_soccer</mat-icon>
+        <img src="icons/logo-emblema.png" class="header-logo" alt="" />
         <h1 class="app-title">Supporto</h1>
         <span class="spacer"></span>
         <app-header-auth-status />
