@@ -20,11 +20,17 @@ const LOGO_SLUG_PER_NOME: Readonly<Record<string, string>> = {
   'DAS HAUS': 'das-haus',
 };
 
-/** URL del logo di una squadra (per nome esatto), o null se non mappato */
+/**
+ * URL del logo di una squadra (per nome esatto), o null se non mappato.
+ * Path RELATIVO (senza "/" iniziale) apposta: si risolve rispetto al
+ * <base href> della pagina, quindi funziona sia in locale (base "/") sia
+ * su GitHub Pages, dove l'app vive sotto "/fantamanager/" — un path
+ * assoluto avrebbe saltato quel prefisso e dato 404 solo in produzione.
+ */
 export function logoUrlPerNome(teamName: string | null | undefined): string | null {
   if (!teamName) {
     return null;
   }
   const slug = LOGO_SLUG_PER_NOME[teamName];
-  return slug ? `/loghi/${slug}.png` : null;
+  return slug ? `loghi/${slug}.png` : null;
 }
