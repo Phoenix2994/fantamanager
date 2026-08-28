@@ -131,7 +131,20 @@ interface RosterEntry {
       <ul class="list">
         @for (p of filtered(); track p.id) {
           <li [class.is-chiamato]="p.chiamato">
-            <div class="row">
+            <!-- L'intera riga è cliccabile per aprire/chiudere il pannello
+                 (valutazione e/o "Apri asta"), quando c'è qualcosa da
+                 mostrarci dentro — per i visitatori senza login resta un
+                 div non interattivo, come prima. -->
+            <div
+              class="row"
+              [class.row-clickable]="puoiEspandere()"
+              [attr.role]="puoiEspandere() ? 'button' : null"
+              [attr.tabindex]="puoiEspandere() ? 0 : null"
+              [attr.aria-expanded]="puoiEspandere() ? pannelloAperto(p.id) : null"
+              (click)="puoiEspandere() && togglePannello(p.id)"
+              (keydown.enter)="puoiEspandere() && togglePannello(p.id)"
+              (keydown.space)="puoiEspandere() && togglePannello(p.id); $event.preventDefault()"
+            >
               <span class="chips">
                 @for (r of rolesOf(p); track r) {
                   <span
@@ -156,34 +169,18 @@ interface RosterEntry {
                   }
                 </span>
               }
-              @if (isAdmin()) {
-                <button matButton="tonal" class="auction-btn" (click)="apriAsta(p)">
-                  <mat-icon>gavel</mat-icon>
-                  Apri asta
-                </button>
-              }
               <span class="quota">{{ p.quotazioneAttuale | number: '1.0-0' }}</span>
-              <!-- Toggle del pannello valutazione (stelle + nota): solo per
-                   chi ha fatto login come squadra (valutazioni private, vedi
-                   TeamNotesService). Se è presente una nota, la sua icona
-                   sostituisce la freccina di apertura. -->
-              @if (myTeam()) {
-                <button
-                  type="button"
-                  matIconButton
-                  class="panel-toggle"
-                  [attr.aria-label]="pannelloAperto(p.id) ? 'Chiudi valutazione' : 'Apri valutazione'"
-                  (click)="togglePannello(p.id)"
-                >
-                  <mat-icon>{{
-                    notaDi(p.id) ? 'sticky_note_2' : pannelloAperto(p.id) ? 'expand_less' : 'expand_more'
-                  }}</mat-icon>
-                </button>
+              <!-- Indicatore puramente visivo: il click che apre/chiude è
+                   già sull'intera riga, non serve un bottone separato -->
+              @if (puoiEspandere()) {
+                <mat-icon class="panel-indicator" aria-hidden="true">{{
+                  notaDi(p.id) ? 'sticky_note_2' : pannelloAperto(p.id) ? 'expand_less' : 'expand_more'
+                }}</mat-icon>
               }
             </div>
-            @if (myTeam(); as squadra) {
-              @if (pannelloAperto(p.id)) {
-                <div class="valutazione-panel">
+            @if (puoiEspandere() && pannelloAperto(p.id)) {
+              <div class="valutazione-panel">
+                @if (myTeam(); as squadra) {
                   <span class="stars" role="radiogroup" aria-label="Valutazione">
                     @for (s of STELLE; track s) {
                       <button
@@ -204,8 +201,17 @@ interface RosterEntry {
                     [value]="notaDi(p.id)"
                     (blur)="salvaNota(squadra.id, p.id, $any($event.target).value)"
                   ></textarea>
-                </div>
-              }
+                }
+                @if (isAdmin()) {
+                  <!-- In fondo e a destra, staccato dalle stelle: se ci sono
+                       entrambe le sezioni erano troppo vicine ed era facile
+                       toccare "Apri asta" per sbaglio mentre si valuta -->
+                  <button matButton="tonal" class="auction-btn" (click)="apriAsta(p)">
+                    <mat-icon>gavel</mat-icon>
+                    Apri asta
+                  </button>
+                }
+              </div>
             }
           </li>
         }
@@ -348,9 +354,23 @@ interface RosterEntry {
       height: 14px;
     }
 
-    .panel-toggle {
+    .panel-indicator {
       flex-shrink: 0;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .row-clickable {
+      cursor: pointer;
+      border-radius: 8px;
+
+      &:hover {
+        background: var(--mat-sys-surface-container-high, #f5f5f5);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--mat-sys-primary);
+        outline-offset: 2px;
+      }
     }
 
     .valutazione-panel {
@@ -420,6 +440,8 @@ interface RosterEntry {
     .auction-btn {
       min-height: 40px;
       flex-shrink: 0;
+      align-self: flex-end;
+      margin-top: 6px;
     }
 
     .quota {
@@ -478,6 +500,9 @@ export class SvincolatiSection {
 
   /** Squadra di cui l'utente corrente è proprietario, se ha fatto login come squadra */
   readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
+
+  /** true se la riga ha qualcosa da mostrare nel pannello espanso (valutazione e/o apri asta) */
+  readonly puoiEspandere = computed(() => this.isAdmin() || !!this.myTeam());
 
   /**
    * Valutazioni PRIVATE della propria squadra sugli svincolati (vuoto se non
