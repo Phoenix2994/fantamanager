@@ -1,0 +1,32 @@
+name: Deploy su GitHub Pages
+
+on:
+  workflow_dispatch: # Lancio manuale dal tab Actions
+
+permissions:
+  contents: write # Necessario per pushare sul branch gh-pages
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Installa dipendenze
+        run: npm ci
+
+      - name: Build produzione (base-href /fantamanager/)
+        run: npm run build:prod
+
+      - name: Deploy su gh-pages
+        run: npx -y angular-cli-ghpages --dir=dist/fantamanager/browser --no-silent
+        env:
+          GIT_USER_NAME: github-actions[bot]
+          GIT_USER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
