@@ -32,3 +32,4 @@ jobs:
           --no-silent
           --name="github-actions[bot]"
           --email="41898282+github-actions[bot]@users.noreply.github.com"
+          --repo="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
