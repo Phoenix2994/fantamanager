@@ -26,7 +26,9 @@ jobs:
         run: npm run build:prod
 
       - name: Deploy su gh-pages
-        run: npx -y angular-cli-ghpages --dir=dist/fantamanager/browser --no-silent
-        env:
-          GIT_USER_NAME: github-actions[bot]
-          GIT_USER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: >
+          npx -y angular-cli-ghpages
+          --dir=dist/fantamanager/browser
+          --no-silent
+          --name="github-actions[bot]"
+          --email="41898282+github-actions[bot]@users.noreply.github.com"
