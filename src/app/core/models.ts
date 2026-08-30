@@ -217,13 +217,18 @@ export interface Scambio {
   createdBy?: string | null;
   ufficializzataAt?: Timestamp | null;
   confirmedAt?: Timestamp | null;
+  /** presente SOLO per le trattative avanzate (prestiti + bonus) — vedi sotto */
+  avanzato?: ScambioAvanzatoDati;
 }
 
 /** Giocatore sintetico dentro lo snapshot di una trattativa */
 export interface ScambioPlayerSnapshot {
+  playerId?: string;
   name: string;
   ruolo: string;
   valoreAttuale: number;
+  /** solo per trattative avanzate: riepilogo leggibile del contratto (es. "Prestito 6 mesi") */
+  contrattoLabel?: string;
 }
 
 /** Rivalutazione registrata nello snapshot */
@@ -243,6 +248,85 @@ export interface ScambioSnapshot {
   valoreTotaleA: number;
   valoreTotaleB: number;
   rivalutazioni: ScambioRivalutazioneSnapshot[];
+}
+
+// ============================================================================
+// SCAMBI AVANZATI (prestiti + bonus) — dati opzionali, in aggiunta a quelli
+// sopra: uno scambio avanzato resta comunque un documento scambi/{id} con
+// squadraA/squadraB/conguaglio/stato/snapshot come uno semplice, con in più
+// il campo `avanzato` sotto. Vedi core/scambi-avanzati-calculator.ts per la
+// logica di calcolo pura.
+// ============================================================================
+
+export type TipoContrattoScambio = 'definitivo' | 'prestito' | 'prestitoDiritto' | 'prestitoObbligo';
+export const DURATE_PRESTITO_SCAMBIO = [3, 6, 9, 12] as const;
+export type DurataPrestitoScambio = (typeof DURATE_PRESTITO_SCAMBIO)[number];
+
+export const TIPI_BONUS_EVENTI_SCAMBIO = ['gol', 'assist'] as const;
+export const TIPI_BONUS_SOGLIA_SCAMBIO = ['presenze', 'voto', 'fantavoto'] as const;
+export type TipoBonusEventiScambio = (typeof TIPI_BONUS_EVENTI_SCAMBIO)[number];
+export type TipoBonusSogliaScambio = (typeof TIPI_BONUS_SOGLIA_SCAMBIO)[number];
+
+export interface BonusScambioEventi {
+  id: string;
+  tipo: TipoBonusEventiScambio;
+  /** eventi stimati al momento dell'accordo */
+  eventiAttesi: number;
+  /** eventi confermati dall'admin finora (parte da 0, cresce col tempo) */
+  eventiVerificati: number;
+  /** ricompensa in € per ogni singolo evento */
+  rewardPerEvento: number;
+}
+
+export interface BonusScambioSoglia {
+  id: string;
+  tipo: TipoBonusSogliaScambio;
+  /** media (voto o fantavoto) sopra la quale scatta il bonus */
+  soglia: number;
+  /** true se l'admin ha confermato che la soglia è stata superata */
+  verificato: boolean;
+  /** ricompensa fissa, una tantum, se la soglia viene superata */
+  rewardUnaTantum: number;
+}
+
+export type BonusScambio = BonusScambioEventi | BonusScambioSoglia;
+
+/** Termini di prestito/bonus di UN giocatore coinvolto in una trattativa avanzata */
+export interface TerminiGiocatoreAvanzato {
+  playerId: string;
+  tipoContratto: TipoContrattoScambio;
+  /**
+   * Quotazione finale proiettata (fine stagione), stimata al momento
+   * dell'accordo: serve al passaggio 2 del calcolo (vedi
+   * scambi-avanzati-calculator.ts) e resta fissata qui per rendere
+   * ripetibile un ricalcolo futuro. Default: la quotazione attuale del
+   * giocatore al momento dell'accordo, se non stimata diversamente.
+   */
+  quotazioneFinale: number;
+  /** obbligatoria per tipoContratto diverso da 'definitivo' */
+  durataPrestito?: DurataPrestitoScambio;
+  /** solo per 'prestitoDiritto': se il diritto è già stato esercitato (admin, dopo la conferma) */
+  riscattato?: boolean;
+  /** cifra pattuita per il riscatto ('prestitoObbligo', o 'prestitoDiritto' quando riscattato) */
+  cifraRiscatto?: number;
+  bonus?: BonusScambio[];
+  /**
+   * true quando l'admin ha confermato che il prestito è concluso e il
+   * giocatore è rientrato alla squadra d'origine — SEMPRE un passo
+   * manuale, mai automatico (vedi TeamService.confermaRientroPrestito).
+   */
+  prestitoConcluso?: boolean;
+}
+
+/** Dati aggiuntivi di una trattativa avanzata, in aggiunta a quelli comuni dello Scambio */
+export interface ScambioAvanzatoDati {
+  /** termini per i giocatori di squadraA.playerIds, stesso ordine */
+  terminiA: TerminiGiocatoreAvanzato[];
+  /** termini per i giocatori di squadraB.playerIds, stesso ordine */
+  terminiB: TerminiGiocatoreAvanzato[];
+  /** conguaglio versato dalla squadra A (in aggiunta a `conguaglio`/`conguaglioPagante`, che restano usati per gli scambi semplici) */
+  conguaglioA: number;
+  conguaglioB: number;
 }
 
 
@@ -366,7 +450,10 @@ export type OperazioneAnnullabile =
   | 'eliminazione'
   | 'rimborso'
   | 'acquistoAsta'
-  | 'scambioConferma';
+  | 'scambioConferma'
+  | 'rientroPrestito'
+  | 'eventoBonusScambio'
+  | 'modificaTerminiScambio';
 
 /**
  * Stato di un documento Firestore prima dell'operazione, per poterlo

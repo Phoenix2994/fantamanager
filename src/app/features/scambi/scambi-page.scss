@@ -17,6 +17,10 @@
   margin: 0;
 }
 
+.avanzato-link {
+  margin-bottom: 12px;
+}
+
 .hint {
   margin: -6px 0 16px;
   font-size: 0.88rem;
@@ -254,38 +258,60 @@
   margin: 8px 0;
 }
 
-.riv-table-scroll {
-  overflow-x: auto;
+/* Riepilogo giocatori come lista a card: va a capo invece di scorrere
+   in orizzontale, quindi il badge rinnovo resta sempre visibile sia su
+   mobile che su desktop (niente overflow-x nascosto). */
+.riv-list {
+  list-style: none;
   margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.riv-table {
-  width: 100%;
-  min-width: 420px;
-  border-collapse: collapse;
+.riv-item {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--mat-sys-surface-container-high);
 
-  th,
-  td {
-    text-align: left;
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
-    white-space: nowrap;
+  &.rivalutato {
+    background: color-mix(in srgb, var(--mat-sys-primary) 6%, var(--mat-sys-surface-container-high));
+    border-color: color-mix(in srgb, var(--mat-sys-primary) 25%, transparent);
   }
+}
 
-  th {
-    font-size: 0.8rem;
-    color: var(--mat-sys-on-surface-variant);
-  }
+.riv-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
-  .nuovo-valore {
-    font-weight: 700;
-    color: var(--mat-sys-primary);
-    font-variant-numeric: tabular-nums;
-  }
+.riv-nome {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
 
-  tr.rivalutato {
-    background: color-mix(in srgb, var(--mat-sys-primary) 6%, transparent);
-  }
+.riv-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.nuovo-valore {
+  font-weight: 700;
+  color: var(--mat-sys-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .squadra-cell {
@@ -297,6 +323,26 @@
 .riv-team-logo {
   width: 18px;
   height: 18px;
+}
+
+.rinnovo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &.si {
+    color: var(--mat-sys-primary);
+  }
 }
 
 /* ---------- Pannello a scomparsa "Dettagli rinnovo" ---------- */
@@ -479,10 +525,29 @@
   }
 
   .giocatore {
-    display: block;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 6px;
     font-size: 0.9rem;
     font-variant-numeric: tabular-nums;
+    margin-bottom: 2px;
   }
+}
+
+.contratto-mini {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--mat-sys-primary);
+}
+
+.bonus-chip-mini {
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
 }
 
 .card-conguaglio,
@@ -505,4 +570,126 @@
   display: flex;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* ---------- Gestione prestiti/bonus (admin, trattative confermate) ---------- */
+.avanzato-gestione {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--mat-sys-outline-variant, #e0e0e0);
+
+  h4 {
+    margin: 0 0 8px;
+    font-size: 0.85rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.giocatore-avanzato {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.giocatore-avanzato-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rientrato-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--mat-sys-primary);
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.scadenza-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--mat-sys-error);
+
+  mat-icon {
+    font-size: 17px;
+    width: 17px;
+    height: 17px;
+  }
+}
+
+.bonus-riga {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+
+.bonus-riga-tipo {
+  flex-shrink: 0;
+  font-weight: 600;
+  text-transform: capitalize;
+  min-width: 60px;
+}
+
+.bonus-riga-info {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.bonus-riga-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.modifica-termini {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--mat-sys-outline-variant, #e0e0e0);
+}
+
+.modifica-termini-campi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.modifica-termini-azioni {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.simulazione-esito {
+  font-weight: 700;
+  color: var(--mat-sys-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.checkbox-riga {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.campo-mini {
+  width: 130px;
 }

@@ -1,0 +1,351 @@
+<div class="page">
+  <header class="page-header">
+    <app-nav-menu />
+    <img src="icons/logo-emblema.png" class="header-logo" alt="" />
+    <h1 class="app-title">Scambi — trattativa avanzata</h1>
+    <span class="spacer"></span>
+    <app-header-auth-status />
+  </header>
+
+  <main class="content">
+    <a matButton routerLink="/scambi" class="torna-link">
+      <mat-icon>arrow_back</mat-icon>
+      Torna agli scambi semplici
+    </a>
+
+    <section class="panel">
+      <h2 class="section-title">
+        <mat-icon>handshake</mat-icon>
+        {{ editingId() ? 'Modifica trattativa avanzata' : 'Nuova trattativa avanzata' }}
+      </h2>
+      <p class="hint">
+        Qui puoi includere prestiti (con o senza diritto/obbligo di
+        riscatto) e bonus attesi (gol, assist, o soglia di presenze/voto/
+        fantavoto). Il pareggio dei conti tiene conto dello sconto sui
+        prestiti, dei bonus attesi e delle cifre di riscatto — i valori
+        finali qui sotto sono già calcolati con quella logica.
+      </p>
+
+      @if (editingId()) {
+        <p class="hint editing-hint">
+          <mat-icon>edit</mat-icon>
+          Stai correggendo una bozza esistente: puoi ancora non sapere se un
+          prestito sarà riscattato o quanti eventi bonus si verificheranno —
+          torna qui in qualsiasi momento per aggiornare questi dati finché
+          resta una bozza.
+          <button matButton type="button" (click)="annullaModifica()">Annulla modifica</button>
+        </p>
+      }
+
+      @if (!myTeam()) {
+        <p class="hint">
+          Accedi come la tua squadra per proporre uno scambio avanzato.
+        </p>
+        <a matButton="tonal" routerLink="/login">
+          <mat-icon>login</mat-icon>
+          Accedi come squadra
+        </a>
+      } @else {
+        <div class="picker-grid">
+          @for (lato of LATI; track lato) {
+            <div class="picker">
+              <div class="picker-header">
+                <mat-form-field appearance="fill" subscriptSizing="dynamic">
+                  <mat-label>Squadra {{ lato }}</mat-label>
+                  <mat-select
+                    [value]="lato === 'A' ? squadraAId() : squadraBId()"
+                    (selectionChange)="squadraChange(lato, $event.value)"
+                  >
+                    @for (team of teams(); track team.id) {
+                      <mat-option [value]="team.id">{{ team.name }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+
+              <mat-form-field appearance="fill" subscriptSizing="dynamic" class="conguaglio-input">
+                <mat-label>Conguaglio versato da {{ lato }} (€)</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  [value]="lato === 'A' ? conguaglioA() : conguaglioB()"
+                  (input)="
+                    (lato === 'A' ? conguaglioA : conguaglioB).set($any($event.target).valueAsNumber || 0)
+                  "
+                />
+              </mat-form-field>
+
+              @if ((lato === 'A' ? opzioniA() : opzioniB()).length === 0) {
+                <p class="vuoto">Seleziona una squadra per vedere la rosa.</p>
+              } @else {
+                <ul class="player-list">
+                  @for (p of lato === 'A' ? opzioniA() : opzioniB(); track p.id) {
+                    <li>
+                      <label class="player-row" [class.selected]="giocatoreSelezionato(lato, p.id)">
+                        <input
+                          type="checkbox"
+                          [checked]="giocatoreSelezionato(lato, p.id)"
+                          (change)="toggleGiocatore(lato, p)"
+                        />
+                        <span class="chips">
+                          @for (r of rolesOf(p.ruolo); track r) {
+                            <span class="chip small" [style.border-color]="colorFor(r)" [style.color]="colorFor(r)">{{
+                              r
+                            }}</span>
+                          }
+                        </span>
+                        <span class="nome">{{ p.name }}</span>
+                        <span class="valore">
+                          {{ p.valoreAttuale | number: '1.0-1' }} €
+                          @if (giocatoreSelezionato(lato, p.id) && valoreDopoDi(p.id) !== null && (valoreDopoDi(p.id) ?? 0) !== p.valoreAttuale) {
+                            <mat-icon class="freccia-su" aria-hidden="true">arrow_upward</mat-icon>
+                            <strong>{{ valoreDopoDi(p.id) | number: '1.0-2' }} €</strong>
+                          }
+                        </span>
+                        @if (giocatoreSelezionato(lato, p.id)) {
+                          <button
+                            type="button"
+                            matIconButton
+                            class="panel-toggle"
+                            (click)="togglePannello(p.id); $event.preventDefault()"
+                          >
+                            <mat-icon>{{ pannelloAperto(p.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                          </button>
+                        }
+                      </label>
+
+                      @if (giocatoreSelezionato(lato, p.id) && pannelloAperto(p.id)) {
+                        <div class="dettagli-contratto">
+                          <div class="riga-campi">
+                            <mat-form-field appearance="fill" subscriptSizing="dynamic">
+                              <mat-label>Contratto</mat-label>
+                              <mat-select
+                                [value]="terminiDi(p.id).tipoContratto"
+                                (selectionChange)="setTipoContratto(p.id, $event.value)"
+                              >
+                                @for (tipo of TIPI_CONTRATTO; track tipo) {
+                                  <mat-option [value]="tipo">{{ etichettaContratto(tipo) }}</mat-option>
+                                }
+                              </mat-select>
+                            </mat-form-field>
+
+                            @if (terminiDi(p.id).tipoContratto !== 'definitivo') {
+                              <mat-form-field appearance="fill" subscriptSizing="dynamic">
+                                <mat-label>Durata (mesi)</mat-label>
+                                <mat-select
+                                  [value]="terminiDi(p.id).durataPrestito"
+                                  (selectionChange)="setDurata(p.id, $event.value)"
+                                >
+                                  @for (d of DURATE; track d) {
+                                    <mat-option [value]="d">{{ d }}</mat-option>
+                                  }
+                                </mat-select>
+                              </mat-form-field>
+                            }
+                          </div>
+
+                          @if (
+                            terminiDi(p.id).tipoContratto === 'prestitoObbligo' ||
+                            terminiDi(p.id).tipoContratto === 'prestitoDiritto'
+                          ) {
+                            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-stretto">
+                              <mat-label>Cifra di riscatto (€)</mat-label>
+                              <input
+                                matInput
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                [value]="terminiDi(p.id).cifraRiscatto ?? 0"
+                                (input)="setCifraRiscatto(p.id, $any($event.target).valueAsNumber)"
+                              />
+                            </mat-form-field>
+                          }
+                          @if (terminiDi(p.id).tipoContratto === 'prestitoDiritto') {
+                            <p class="hint-campo-futuro">
+                              La cifra è il prezzo pattuito per il riscatto; SE verrà davvero
+                              esercitato si decide più avanti, a trattativa già confermata (o si prova
+                              in anteprima con "Simula cambio valori").
+                            </p>
+                            @if (simulazioneAttiva()) {
+                              <label class="checkbox-riga sim-campo">
+                                <input
+                                  type="checkbox"
+                                  [checked]="!!terminiSimulati(p.id).riscattato"
+                                  (change)="impostaSimRiscattato(p.id, $any($event.target).checked)"
+                                />
+                                Simula: riscattato
+                              </label>
+                            }
+                          }
+
+                          <div class="bonus-section">
+                            <p class="hint-campo-futuro">
+                              Qui si fissano solo tipo e ricompensa: quanti eventi si verificheranno (o
+                              se la soglia viene superata) si segna più avanti, quando succede davvero.
+                            </p>
+                            <div class="bonus-header">
+                              <span>Aggiungi bonus:</span>
+                              <div class="bonus-add-buttons">
+                                @for (t of TIPI_BONUS_EVENTI; track t) {
+                                  <button type="button" matButton (click)="aggiungiBonusEventi(p.id, t)">
+                                    <mat-icon>add</mat-icon>
+                                    {{ t }}
+                                  </button>
+                                }
+                                @for (t of TIPI_BONUS_SOGLIA; track t) {
+                                  <button type="button" matButton (click)="aggiungiBonusSoglia(p.id, t)">
+                                    <mat-icon>add</mat-icon>
+                                    {{ t }} soglia
+                                  </button>
+                                }
+                              </div>
+                            </div>
+
+                            @for (b of terminiDi(p.id).bonus ?? []; track b.id) {
+                              <div class="bonus-row">
+                                <span class="bonus-tipo">{{ b.tipo }}</span>
+                                @if (isBonusEventi(b)) {
+                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+                                    <mat-label>€/evento</mat-label>
+                                    <input
+                                      matInput
+                                      type="number"
+                                      min="0"
+                                      step="0.1"
+                                      [value]="b.rewardPerEvento"
+                                      (input)="aggiornaBonus(p.id, b.id, { rewardPerEvento: $any($event.target).valueAsNumber || 0 })"
+                                    />
+                                  </mat-form-field>
+                                } @else {
+                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+                                    <mat-label>Soglia</mat-label>
+                                    <input
+                                      matInput
+                                      type="number"
+                                      min="0"
+                                      step="0.1"
+                                      [value]="b.soglia"
+                                      (input)="aggiornaBonus(p.id, b.id, { soglia: $any($event.target).valueAsNumber || 0 })"
+                                    />
+                                  </mat-form-field>
+                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+                                    <mat-label>Bonus fisso (€)</mat-label>
+                                    <input
+                                      matInput
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      [value]="b.rewardUnaTantum"
+                                      (input)="aggiornaBonus(p.id, b.id, { rewardUnaTantum: $any($event.target).valueAsNumber || 0 })"
+                                    />
+                                  </mat-form-field>
+                                }
+                                @if (simulazioneAttiva()) {
+                                  @if (isBonusEventi(b)) {
+                                    <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini sim-campo">
+                                      <mat-label>Sim: eventi verificati</mat-label>
+                                      <input
+                                        matInput
+                                        type="number"
+                                        min="0"
+                                        [value]="$any(bonusSimulato(p.id, b.id))?.eventiVerificati ?? 0"
+                                        (input)="impostaSimEventiVerificati(p.id, b.id, $any($event.target).valueAsNumber || 0)"
+                                      />
+                                    </mat-form-field>
+                                  } @else {
+                                    <label class="checkbox-riga sim-campo">
+                                      <input
+                                        type="checkbox"
+                                        [checked]="!!$any(bonusSimulato(p.id, b.id))?.verificato"
+                                        (change)="impostaSimSogliaSuperata(p.id, b.id, $any($event.target).checked)"
+                                      />
+                                      Sim: superata
+                                    </label>
+                                  }
+                                }
+                                <button type="button" matIconButton (click)="rimuoviBonus(p.id, b.id)">
+                                  <mat-icon>delete</mat-icon>
+                                </button>
+                              </div>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          }
+        </div>
+
+        @if (erroreSquadre(); as err) {
+          <p class="errore">
+            <mat-icon>error_outline</mat-icon>
+            {{ err }}
+          </p>
+        }
+        @if (anteprima().errore; as err) {
+          <p class="errore">
+            <mat-icon>error_outline</mat-icon>
+            {{ err }}
+          </p>
+        } @else if (giocatoriA().length + giocatoriB().length > 0) {
+          <div class="anteprima">
+            <div class="anteprima-header">
+              <h3>{{ simulazioneAttiva() ? 'Anteprima simulata' : 'Anteprima dello scambio' }}</h3>
+              <button matButton type="button" (click)="toggleSimulazione()">
+                <mat-icon>science</mat-icon>
+                {{ simulazioneAttiva() ? 'Esci dalla simulazione' : 'Simula cambio valori' }}
+              </button>
+            </div>
+            @if (simulazioneAttiva()) {
+              <p class="hint-campo-futuro">
+                Stai provando un'ipotesi (campi "Sim:" qui sopra, per ogni giocatore) — non è
+                salvata nella bozza, serve solo a vedere a cosa porterebbero questi eventi.
+                <button matButton type="button" (click)="annullaSimulazione()">Azzera ipotesi</button>
+              </p>
+            }
+            @if (risultatiMostrati().errore; as errSim) {
+              <p class="errore">
+                <mat-icon>error_outline</mat-icon>
+                {{ errSim }}
+              </p>
+            } @else {
+              <ul class="riv-list">
+                @for (r of riepilogoGiocatori(); track r.id) {
+                  <li class="riv-item" [class.rivalutato]="r.rivalutato">
+                    <div class="riv-top">
+                      <span class="riv-nome">{{ r.name }} — {{ r.squadra }}</span>
+                    </div>
+                    <div class="riv-bottom">
+                      <span>{{ r.contrattoLabel }}</span>
+                      @for (b of r.bonus; track b.id) {
+                        <span class="bonus-chip-mini">{{ etichettaBonusRiga(b) }}</span>
+                      }
+                      <span class="nuovo-valore">
+                        @if (r.rivalutato) {
+                          {{ r.valorePrima | number: '1.0-1' }} € →
+                        }
+                        {{ r.valoreDopo | number: '1.0-2' }} €
+                      </span>
+                    </div>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        }
+
+        <div class="actions">
+          <button matButton="filled" type="button" [disabled]="!puoiSalvare()" (click)="salvaBozza()">
+            <mat-icon>save</mat-icon>
+            {{ editingId() ? 'Salva modifiche alla bozza' : 'Salva bozza avanzata' }}
+          </button>
+        </div>
+      }
+    </section>
+  </main>
+</div>

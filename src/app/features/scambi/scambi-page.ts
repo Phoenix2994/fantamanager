@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterLink } from '@angular/router';
@@ -16,7 +17,8 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
 import { ScambiService } from '../../core/services/scambi.service';
 import { TeamService } from '../../core/services/team.service';
-import { Player, Scambio, Team } from '../../core/models';
+import { BonusScambio, Player, Scambio, Team, TerminiGiocatoreAvanzato } from '../../core/models';
+import { RivalutazioneAvanzata } from '../../core/scambi-avanzati-calculator';
 import { calcolaProssimaSpesaRinnovo } from '../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
 import {
@@ -66,6 +68,7 @@ interface RiepilogoGiocatore {
 @Component({
   selector: 'app-scambi-page',
   imports: [
+    DatePipe,
     DecimalPipe,
     MatButtonModule,
     MatCardModule,
@@ -74,6 +77,7 @@ interface RiepilogoGiocatore {
     MatInputModule,
     MatIconModule,
     MatSelectModule,
+    MatTooltipModule,
     RouterLink,
     NavMenu,
     HeaderAuthStatus,
@@ -102,6 +106,8 @@ export class ScambiPage {
   readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
   readonly trattative = toSignal(this.scambiService.scambi$, { initialValue: [] as Scambio[] });
+  /** Elenco visibile: le trattative annullate restano nello storico/undo ma non intasano questa lista */
+  readonly trattativeVisibili = computed(() => this.trattative().filter((s) => s.stato !== 'annullata'));
 
   // ---------- Stato del form "nuova trattativa" ----------
   // Chi ha fatto login come squadra propone SEMPRE per la propria: Squadra A
@@ -379,6 +385,7 @@ export class ScambiPage {
               : scambio.snapshot.nomeSquadraB
           }`
         : '') +
+      (scambio.avanzato ? `\n• eventuali prestiti si spostano subito nella rosa di chi li riceve` : '') +
       '.';
     const ref = this.dialog.open(ConfirmDialog, {
       data: { title: 'Conferma scambio', message, confirmLabel: 'Conferma scambio' },
@@ -389,7 +396,11 @@ export class ScambiPage {
         return;
       }
       try {
-        await this.scambiService.conferma(scambio);
+        if (scambio.avanzato) {
+          await this.scambiService.confermaAvanzato(scambio);
+        } else {
+          await this.scambiService.conferma(scambio);
+        }
         this.snackBar.open('Scambio confermato e registrato.', 'OK', { duration: 3500 });
       } catch (err) {
         console.error(err);
@@ -475,6 +486,249 @@ export class ScambiPage {
       } catch (err) {
         console.error(err);
         this.snackBar.open('Errore eliminando la trattativa.', 'Chiudi', { duration: 4000 });
+      }
+    });
+  }
+
+  // ---------- Trattative avanzate: prestiti + bonus ----------
+  // (i metodi di sola lettura qui sotto sono visibili a chiunque veda la
+  // trattativa — le due squadre coinvolte devono poter vedere subito i
+  // termini pattuiti; solo le AZIONI più giù restano riservate all'admin)
+
+  /** Tutti i giocatori coinvolti in una trattativa (entrambi i lati), per il template */
+  giocatoriDellaTrattativa(scambio: Scambio) {
+    return [...scambio.snapshot.giocatoriA, ...scambio.snapshot.giocatoriB];
+  }
+
+  /** Termini pattuiti di un giocatore in una trattativa avanzata, se presente */
+  terminiDiGiocatore(scambio: Scambio, playerId: string): TerminiGiocatoreAvanzato | undefined {
+    return (
+      scambio.avanzato?.terminiA.find((t) => t.playerId === playerId) ??
+      scambio.avanzato?.terminiB.find((t) => t.playerId === playerId)
+    );
+  }
+
+  /** Etichetta sintetica di un bonus pattuito, per il riepilogo della trattativa (visibile a tutti) */
+  etichettaBonus(b: BonusScambio): string {
+    if (this.isBonusEventi(b)) {
+      const be = b as BonusScambio & { rewardPerEvento: number };
+      return `${b.tipo} ${be.rewardPerEvento}€/evento`;
+    }
+    const bs = b as BonusScambio & { soglia: number; rewardUnaTantum: number };
+    return `${b.tipo} ≥${bs.soglia} → ${bs.rewardUnaTantum}€`;
+  }
+
+  /** true se il giocatore è ancora in prestito (non definitivo, non ancora rientrato) */
+  puoRientrare(t: TerminiGiocatoreAvanzato): boolean {
+    const eDefinitivo =
+      t.tipoContratto === 'definitivo' ||
+      t.tipoContratto === 'prestitoObbligo' ||
+      (t.tipoContratto === 'prestitoDiritto' && t.riscattato === true);
+    return !eDefinitivo && !t.prestitoConcluso;
+  }
+
+  /** Data prevista di fine prestito (confermata + durata in mesi), null se non calcolabile */
+  scadenzaPrestito(scambio: Scambio, t: TerminiGiocatoreAvanzato): Date | null {
+    if (!scambio.confirmedAt || !t.durataPrestito) {
+      return null;
+    }
+    const scadenza = scambio.confirmedAt.toDate();
+    scadenza.setMonth(scadenza.getMonth() + t.durataPrestito);
+    return scadenza;
+  }
+
+  /** true se il prestito è ancora attivo e scade entro un mese (promemoria admin) */
+  prestitoInScadenza(scambio: Scambio, t: TerminiGiocatoreAvanzato): boolean {
+    if (!this.puoRientrare(t)) {
+      return false;
+    }
+    const scadenza = this.scadenzaPrestito(scambio, t);
+    if (!scadenza) {
+      return false;
+    }
+    const unMesePrima = new Date(scadenza);
+    unMesePrima.setMonth(unMesePrima.getMonth() - 1);
+    return new Date() >= unMesePrima;
+  }
+
+  isBonusEventi(b: BonusScambio): boolean {
+    return b.tipo === 'gol' || b.tipo === 'assist';
+  }
+
+  confermaRientro(scambio: Scambio, playerName: string, playerId: string): void {
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        title: 'Rientro dal prestito',
+        message: `Confermare il rientro di ${playerName} alla squadra d'origine? Il giocatore si sposta subito, così com'è oggi.`,
+        confirmLabel: 'Conferma rientro',
+      },
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe(async (confirmed) => {
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await this.scambiService.confermaRientroPrestito(scambio, playerId);
+        this.snackBar.open(`${playerName} è rientrato dal prestito.`, 'OK', { duration: 3500 });
+      } catch (err) {
+        console.error(err);
+        this.snackBar.open(err instanceof Error ? err.message : 'Errore confermando il rientro.', 'Chiudi', {
+          duration: 5000,
+        });
+      }
+    });
+  }
+
+  aggiornaEventiBonus(scambio: Scambio, playerId: string, bonusId: string, nuoviEventi: number): void {
+    const valore = Math.max(0, Math.round(nuoviEventi));
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        title: 'Conferma evento bonus',
+        message: `Impostare a ${valore} gli eventi confermati per questo bonus? La differenza si somma subito ai trasferimenti in finanza e i valori dei giocatori coinvolti vengono ricalcolati.`,
+        confirmLabel: 'Conferma',
+      },
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe(async (confirmed) => {
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await this.scambiService.confermaEventoBonus(scambio, playerId, bonusId, { eventiVerificati: valore });
+        this.snackBar.open('Bonus aggiornato e valori ricalcolati.', 'OK', { duration: 3500 });
+      } catch (err) {
+        console.error(err);
+        this.snackBar.open(err instanceof Error ? err.message : 'Errore aggiornando il bonus.', 'Chiudi', {
+          duration: 5000,
+        });
+      }
+    });
+  }
+
+  aggiornaSogliaBonus(scambio: Scambio, playerId: string, bonusId: string, verificato: boolean): void {
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        title: 'Conferma soglia bonus',
+        message: verificato
+          ? 'Confermare che la soglia è stata superata? Il bonus si somma subito ai trasferimenti in finanza e i valori dei giocatori coinvolti vengono ricalcolati.'
+          : 'Annullare la conferma di questa soglia? L\'importo verrà tolto dai trasferimenti già registrati.',
+        confirmLabel: 'Conferma',
+      },
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe(async (confirmed) => {
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await this.scambiService.confermaEventoBonus(scambio, playerId, bonusId, { verificato });
+        this.snackBar.open('Bonus aggiornato e valori ricalcolati.', 'OK', { duration: 3500 });
+      } catch (err) {
+        console.error(err);
+        this.snackBar.open(err instanceof Error ? err.message : 'Errore aggiornando il bonus.', 'Chiudi', {
+          duration: 5000,
+        });
+      }
+    });
+  }
+
+  // ---------- Modifica termini post-conferma (riscatto, QF) + simulazione ----------
+
+  /** Bozza locale di modifiche non ancora applicate, chiave = playerId */
+  readonly draftTermini = signal<Record<string, Partial<TerminiGiocatoreAvanzato>>>({});
+  /** Ultimo esito di "Simula": risultati per scambioId, non salvati */
+  readonly anteprimaSimulazione = signal<Record<string, RivalutazioneAvanzata[]>>({});
+  readonly simulazioneInCorso = signal<string | null>(null);
+
+  /** Termini "effettivi" mostrati nel form: quelli reali + eventuale bozza sopra */
+  terminiConDraft(scambio: Scambio, playerId: string): TerminiGiocatoreAvanzato | undefined {
+    const reali = this.terminiDiGiocatore(scambio, playerId);
+    if (!reali) {
+      return undefined;
+    }
+    return { ...reali, ...(this.draftTermini()[playerId] ?? {}) };
+  }
+
+  haDraftPendente(playerId: string): boolean {
+    return !!this.draftTermini()[playerId] && Object.keys(this.draftTermini()[playerId]).length > 0;
+  }
+
+  impostaDraftRiscattato(playerId: string, riscattato: boolean): void {
+    this.draftTermini.set({ ...this.draftTermini(), [playerId]: { ...this.draftTermini()[playerId], riscattato } });
+  }
+  impostaDraftCifraRiscatto(playerId: string, cifraRiscatto: number): void {
+    this.draftTermini.set({
+      ...this.draftTermini(),
+      [playerId]: { ...this.draftTermini()[playerId], cifraRiscatto: cifraRiscatto || 0 },
+    });
+  }
+  impostaDraftQuotazioneFinale(playerId: string, quotazioneFinale: number): void {
+    this.draftTermini.set({
+      ...this.draftTermini(),
+      [playerId]: { ...this.draftTermini()[playerId], quotazioneFinale: quotazioneFinale || 0 },
+    });
+  }
+
+  annullaDraft(playerId: string): void {
+    const nuovo = { ...this.draftTermini() };
+    delete nuovo[playerId];
+    this.draftTermini.set(nuovo);
+    const nuovaAnteprima = { ...this.anteprimaSimulazione() };
+    delete nuovaAnteprima[playerId];
+    this.anteprimaSimulazione.set(nuovaAnteprima);
+  }
+
+  /** Valore simulato per un giocatore, se è stata eseguita una simulazione con la bozza corrente */
+  valoreSimulato(scambio: Scambio, playerId: string): number | null {
+    return this.anteprimaSimulazione()[scambio.id]?.find((r) => r.giocatore.id === playerId)?.valoreDopo ?? null;
+  }
+
+  async simulaCambioValori(scambio: Scambio): Promise<void> {
+    this.simulazioneInCorso.set(scambio.id);
+    try {
+      const risultato = await this.scambiService.simulaRicalcoloAvanzato(scambio, this.draftTermini());
+      if (risultato.errore) {
+        this.snackBar.open(risultato.errore, 'Chiudi', { duration: 5000 });
+        return;
+      }
+      this.anteprimaSimulazione.set({ ...this.anteprimaSimulazione(), [scambio.id]: risultato.risultati });
+    } catch (err) {
+      console.error(err);
+      this.snackBar.open(err instanceof Error ? err.message : 'Errore nella simulazione.', 'Chiudi', {
+        duration: 5000,
+      });
+    } finally {
+      this.simulazioneInCorso.set(null);
+    }
+  }
+
+  applicaTermini(scambio: Scambio, playerName: string, playerId: string): void {
+    const patch = this.draftTermini()[playerId];
+    if (!patch) {
+      return;
+    }
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        title: 'Applica modifica ai termini',
+        message: `Aggiornare davvero i termini di ${playerName}? I valori dei giocatori coinvolti si ricalcolano e l'eventuale differenza sulla cifra di riscatto si sposta subito nei trasferimenti in finanza.`,
+        confirmLabel: 'Applica',
+      },
+      autoFocus: false,
+    });
+    ref.afterClosed().subscribe(async (confirmed) => {
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await this.scambiService.aggiornaTerminiAvanzati(scambio, playerId, patch);
+        this.snackBar.open('Termini aggiornati e valori ricalcolati.', 'OK', { duration: 3500 });
+        this.annullaDraft(playerId);
+      } catch (err) {
+        console.error(err);
+        this.snackBar.open(err instanceof Error ? err.message : 'Errore aggiornando i termini.', 'Chiudi', {
+          duration: 5000,
+        });
       }
     });
   }

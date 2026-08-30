@@ -34,6 +34,12 @@ export const routes: Routes = [
       import('./features/scambi/scambi-page').then((m) => m.ScambiPage),
   },
   {
+    // Trattativa avanzata (prestiti + bonus), raggiungibile dalla pagina Scambi
+    path: 'scambi/avanzato',
+    loadComponent: () =>
+      import('./features/scambi/scambi-avanzato-page').then((m) => m.ScambiAvanzatoPage),
+  },
+  {
     // Vista TV dell'asta: sola lettura pubblica
     path: 'tv',
     loadComponent: () => import('./features/asta/tv-page').then((m) => m.TvPage),

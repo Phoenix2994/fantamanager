@@ -1,0 +1,143 @@
+.torna-link {
+  align-self: flex-start;
+  margin-bottom: 8px;
+}
+
+.picker-header {
+  margin-bottom: 8px;
+}
+
+.panel-toggle {
+  flex-shrink: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.freccia-su {
+  color: var(--mat-sys-primary);
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}
+
+.valore strong {
+  color: var(--mat-sys-primary);
+}
+
+/* ---------- Pannello dettagli contratto/bonus ---------- */
+.dettagli-contratto {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-high);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.riga-campi {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+
+  mat-form-field {
+    flex: 1;
+    min-width: 140px;
+  }
+}
+
+.checkbox-riga {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.campo-stretto {
+  max-width: 220px;
+}
+
+.hint-campo-futuro {
+  margin: 4px 0 8px;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.bonus-section {
+  border-top: 1px dashed var(--mat-sys-outline-variant, #e0e0e0);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bonus-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.bonus-add-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+
+  button {
+    font-size: 0.78rem;
+    min-width: 0;
+    padding: 0 10px;
+  }
+}
+
+.bonus-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.bonus-tipo {
+  flex-shrink: 0;
+  min-width: 70px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+  align-self: center;
+}
+
+.campo-mini {
+  width: 100px;
+}
+
+.sim-campo {
+  border: 1px dashed var(--mat-sys-tertiary, var(--mat-sys-primary));
+
+  ::ng-deep .mat-mdc-text-field-wrapper {
+    background: transparent;
+  }
+}
+
+label.sim-campo {
+  border-radius: 8px;
+  padding: 2px 8px;
+  border-style: dashed;
+}
+
+.anteprima-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  h3 {
+    margin: 0;
+  }
+}

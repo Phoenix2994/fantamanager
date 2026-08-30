@@ -15,6 +15,13 @@
         {{ editingId() ? 'Modifica trattativa' : 'Nuova trattativa' }}
       </h2>
 
+      @if (isAdmin()) {
+        <a matButton="tonal" routerLink="/scambi/avanzato" class="avanzato-link">
+          <mat-icon>handshake</mat-icon>
+          Trattativa avanzata (prestiti e bonus)
+        </a>
+      }
+
       @if (editingId()) {
         <p class="hint editing-hint">
           <mat-icon>edit</mat-icon>
@@ -203,47 +210,48 @@
             }
 
             <!-- Riepilogo di TUTTI i giocatori coinvolti, anche quelli il
-                 cui valore non cambia -->
-            <div class="riv-table-scroll">
-              <table class="riv-table">
-                <thead>
-                  <tr>
-                    <th>Giocatore</th>
-                    <th>Ruolo</th>
-                    <th>V.A. finale</th>
-                    <th>Squadra</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (r of riepilogoGiocatori(); track r.id) {
-                    <tr [class.rivalutato]="r.rivalutato">
-                      <td>{{ r.name }}</td>
-                      <td>
-                        <span class="chips">
-                          @for (ruolo of rolesOf(r.ruolo); track ruolo) {
-                            <span
-                              class="chip small"
-                              [style.border-color]="colorFor(ruolo)"
-                              [style.color]="colorFor(ruolo)"
-                            >{{ ruolo }}</span>
-                          }
-                        </span>
-                      </td>
-                      <td class="nuovo-valore">
-                        @if (r.rivalutato) {
-                          {{ r.valoreAttuale | number: '1.0-1' }} € →
-                        }
-                        {{ r.valoreFinale | number: '1.0-1' }} €
-                      </td>
-                      <td class="squadra-cell">
-                        <app-team-logo [name]="r.squadra" class="riv-team-logo" />
-                        {{ r.squadra }}
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+                 cui valore non cambia. Lista a card (non tabella): va a capo
+                 invece di richiedere scroll orizzontale, quindi resta
+                 leggibile sia su mobile che su desktop. -->
+            <ul class="riv-list">
+              @for (r of riepilogoGiocatori(); track r.id) {
+                <li class="riv-item" [class.rivalutato]="r.rivalutato">
+                  <div class="riv-top">
+                    <span class="chips">
+                      @for (ruolo of rolesOf(r.ruolo); track ruolo) {
+                        <span
+                          class="chip small"
+                          [style.border-color]="colorFor(ruolo)"
+                          [style.color]="colorFor(ruolo)"
+                        >{{ ruolo }}</span>
+                      }
+                    </span>
+                    <span class="riv-nome">{{ r.name }}</span>
+                    <span
+                      class="rinnovo-badge"
+                      [class.si]="r.giaRinnovato"
+                      [attr.aria-label]="r.giaRinnovato ? 'Già rinnovato quest\'anno' : 'Non ancora rinnovato quest\'anno'"
+                      [matTooltip]="r.giaRinnovato ? 'Ha già speso soldi quest\'anno (acquisto o rinnovo)' : 'Non ha ancora speso soldi quest\'anno'"
+                    >
+                      <mat-icon>{{ r.giaRinnovato ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                      {{ r.giaRinnovato ? 'già rinnovato' : 'da rinnovare' }}
+                    </span>
+                  </div>
+                  <div class="riv-bottom">
+                    <span class="squadra-cell">
+                      <app-team-logo [name]="r.squadra" class="riv-team-logo" />
+                      {{ r.squadra }}
+                    </span>
+                    <span class="nuovo-valore">
+                      @if (r.rivalutato) {
+                        {{ r.valoreAttuale | number: '1.0-1' }} € →
+                      }
+                      {{ r.valoreFinale | number: '1.0-1' }} €
+                    </span>
+                  </div>
+                </li>
+              }
+            </ul>
 
             <!-- Pannello "Dettagli rinnovo" temporaneamente nascosto su
                  richiesta: codice lasciato pronto per essere riattivato. -->
@@ -306,7 +314,7 @@
         Trattative
       </h2>
 
-      @for (s of trattative(); track s.id) {
+      @for (s of trattativeVisibili(); track s.id) {
         <article
           class="trattativa-card"
           [class.confermata]="s.stato === 'confermata'"
@@ -344,6 +352,14 @@
                   @for (g of s.snapshot.giocatoriA; track g.name) {
                     <span class="giocatore">
                       {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
+                      @if (g.contrattoLabel && g.contrattoLabel !== 'Definitivo') {
+                        <span class="contratto-mini">{{ g.contrattoLabel }}</span>
+                      }
+                      @if (s.avanzato && g.playerId; as pid) {
+                        @for (b of terminiDiGiocatore(s, pid)?.bonus ?? []; track b.id) {
+                          <span class="bonus-chip-mini">{{ etichettaBonus(b) }}</span>
+                        }
+                      }
                     </span>
                   }
                 </div>
@@ -355,6 +371,14 @@
                   @for (g of s.snapshot.giocatoriB; track g.name) {
                     <span class="giocatore">
                       {{ g.name }} ({{ g.valoreAttuale | number: '1.0-1' }} €)
+                      @if (g.contrattoLabel && g.contrattoLabel !== 'Definitivo') {
+                        <span class="contratto-mini">{{ g.contrattoLabel }}</span>
+                      }
+                      @if (s.avanzato && g.playerId; as pid) {
+                        @for (b of terminiDiGiocatore(s, pid)?.bonus ?? []; track b.id) {
+                          <span class="bonus-chip-mini">{{ etichettaBonus(b) }}</span>
+                        }
+                      }
                     </span>
                   }
                 </div>
@@ -380,16 +404,161 @@
                 </p>
               }
 
+              @if (s.avanzato && s.stato === 'confermata' && isAdmin()) {
+                <div class="avanzato-gestione">
+                  <h4>Prestiti e bonus</h4>
+                  @for (g of giocatoriDellaTrattativa(s); track g.playerId) {
+                    @if (g.playerId; as pid) {
+                      @if (terminiDiGiocatore(s, pid); as t) {
+                        @if (t.tipoContratto !== 'definitivo' || (t.bonus ?? []).length > 0) {
+                          <div class="giocatore-avanzato">
+                            <div class="giocatore-avanzato-head">
+                              <strong>{{ g.name }}</strong>
+                              @if (prestitoInScadenza(s, t)) {
+                                <span
+                                  class="scadenza-badge"
+                                  [matTooltip]="'Rientra il ' + (scadenzaPrestito(s, t) | date: 'dd/MM/yyyy')"
+                                >
+                                  <mat-icon>event_busy</mat-icon>
+                                  in scadenza ({{ scadenzaPrestito(s, t) | date: 'dd/MM' }})
+                                </span>
+                              }
+                              @if (puoRientrare(t)) {
+                                <button matButton type="button" (click)="confermaRientro(s, g.name, pid)">
+                                  <mat-icon>undo</mat-icon>
+                                  Rientro dal prestito
+                                </button>
+                              } @else if (t.prestitoConcluso) {
+                                <span class="rientrato-badge">
+                                  <mat-icon>check_circle</mat-icon>
+                                  Rientrato
+                                </span>
+                              }
+                            </div>
+                            @for (b of t.bonus ?? []; track b.id) {
+                              <div class="bonus-riga">
+                                <span class="bonus-riga-tipo">{{ b.tipo }}</span>
+                                @if (isBonusEventi(b) && $any(b).eventiAttesi !== undefined) {
+                                  <span class="bonus-riga-info">
+                                    {{ $any(b).eventiVerificati }} / {{ $any(b).eventiAttesi }} eventi confermati
+                                    ({{ $any(b).rewardPerEvento | number: '1.0-2' }} €/evento)
+                                  </span>
+                                  <button
+                                    matIconButton
+                                    type="button"
+                                    [disabled]="$any(b).eventiVerificati <= 0"
+                                    (click)="aggiornaEventiBonus(s, pid, b.id, $any(b).eventiVerificati - 1)"
+                                  >
+                                    <mat-icon>remove_circle_outline</mat-icon>
+                                  </button>
+                                  <button
+                                    matIconButton
+                                    type="button"
+                                    (click)="aggiornaEventiBonus(s, pid, b.id, $any(b).eventiVerificati + 1)"
+                                  >
+                                    <mat-icon>add_circle_outline</mat-icon>
+                                  </button>
+                                } @else {
+                                  <span class="bonus-riga-info">
+                                    soglia {{ $any(b).soglia }} — {{ $any(b).rewardUnaTantum | number: '1.0-2' }} € una tantum
+                                  </span>
+                                  <label class="bonus-riga-checkbox">
+                                    <input
+                                      type="checkbox"
+                                      [checked]="$any(b).verificato"
+                                      (change)="aggiornaSogliaBonus(s, pid, b.id, $any($event.target).checked)"
+                                    />
+                                    Superata
+                                  </label>
+                                }
+                              </div>
+                            }
+
+                            <div class="modifica-termini">
+                              <div class="modifica-termini-campi">
+                                @if (t.tipoContratto === 'prestitoDiritto') {
+                                  <label class="checkbox-riga">
+                                    <input
+                                      type="checkbox"
+                                      [checked]="!!terminiConDraft(s, pid)?.riscattato"
+                                      (change)="impostaDraftRiscattato(pid, $any($event.target).checked)"
+                                    />
+                                    Riscattato
+                                  </label>
+                                }
+                                @if (t.tipoContratto === 'prestitoObbligo' || terminiConDraft(s, pid)?.riscattato) {
+                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+                                    <mat-label>Cifra riscatto (€)</mat-label>
+                                    <input
+                                      matInput
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      [value]="terminiConDraft(s, pid)?.cifraRiscatto ?? 0"
+                                      (input)="impostaDraftCifraRiscatto(pid, $any($event.target).valueAsNumber)"
+                                    />
+                                  </mat-form-field>
+                                }
+                                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+                                  <mat-label>Quotazione finale</mat-label>
+                                  <input
+                                    matInput
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    [value]="terminiConDraft(s, pid)?.quotazioneFinale ?? 0"
+                                    (input)="impostaDraftQuotazioneFinale(pid, $any($event.target).valueAsNumber)"
+                                  />
+                                </mat-form-field>
+                              </div>
+
+                              @if (haDraftPendente(pid)) {
+                                <div class="modifica-termini-azioni">
+                                  <button
+                                    matButton
+                                    type="button"
+                                    [disabled]="simulazioneInCorso() === s.id"
+                                    (click)="simulaCambioValori(s)"
+                                  >
+                                    <mat-icon>science</mat-icon>
+                                    Simula cambio valori
+                                  </button>
+                                  @if (valoreSimulato(s, pid); as vs) {
+                                    <span class="simulazione-esito">→ {{ vs | number: '1.0-2' }} €</span>
+                                  }
+                                  <button matButton="filled" type="button" (click)="applicaTermini(s, g.name, pid)">
+                                    <mat-icon>save</mat-icon>
+                                    Applica
+                                  </button>
+                                  <button matButton type="button" (click)="annullaDraft(pid)">Annulla</button>
+                                </div>
+                              }
+                            </div>
+                          </div>
+                        }
+                      }
+                    }
+                  }
+                </div>
+              }
+
               @if (s.stato === 'bozza') {
                 <footer class="card-actions">
                   <button matButton="filled" type="button" (click)="ufficializza(s)">
                     <mat-icon>send</mat-icon>
                     Ufficializza
                   </button>
-                  <button matButton type="button" (click)="modifica(s)">
-                    <mat-icon>edit</mat-icon>
-                    Modifica
-                  </button>
+                  @if (s.avanzato) {
+                    <a matButton [routerLink]="['/scambi/avanzato']" [queryParams]="{ edit: s.id }">
+                      <mat-icon>edit</mat-icon>
+                      Modifica
+                    </a>
+                  } @else {
+                    <button matButton type="button" (click)="modifica(s)">
+                      <mat-icon>edit</mat-icon>
+                      Modifica
+                    </button>
+                  }
                   <button matButton type="button" (click)="elimina(s)">
                     <mat-icon>delete</mat-icon>
                     Elimina

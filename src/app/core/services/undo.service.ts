@@ -25,6 +25,9 @@ const ENTITY_PER_TIPO: Record<OperazioneAnnullabile, AuditEntityType> = {
   rimborso: 'player',
   acquistoAsta: 'player',
   scambioConferma: 'scambio',
+  rientroPrestito: 'player',
+  eventoBonusScambio: 'scambio',
+  modificaTerminiScambio: 'scambio',
 };
 
 /** Dati di una voce di undoLog, senza i campi generati alla scrittura */
