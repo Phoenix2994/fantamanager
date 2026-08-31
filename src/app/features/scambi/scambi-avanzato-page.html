@@ -89,14 +89,24 @@
                   <mat-expansion-panel-header>
                     <mat-panel-title>Rosa</mat-panel-title>
                     <mat-panel-description>
-                      {{ (lato === 'A' ? selezioneA() : selezioneB()).length }} selezionat{{
-                        (lato === 'A' ? selezioneA() : selezioneB()).length === 1 ? 'o' : 'i'
-                      }}
-                      · {{ (lato === 'A' ? opzioniA() : opzioniB()).length }} giocatori
+                      @if (simulazioneAttiva()) {
+                        {{ (lato === 'A' ? selezioneA() : selezioneB()).length }} coinvolt{{
+                          (lato === 'A' ? selezioneA() : selezioneB()).length === 1 ? 'o' : 'i'
+                        }}
+                        nella trattativa
+                      } @else {
+                        {{ (lato === 'A' ? selezioneA() : selezioneB()).length }} selezionat{{
+                          (lato === 'A' ? selezioneA() : selezioneB()).length === 1 ? 'o' : 'i'
+                        }}
+                        · {{ (lato === 'A' ? opzioniA() : opzioniB()).length }} giocatori
+                      }
                     </mat-panel-description>
                   </mat-expansion-panel-header>
+                @if (simulazioneAttiva() && rosaMostrata(lato).length === 0) {
+                  <p class="vuoto">Nessun giocatore di questa squadra è coinvolto in questa trattativa.</p>
+                }
                 <ul class="player-list">
-                  @for (p of lato === 'A' ? opzioniA() : opzioniB(); track p.id) {
+                  @for (p of rosaMostrata(lato); track p.id) {
                     <li>
                       <label class="player-row" [class.selected]="giocatoreSelezionato(lato, p.id)">
                         <input

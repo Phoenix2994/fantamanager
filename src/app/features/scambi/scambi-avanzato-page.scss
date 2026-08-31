@@ -137,23 +137,47 @@
   }
 }
 
-.bonus-row {
+.bonus-card {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
-  padding: 6px 8px;
+  padding: 8px 8px 10px;
   border-radius: 10px;
   background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant, transparent);
+}
+
+.bonus-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .bonus-tipo {
-  flex-shrink: 0;
-  min-width: 70px;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   text-transform: capitalize;
-  align-self: center;
+}
+
+.bonus-elimina {
+  flex-shrink: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.bonus-card-campi {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bonus-card-sim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px dashed var(--mat-sys-outline-variant, currentColor);
 }
 
 .campo-mini {

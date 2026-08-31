@@ -197,6 +197,19 @@ export class ScambiAvanzatoPage {
     return (lato === 'A' ? this.selezioneA() : this.selezioneB()).includes(playerId);
   }
 
+  /**
+   * Rosa da elencare nel picker: durante la simulazione mostra solo chi è
+   * già coinvolto nella trattativa (più veloce ritrovarli per il tasto
+   * "tune"), altrimenti l'intera rosa per poterne scegliere di nuovi.
+   */
+  rosaMostrata(lato: Lato): Player[] {
+    const tutti = lato === 'A' ? this.opzioniA() : this.opzioniB();
+    if (!this.simulazioneAttiva()) {
+      return tutti;
+    }
+    return tutti.filter((p) => this.giocatoreSelezionato(lato, p.id));
+  }
+
   rosaEspansa(lato: Lato): boolean {
     return (lato === 'A' ? this.rosaEspansaA : this.rosaEspansaB)();
   }

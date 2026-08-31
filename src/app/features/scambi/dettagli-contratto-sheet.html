@@ -107,70 +107,82 @@
     </div>
 
     @for (b of page.terminiDi(playerId).bonus ?? []; track b.id) {
-      <div class="bonus-row">
-        <span class="bonus-tipo">{{ b.tipo }}</span>
-        @if (page.isBonusEventi(b)) {
-          <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
-            <mat-label>€/evento</mat-label>
-            <input
-              matInput
-              type="number"
-              min="0"
-              step="0.1"
-              [value]="b.rewardPerEvento"
-              (input)="page.aggiornaBonus(playerId, b.id, { rewardPerEvento: $any($event.target).valueAsNumber || 0 })"
-            />
-          </mat-form-field>
-        } @else {
-          <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
-            <mat-label>Soglia</mat-label>
-            <input
-              matInput
-              type="number"
-              min="0"
-              step="0.1"
-              [value]="b.soglia"
-              (input)="page.aggiornaBonus(playerId, b.id, { soglia: $any($event.target).valueAsNumber || 0 })"
-            />
-          </mat-form-field>
-          <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
-            <mat-label>Bonus fisso (€)</mat-label>
-            <input
-              matInput
-              type="number"
-              min="0"
-              step="0.5"
-              [value]="b.rewardUnaTantum"
-              (input)="page.aggiornaBonus(playerId, b.id, { rewardUnaTantum: $any($event.target).valueAsNumber || 0 })"
-            />
-          </mat-form-field>
-        }
-        @if (page.simulazioneAttiva()) {
+      <div class="bonus-card">
+        <div class="bonus-card-head">
+          <span class="bonus-tipo">{{ b.tipo }}</span>
+          <button
+            type="button"
+            matIconButton
+            class="bonus-elimina"
+            [attr.aria-label]="'Rimuovi bonus ' + b.tipo"
+            (click)="page.rimuoviBonus(playerId, b.id)"
+          >
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+        <div class="bonus-card-campi">
           @if (page.isBonusEventi(b)) {
-            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini sim-campo">
-              <mat-label>Sim: eventi verificati</mat-label>
+            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+              <mat-label>€/evento</mat-label>
               <input
                 matInput
                 type="number"
                 min="0"
-                [value]="$any(page.bonusSimulato(playerId, b.id))?.eventiVerificati ?? 0"
-                (input)="page.impostaSimEventiVerificati(playerId, b.id, $any($event.target).value)"
+                step="0.1"
+                [value]="b.rewardPerEvento"
+                (input)="page.aggiornaBonus(playerId, b.id, { rewardPerEvento: $any($event.target).valueAsNumber || 0 })"
               />
             </mat-form-field>
           } @else {
-            <label class="checkbox-riga sim-campo">
+            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+              <mat-label>Soglia</mat-label>
               <input
-                type="checkbox"
-                [checked]="!!$any(page.bonusSimulato(playerId, b.id))?.verificato"
-                (change)="page.impostaSimSogliaSuperata(playerId, b.id, $any($event.target).checked)"
+                matInput
+                type="number"
+                min="0"
+                step="0.1"
+                [value]="b.soglia"
+                (input)="page.aggiornaBonus(playerId, b.id, { soglia: $any($event.target).valueAsNumber || 0 })"
               />
-              Sim: superata
-            </label>
+            </mat-form-field>
+            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+              <mat-label>Bonus fisso (€)</mat-label>
+              <input
+                matInput
+                type="number"
+                min="0"
+                step="0.5"
+                [value]="b.rewardUnaTantum"
+                (input)="page.aggiornaBonus(playerId, b.id, { rewardUnaTantum: $any($event.target).valueAsNumber || 0 })"
+              />
+            </mat-form-field>
           }
+        </div>
+        @if (page.simulazioneAttiva()) {
+          <div class="bonus-card-sim">
+            @if (page.isBonusEventi(b)) {
+              <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini sim-campo">
+                <mat-label>Sim: eventi verificati</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  min="0"
+                  [value]="$any(page.bonusSimulato(playerId, b.id))?.eventiVerificati ?? 0"
+                  (input)="page.impostaSimEventiVerificati(playerId, b.id, $any($event.target).value)"
+                />
+              </mat-form-field>
+            } @else {
+              <label class="checkbox-riga sim-campo">
+                <input
+                  type="checkbox"
+                  [checked]="!!$any(page.bonusSimulato(playerId, b.id))?.verificato"
+                  (change)="page.impostaSimSogliaSuperata(playerId, b.id, $any($event.target).checked)"
+                />
+                Sim: superata
+              </label>
+            }
+          </div>
         }
-        <button type="button" matIconButton (click)="page.rimuoviBonus(playerId, b.id)">
-          <mat-icon>delete</mat-icon>
-        </button>
       </div>
     }
   </div>
