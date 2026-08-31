@@ -335,8 +335,11 @@ interface RosterEntry {
 
     /* Giocatore già chiamato in asta (a prescindere dall'esito): stessa
        tinta usata per i giocatori fuori Serie A nella rosa, coerenza visiva
-       tra le due sezioni */
-    .row.is-chiamato {
+       tra le due sezioni. La classe è sull'<li> (vedi template), non su
+       .row — da qui il selettore discendente invece di un semplice
+       .row.is-chiamato, che non avrebbe mai trovato le due classi sullo
+       stesso elemento. */
+    li.is-chiamato > .row {
       background: rgba(252, 185, 203, 0.4);
     }
 
