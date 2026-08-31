@@ -74,21 +74,74 @@ export function prossimaPercentRinnovo(perce: number): number {
  return PROSSIMA_PERC_MAP[key] ?? perce;
 }
 
-/** Prima soglia (più bassa) degli scaglioni multa, es. 437.15 € */
-export function primaSogliaMulte(brackets: ReadonlyArray<TaxBracket>): number {
-  return brackets.length ? Math.min(...brackets.map((b) => b.limiteSogliaEuro)) : 0;
+/**
+ * Prossimo scaglione multa non ancora superato dalla spesa annuale (quello
+ * con la soglia più bassa tra chi supera spesaAnnuale) — per una squadra
+ * ancora senza multe è il primo scaglione in assoluto, per una già in
+ * tassazione è quello della fascia successiva. null se la spesa ha già
+ * superato anche l'ultimo scaglione (aperto, senza soglia superiore).
+ */
+export function prossimoScaglioneMulte(
+  spesaAnnuale: number,
+  brackets: ReadonlyArray<TaxBracket>,
+): TaxBracket | null {
+  const superiori = brackets.filter((b) => b.limiteSogliaEuro > spesaAnnuale);
+  return superiori.length
+    ? superiori.reduce((min, b) => (b.limiteSogliaEuro < min.limiteSogliaEuro ? b : min))
+    : null;
 }
 
 /**
- * Residuo alle multe = prima soglia − imponibile fairplay finanziario
- * (spesaAnnuale). Positivo finché la squadra resta sotto la prima soglia,
- * negativo (già in tassazione) altrimenti.
+ * Residuo alle multe = soglia del prossimo scaglione non ancora superato −
+ * imponibile fairplay finanziario (spesaAnnuale). Per una squadra già in
+ * tassazione indica quanto manca alla fascia SUCCESSIVA (aliquota più
+ * alta), non alla prima soglia in assoluto — sempre >= 0. 0 se la spesa ha
+ * già superato anche l'ultimo scaglione (aperto, quindi senza una prossima
+ * soglia) — vedi prossimoScaglioneMulte.
  */
 export function residuoAlleMulte(
   spesaAnnuale: number,
   brackets: ReadonlyArray<TaxBracket>,
 ): number {
-  return round2(primaSogliaMulte(brackets) - spesaAnnuale);
+  const prossimo = prossimoScaglioneMulte(spesaAnnuale, brackets);
+  return prossimo === null ? 0 : round2(prossimo.limiteSogliaEuro - spesaAnnuale);
+}
+
+const ORDINALI_SCAGLIONE = [
+  'primo',
+  'secondo',
+  'terzo',
+  'quarto',
+  'quinto',
+  'sesto',
+  'settimo',
+  'ottavo',
+  'nono',
+  'decimo',
+];
+
+/**
+ * Etichetta del residuo alle multe. Verso il primo scaglione (nessuna multa
+ * ancora scattata) resta il generico "Residuo alle multe"; una volta
+ * superato indica esplicitamente a quale scaglione si riferisce (es.
+ * "Residuo al secondo scaglione di multe") — scaglioneIndex è il
+ * bracketIndex (1-based) del TaxBracket restituito da
+ * prossimoScaglioneMulte, null se non ce n'è uno (già oltre l'ultimo).
+ */
+export function etichettaResiduoMulte(scaglioneIndex: number | null): string {
+  if (scaglioneIndex === null) {
+    return 'Scaglione massimo di multe raggiunto';
+  }
+  if (scaglioneIndex === 1) {
+    return 'Residuo alle multe';
+  }
+  const ordinale = ORDINALI_SCAGLIONE[scaglioneIndex - 1] ?? `${scaglioneIndex}°`;
+  return `Residuo al ${ordinale} scaglione di multe`;
+}
+
+/** true se la squadra ha già superato il primo scaglione (è già in tassazione) — usato per colorare il residuo come "attenzione" */
+export function giaInTassazione(scaglioneIndex: number | null): boolean {
+  return scaglioneIndex !== 1;
 }
 
 /** Valore rosa = somma dei V.A. di tutti i giocatori della squadra */

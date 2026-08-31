@@ -5,8 +5,10 @@ import {
   preparaRescissione,
   preparaRinnovo,
   preparaTrasferimento,
-  primaSogliaMulte,
+  prossimoScaglioneMulte,
   residuoAlleMulte,
+  etichettaResiduoMulte,
+  giaInTassazione,
 } from './finance-calculator';
 
 /** Documento finanze completo di partenza, coi soli campi che servono ai test */
@@ -135,18 +137,36 @@ describe('finance-calculator: operazioni annullabili', () => {
     });
   });
 
-  describe('primaSogliaMulte / residuoAlleMulte', () => {
-    it('prende la soglia più bassa tra gli scaglioni', () => {
-      expect(primaSogliaMulte(DEFAULT_TAX_BRACKETS)).toBe(437.15);
+  describe('prossimoScaglioneMulte / residuoAlleMulte / etichettaResiduoMulte', () => {
+    it('sotto la prima soglia, il prossimo scaglione è il primo in assoluto (etichetta generica, non ancora in tassazione)', () => {
+      expect(prossimoScaglioneMulte(300, DEFAULT_TAX_BRACKETS)?.bracketIndex).toBe(1);
+      expect(prossimoScaglioneMulte(300, DEFAULT_TAX_BRACKETS)?.limiteSogliaEuro).toBe(437.15);
+      expect(residuoAlleMulte(300, DEFAULT_TAX_BRACKETS)).toBe(137.15);
+      expect(etichettaResiduoMulte(1)).toBe('Residuo alle multe');
+      expect(giaInTassazione(1)).toBe(false);
     });
 
-    it('è positivo sotto soglia e negativo oltre soglia', () => {
-      expect(residuoAlleMulte(300, DEFAULT_TAX_BRACKETS)).toBe(137.15);
-      expect(residuoAlleMulte(500, DEFAULT_TAX_BRACKETS)).toBe(-62.85);
+    it('già oltre una o più soglie: il prossimo è lo scaglione della fascia successiva, non il primo (etichetta e stato "in tassazione")', () => {
+      // 500 ha già superato gli scaglioni 1 (437.15) e 2 (482.37): il
+      // prossimo non ancora superato è il 3° (527.60), non più il primo.
+      const scaglione = prossimoScaglioneMulte(500, DEFAULT_TAX_BRACKETS);
+      expect(scaglione?.bracketIndex).toBe(3);
+      expect(scaglione?.limiteSogliaEuro).toBe(527.6);
+      expect(residuoAlleMulte(500, DEFAULT_TAX_BRACKETS)).toBe(27.6);
+      expect(etichettaResiduoMulte(3)).toBe('Residuo al terzo scaglione di multe');
+      expect(giaInTassazione(3)).toBe(true);
+    });
+
+    it('oltre anche l\'ultimo scaglione (aperto): nessuno scaglione successivo, residuo zero, comunque "in tassazione"', () => {
+      expect(prossimoScaglioneMulte(700, DEFAULT_TAX_BRACKETS)).toBeNull();
+      expect(residuoAlleMulte(700, DEFAULT_TAX_BRACKETS)).toBe(0);
+      expect(etichettaResiduoMulte(null)).toBe('Scaglione massimo di multe raggiunto');
+      expect(giaInTassazione(null)).toBe(true);
     });
 
     it('è zero se non ci sono scaglioni configurati', () => {
-      expect(primaSogliaMulte([])).toBe(0);
+      expect(prossimoScaglioneMulte(300, [])).toBeNull();
+      expect(residuoAlleMulte(300, [])).toBe(0);
     });
   });
 });

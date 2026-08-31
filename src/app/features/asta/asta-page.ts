@@ -16,7 +16,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { AstaStato, Team, ValutazioneSvincolato } from '../../core/models';
-import { residuoAlleMulte } from '../../core/finance-calculator';
+import { prossimoScaglioneMulte, round2 } from '../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
 import { slugify } from '../../core/text-utils';
 import { TeamNotesService } from '../../core/services/team-notes.service';
@@ -828,14 +828,19 @@ export class AstaPage {
                   this.financeService.seasonFinance$(team.id),
                   this.financeService.taxBrackets$,
                 ]).pipe(
-                  map(([players, finance, brackets]) => ({
-                    id: team.id,
-                    name: team.name,
-                    giocatori: players.length,
-                    bilancio: finance?.bilancioSocietarioStagionale ?? 0,
-                    residuoAlleMulte: residuoAlleMulte(finance?.spesaAnnuale ?? 0, brackets),
-                    acquisti: estraiAcquistiAsta(players),
-                  })),
+                  map(([players, finance, brackets]) => {
+                    const spesaAnnuale = finance?.spesaAnnuale ?? 0;
+                    const scaglione = prossimoScaglioneMulte(spesaAnnuale, brackets);
+                    return {
+                      id: team.id,
+                      name: team.name,
+                      giocatori: players.length,
+                      bilancio: finance?.bilancioSocietarioStagionale ?? 0,
+                      residuoAlleMulte: scaglione ? round2(scaglione.limiteSogliaEuro - spesaAnnuale) : 0,
+                      prossimoScaglioneIndex: scaglione?.bracketIndex ?? null,
+                      acquisti: estraiAcquistiAsta(players),
+                    };
+                  }),
                 ),
               ),
             )

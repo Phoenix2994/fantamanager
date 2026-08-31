@@ -1,6 +1,7 @@
 import { Component, input, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { etichettaResiduoMulte, giaInTassazione } from '../../core/finance-calculator';
 import { Player } from '../../core/models';
 
 /** Acquisto effettuato durante l'asta */
@@ -15,8 +16,10 @@ export interface TeamStatAsta {
   name: string;
   giocatori: number;
   bilancio: number;
-  /** prima soglia scaglioni − imponibile fairplay finanziario (spesaAnnuale) */
+  /** soglia del prossimo scaglione non ancora superato − imponibile fairplay finanziario (spesaAnnuale) */
   residuoAlleMulte: number;
+  /** bracketIndex (1-based) dello scaglione a cui si riferisce residuoAlleMulte; null se già oltre l'ultimo scaglione configurato */
+  prossimoScaglioneIndex: number | null;
   /** giocatori acquistati durante l'asta con il costo di ciascuno */
   acquisti: AcquistoAsta[];
 }
@@ -97,9 +100,11 @@ export function estraiAcquistiAsta(players: Player[]): AcquistoAsta[] {
                   <span>{{ totaleAcquisti(t) | number: '1.2-2' }} €</span>
                 </div>
               }
-              <div class="acquisto residuo" [class.negative]="t.residuoAlleMulte < 0">
-                <span>Residuo alle multe</span>
-                <span>{{ t.residuoAlleMulte | number: '1.2-2' }} €</span>
+              <div class="acquisto residuo" [class.negative]="residuoInTassazione(t.prossimoScaglioneIndex)">
+                <span>{{ etichettaResiduo(t.prossimoScaglioneIndex) }}</span>
+                @if (t.prossimoScaglioneIndex !== null) {
+                  <span>{{ t.residuoAlleMulte | number: '1.2-2' }} €</span>
+                }
               </div>
             </div>
           }
@@ -294,5 +299,13 @@ export class AstaStatsPanel {
 
   totaleAcquisti(t: TeamStatAsta): number {
     return t.acquisti.reduce((somma, a) => somma + a.prezzo, 0);
+  }
+
+  etichettaResiduo(prossimoScaglioneIndex: number | null): string {
+    return etichettaResiduoMulte(prossimoScaglioneIndex);
+  }
+
+  residuoInTassazione(prossimoScaglioneIndex: number | null): boolean {
+    return giaInTassazione(prossimoScaglioneIndex);
   }
 }
