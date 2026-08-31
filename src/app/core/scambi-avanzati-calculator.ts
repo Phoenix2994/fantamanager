@@ -338,8 +338,8 @@ export function calcolaScambioAvanzato(
   const [bigger, smaller, biggerÈA] =
     latoA.peso >= latoB.peso ? ([latoA, latoB, true] as const) : ([latoB, latoA, false] as const);
 
-  const biggerFinal = pass1Bigger(bigger, smaller);
-  const smallerFinal = pass1Smaller(bigger, smaller);
+  const biggerFinal = pass1Bigger(bigger, smaller, valoreBonusDi);
+  const smallerFinal = pass1Smaller(bigger, smaller, valoreBonusDi);
 
   let risultatiA = biggerÈA ? biggerFinal : smallerFinal;
   let risultatiB = biggerÈA ? smallerFinal : biggerFinal;
@@ -375,14 +375,26 @@ export function calcolaScambioAvanzato(
 /**
  * Lato "più pesante": di norma invariato, a meno che il divario di bonus
  * altrui non ribalti il confronto — corrisponde a getFirstTeam.
+ *
+ * Questo ramo scatta SOLO grazie al bonus proprio del lato "bigger": a
+ * parità di bonus tra i due lati, un peso maggiore resta sempre invariato
+ * per costruzione (bigger.peso >= smaller.peso). Il divario è quindi
+ * interamente "bonus atteso da questo lato", non un surplus di valore
+ * puro — va perciò attribuito a CHI il bonus lo realizza davvero
+ * (proporzionalmente al proprio bonus), non spalmato per quotazione come
+ * farebbe un surplus di valore (vedi distribuisciPerBonusProprio).
  */
-function pass1Bigger(bigger: LatoAggregato, smaller: LatoAggregato): RivalutazioneAvanzata[] {
+function pass1Bigger(
+  bigger: LatoAggregato,
+  smaller: LatoAggregato,
+  valoreBonusDi: (b: BonusAtteso) => number,
+): RivalutazioneAvanzata[] {
   const invariato = bigger.peso + smaller.bonusTotale > smaller.peso + bigger.bonusTotale;
   if (invariato) {
     return bigger.giocatori.map((g) => ({ giocatore: g, valorePrima: g.valoreAttuale, valoreDopo: g.valoreAttuale }));
   }
   const divarioValore = smaller.peso + bigger.bonusTotale - bigger.peso - smaller.bonusTotale;
-  return distribuisciPerQuotazione(bigger.giocatori, divarioValore);
+  return distribuisciPerBonusProprio(bigger.giocatori, divarioValore, bigger.bonusTotale, valoreBonusDi);
 }
 
 /**
@@ -390,7 +402,11 @@ function pass1Bigger(bigger: LatoAggregato, smaller: LatoAggregato): Rivalutazio
  * Due surplus separati (valore per QI, bonus per bonus proprio O per QI a
  * seconda del confronto tra i bonus dei due lati — vedi intestazione file).
  */
-function pass1Smaller(bigger: LatoAggregato, smaller: LatoAggregato): RivalutazioneAvanzata[] {
+function pass1Smaller(
+  bigger: LatoAggregato,
+  smaller: LatoAggregato,
+  valoreBonusDi: (b: BonusAtteso) => number,
+): RivalutazioneAvanzata[] {
   const divarioValore = bigger.peso - smaller.peso;
   const divarioBonus = smaller.bonusTotale - bigger.bonusTotale;
   const bonusPropioVince = smaller.bonusTotale > bigger.bonusTotale;
@@ -400,7 +416,7 @@ function pass1Smaller(bigger: LatoAggregato, smaller: LatoAggregato): Rivalutazi
 
     let quotaBonus: number;
     if (bonusPropioVince) {
-      const bonusProprio = sommaBonus(g, valoreBonusAtteso);
+      const bonusProprio = sommaBonus(g, valoreBonusDi);
       quotaBonus = smaller.bonusTotale > 0 ? (divarioBonus * bonusProprio) / smaller.bonusTotale : 0;
     } else {
       quotaBonus = smaller.quotTotale > 0 ? (divarioBonus * (g.quotazioneAttuale || 0)) / smaller.quotTotale : 0;
@@ -415,14 +431,16 @@ function pass1Smaller(bigger: LatoAggregato, smaller: LatoAggregato): Rivalutazi
   });
 }
 
-/** Ripartisce un divario (sempre >= 0 se questo ramo è raggiunto) sui giocatori per quotazione iniziale */
-function distribuisciPerQuotazione(
+/** Ripartisce un divario (sempre >= 0 se questo ramo è raggiunto) sui giocatori per il bonus PROPRIO di ciascuno — vedi pass1Bigger */
+function distribuisciPerBonusProprio(
   giocatori: readonly GiocatoreAvanzato[],
   divario: number,
+  bonusTotale: number,
+  valoreBonusDi: (b: BonusAtteso) => number,
 ): RivalutazioneAvanzata[] {
-  const pesoTotale = giocatori.reduce((s, g) => s + (g.quotazioneAttuale || 0), 0);
   return giocatori.map((g) => {
-    const quota = pesoTotale > 0 ? (divario * (g.quotazioneAttuale || 0)) / pesoTotale : 0;
+    const bonusProprio = sommaBonus(g, valoreBonusDi);
+    const quota = bonusTotale > 0 ? (divario * bonusProprio) / bonusTotale : 0;
     return {
       giocatore: g,
       valorePrima: g.valoreAttuale,
@@ -529,7 +547,8 @@ function giocatoreSenzaBonus(g: GiocatoreAvanzato): GiocatoreAvanzato {
 /**
  * Ripartisce un eccesso (sempre >= 0) tra TUTTI i giocatori del lato, in
  * proporzione alla loro quotazione iniziale — stessa meccanica di
- * distribuisciPerQuotazione, ma qui aggiunta SOPRA un valore già calcolato
+ * distribuisciPerBonusProprio, ma per quotazione anziché bonus e aggiunta
+ * SOPRA un valore già calcolato
  * invece che a partire dal V.A. grezzo.
  *
  * Include anche i giocatori che hanno già raggiunto il tetto: possono

@@ -169,12 +169,16 @@ describe('scambi-avanzati-calculator', () => {
     it('lato con due giocatori: il compagno assorbe la quota di eccesso per quotazione, il totale del lato resta invariato', () => {
       // Lato A: X (val 1€, quot 1, bonus atteso 2 gol×3€=6€) + Z (val 20€,
       // quot 1, nessun bonus). Lato B: Y (val 21€, quot 21), nessun bonus.
-      // Senza tetto: X=4€, Z=23€ (verificato a mano). Il tetto di X è 2×1=2€
-      // (il suo valore "senza bonus" resta 1€): eccesso 2€, ridistribuito
-      // per quotazione tra X e Z (quotazione 1 e 1 → metà ciascuno):
-      // X = 2 + 1 = 3€, Z = 23 + 1 = 24€. Il totale del lato A (27€) è
-      // identico con o senza tetto: il tetto sposta valore da un giocatore
-      // all'altro dello stesso lato, non lo fa sparire.
+      // Senza tetto: il divario di questo passaggio (6€, tutto dovuto al
+      // bonus di X) va per intero a X, che è l'unico ad averlo — X=7€,
+      // Z resta a 20€ (verificato a mano, bug reale corretto: prima veniva
+      // spalmato per quotazione anche su Z, che non aveva realizzato nulla).
+      // Il tetto di X è 2×1=2€ (il suo valore "senza bonus" resta 1€):
+      // eccesso 7-2=5€, ridistribuito per quotazione tra X e Z (quotazione 1
+      // e 1 → metà ciascuno): X = 2 + 2,5 = 4,5€, Z = 20 + 2,5 = 22,5€. Il
+      // totale del lato A (27€) è identico con o senza tetto: il tetto
+      // sposta valore da un giocatore all'altro dello stesso lato, non lo fa
+      // sparire.
       const x: GiocatoreAvanzato = {
         id: 'x2',
         name: 'X2',
@@ -206,16 +210,65 @@ describe('scambi-avanzati-calculator', () => {
 
       const senzaTetto = calcolaScambioAvanzato([x, z], [y], 0, 0, true);
       const trovaSenza = (id: string) => senzaTetto.risultati.find((r) => r.giocatore.id === id)?.valoreDopo ?? 0;
-      expect(trovaSenza('x2')).toBeCloseTo(4, 2);
-      expect(trovaSenza('z2')).toBeCloseTo(23, 2);
+      expect(trovaSenza('x2')).toBeCloseTo(7, 2);
+      expect(trovaSenza('z2')).toBeCloseTo(20, 2);
 
       const conTetto = calcolaScambioAvanzatoConTetto([x, z], [y], 0, 0, true);
       expect(conTetto.errore).toBeNull();
       const trova = (id: string) => conTetto.risultati.find((r) => r.giocatore.id === id)?.valoreDopo;
-      expect(trova('x2')).toBeCloseTo(3, 2);
-      expect(trova('z2')).toBeCloseTo(24, 2);
+      expect(trova('x2')).toBeCloseTo(4.5, 2);
+      expect(trova('z2')).toBeCloseTo(22.5, 2);
       expect(trova('y2')).toBeCloseTo(21, 2);
       expect((trova('x2') ?? 0) + (trova('z2') ?? 0)).toBeCloseTo(trovaSenza('x2') + trovaSenza('z2'), 2);
+    });
+
+    it('lato "più pesante" che diventa tale solo per il bonus: il compagno senza bonus non deve muoversi (bug reale segnalato dalla lega)', () => {
+      // Scambio reale segnalato: Pinamonti (11,9€, quot 12, bonus gol) e
+      // Thuram K. (12,7€, quot 10, bonus gol) del lato A, contro Butez
+      // (14,8€, quot 16) del lato B. Simulando 20 gol di Thuram K. a 1€
+      // l'evento (0 per Pinamonti), il lato A pesa di più anche a bonus
+      // zero, quindi la revisione del passaggio 1 dipende SOLO dal bonus di
+      // Thuram K.: prima del fix veniva spalmata per quotazione su
+      // entrambi (17,46€ e 17,34€, Pinamonti compreso pur non avendo
+      // segnato nulla); ora va per intero a chi il bonus lo realizza, sotto
+      // al tetto del raddoppio (25,4€) quindi senza alcuno sconfinamento.
+      const pinamonti: GiocatoreAvanzato = {
+        id: 'pinamonti',
+        name: 'PINAMONTI',
+        ruolo: 'A',
+        valoreAttuale: 11.9,
+        quotazioneAttuale: 12,
+        quotazioneFinale: 12,
+        tipoContratto: 'definitivo',
+        bonus: [{ id: 'bp', tipo: 'gol', eventiAttesi: 0, eventiVerificati: 0, rewardPerEvento: 1 }],
+      };
+      const thuramK: GiocatoreAvanzato = {
+        id: 'thuram-k',
+        name: 'THURAM K.',
+        ruolo: 'C',
+        valoreAttuale: 12.7,
+        quotazioneAttuale: 10,
+        quotazioneFinale: 10,
+        tipoContratto: 'definitivo',
+        bonus: [{ id: 'bt', tipo: 'gol', eventiAttesi: 0, eventiVerificati: 20, rewardPerEvento: 1 }],
+      };
+      const butez: GiocatoreAvanzato = {
+        id: 'butez',
+        name: 'BUTEZ',
+        ruolo: 'Por',
+        valoreAttuale: 14.8,
+        quotazioneAttuale: 16,
+        quotazioneFinale: 16,
+        tipoContratto: 'definitivo',
+      };
+
+      // false = ricalcolo sui bonus REALIZZATI (come fa "Simula cambio valori")
+      const risultato = calcolaScambioAvanzatoConTetto([pinamonti, thuramK], [butez], 0, 0, false);
+      expect(risultato.errore).toBeNull();
+      const trova = (id: string) => risultato.risultati.find((r) => r.giocatore.id === id)?.valoreDopo;
+      expect(trova('pinamonti')).toBeCloseTo(11.9, 2);
+      expect(trova('thuram-k')).toBeCloseTo(22.9, 2);
+      expect(trova('butez')).toBeCloseTo(14.8, 2);
     });
   });
 });
