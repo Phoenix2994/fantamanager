@@ -43,7 +43,7 @@
         min="0"
         step="0.5"
         placeholder="attuale"
-        [value]="page.simOverrides()[playerId]?.quotazioneFinale ?? ''"
+        [value]="page.terminiSimulati(playerId).quotazioneFinale"
         (input)="page.impostaSimQuotazioneFinale(playerId, $any($event.target).value)"
       />
     </mat-form-field>

@@ -438,16 +438,25 @@ export class ScambiAvanzatoPage {
     this.simOverrides.set({ ...this.simOverrides(), [playerId]: { ...this.simOverrides()[playerId], riscattato } });
   }
 
-  /** Quotazione finale simulata; vuota = usa quella reale (già la quotazione attuale al momento della selezione) */
+  /**
+   * Quotazione finale simulata; il campo è prevalorizzato con quella reale
+   * (vedi terminiSimulati). Un campo momentaneamente vuoto (mentre l'utente
+   * cancella la cifra per scriverne un'altra) NON tocca la bozza: se
+   * scrivessimo subito "nessuna ipotesi" qui, il valore mostrato tornerebbe
+   * a quello reale a metà digitazione, impedendo di fatto la modifica.
+   */
   impostaSimQuotazioneFinale(playerId: string, valore: string): void {
-    const attuale = { ...this.simOverrides()[playerId] };
-    const numero = valore === '' ? NaN : Number(valore);
-    if (Number.isNaN(numero)) {
-      delete attuale.quotazioneFinale;
-    } else {
-      attuale.quotazioneFinale = numero;
+    if (valore === '') {
+      return;
     }
-    this.simOverrides.set({ ...this.simOverrides(), [playerId]: attuale });
+    const numero = Number(valore);
+    if (Number.isNaN(numero)) {
+      return;
+    }
+    this.simOverrides.set({
+      ...this.simOverrides(),
+      [playerId]: { ...this.simOverrides()[playerId], quotazioneFinale: numero },
+    });
   }
 
   /**
