@@ -25,7 +25,7 @@ export interface DettagliContrattoSheetData {
   selector: 'app-dettagli-contratto-sheet',
   imports: [MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule],
   templateUrl: './dettagli-contratto-sheet.html',
-  styleUrls: ['./scambi-avanzato-page.scss'],
+  styleUrls: ['./scambi-page.scss', './scambi-avanzato-page.scss'],
 })
 export class DettagliContrattoSheet {
   private readonly sheetRef = inject(MatBottomSheetRef<DettagliContrattoSheet>);
