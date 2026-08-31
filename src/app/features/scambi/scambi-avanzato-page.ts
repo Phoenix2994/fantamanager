@@ -450,7 +450,17 @@ export class ScambiAvanzatoPage {
     this.simOverrides.set({ ...this.simOverrides(), [playerId]: attuale });
   }
 
-  impostaSimEventiVerificati(playerId: string, bonusId: string, eventiVerificati: number): void {
+  /**
+   * Legge la stringa grezza (non valueAsNumber): un input number mobile può
+   * emettere un evento con valore vuoto mentre l'utente sta ancora digitando
+   * (es. in blur sul tastierino) — se coercizzato subito a 0 sovrascriverebbe
+   * silenziosamente il valore appena inserito, vedi impostaSimQuotazioneFinale.
+   */
+  impostaSimEventiVerificati(playerId: string, bonusId: string, valore: string): void {
+    if (valore === '') {
+      return;
+    }
+    const eventiVerificati = Math.max(0, Math.round(Number(valore) || 0));
     const bonusBase = this.terminiSimulati(playerId).bonus ?? [];
     const bonusAggiornato = bonusBase.map((b) => (b.id === bonusId ? { ...b, eventiVerificati } : b));
     this.simOverrides.set({

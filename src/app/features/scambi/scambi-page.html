@@ -486,7 +486,7 @@
                                       type="number"
                                       min="0"
                                       [value]="$any(bonusConDraft(s, pid, b.id))?.eventiVerificati ?? $any(b).eventiVerificati"
-                                      (input)="impostaDraftEventiVerificati(s, pid, b.id, $any($event.target).valueAsNumber || 0)"
+                                      (input)="impostaDraftEventiVerificati(s, pid, b.id, $any($event.target).value)"
                                     />
                                   </mat-form-field>
                                 } @else {

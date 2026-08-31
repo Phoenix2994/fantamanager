@@ -678,7 +678,17 @@ export class ScambiPage {
     return this.terminiConDraft(scambio, playerId)?.bonus?.find((b) => b.id === bonusId);
   }
 
-  impostaDraftEventiVerificati(scambio: Scambio, playerId: string, bonusId: string, eventiVerificati: number): void {
+  /**
+   * Legge la stringa grezza (non valueAsNumber): un input number mobile può
+   * emettere un evento con valore vuoto mentre l'utente sta ancora digitando
+   * — se coercizzato subito a 0 sovrascriverebbe silenziosamente il valore
+   * appena inserito, vedi impostaDraftQuotazioneFinale.
+   */
+  impostaDraftEventiVerificati(scambio: Scambio, playerId: string, bonusId: string, valore: string): void {
+    if (valore === '') {
+      return;
+    }
+    const eventiVerificati = Math.max(0, Math.round(Number(valore) || 0));
     const bonusBase = this.terminiConDraft(scambio, playerId)?.bonus ?? [];
     const bonusAggiornato = bonusBase.map((b) => (b.id === bonusId ? { ...b, eventiVerificati } : b));
     this.draftTermini.set({

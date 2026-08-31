@@ -154,7 +154,7 @@
                 type="number"
                 min="0"
                 [value]="$any(page.bonusSimulato(playerId, b.id))?.eventiVerificati ?? 0"
-                (input)="page.impostaSimEventiVerificati(playerId, b.id, $any($event.target).valueAsNumber || 0)"
+                (input)="page.impostaSimEventiVerificati(playerId, b.id, $any($event.target).value)"
               />
             </mat-form-field>
           } @else {
