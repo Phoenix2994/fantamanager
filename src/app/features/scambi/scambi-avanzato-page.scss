@@ -1,6 +1,6 @@
 .torna-link {
   align-self: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .picker-header {
@@ -24,15 +24,59 @@
   color: var(--mat-sys-primary);
 }
 
-/* ---------- Pannello dettagli contratto/bonus ---------- */
-.dettagli-contratto {
-  margin: 4px 0 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--mat-sys-surface-container-high);
+/* ---------- Riepilogo compatto nella riga (apre il drawer dettagli) ---------- */
+.riepilogo-mini {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  width: 100%;
+  margin: 2px 0 6px;
+  padding: 4px 8px 4px 34px; // allineato sotto ai chip di ruolo della riga sopra
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  .bonus-chip-mini.muted {
+    background: transparent;
+    font-style: italic;
+  }
+}
+
+/* ---------- Drawer dettagli contratto/bonus (bottom sheet) ---------- */
+.sheet-content {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 4px 4px 12px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.sheet-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .riga-campi {

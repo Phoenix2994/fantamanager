@@ -4,6 +4,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -73,6 +74,7 @@ interface RiepilogoGiocatore {
     MatButtonModule,
     MatCardModule,
     MatChipsModule,
+    MatExpansionModule,
     MatFormFieldModule,
     MatInputModule,
     MatIconModule,
@@ -104,6 +106,17 @@ export class ScambiPage {
   });
   /** Squadra di cui l'utente corrente è proprietario, se ha fatto login come squadra */
   readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
+  /**
+   * TEMPORANEO: solo permesso FRONTEND (nessuna regola Firestore toccata) per
+   * far provare a Nicaragua Pacamara Gigante il pulsante "Trattativa avanzata",
+   * normalmente visibile solo agli admin — vedi puoVedereAvanzato(). Da
+   * togliere quando le prove sono finite (basta rimuovere questo blocco e
+   * l'uso di TEAM_ID_TEST_AVANZATO in puoVedereAvanzato).
+   */
+  private readonly TEAM_ID_TEST_AVANZATO = 'nicaragua-pacamara-gigante';
+  readonly puoVedereAvanzato = computed(
+    () => this.isAdmin() || this.myTeam()?.id === this.TEAM_ID_TEST_AVANZATO,
+  );
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
   readonly trattative = toSignal(this.scambiService.scambi$, { initialValue: [] as Scambio[] });
   /** Elenco visibile: le trattative annullate restano nello storico/undo ma non intasano questa lista */
@@ -120,6 +133,9 @@ export class ScambiPage {
   readonly pagatore = signal<LatoScambio | null>(null);
   /** Pannello "Dettagli rinnovo" nell'anteprima: chiuso di default, specie utile su mobile */
   readonly mostraDettagliRinnovo = signal(false);
+  /** Rosa espansa/richiusa (per liberare spazio dopo aver scelto i giocatori) — aperta di default */
+  readonly rosaEspansaA = signal(true);
+  readonly rosaEspansaB = signal(true);
 
   /** Id delle trattative espanse nell'elenco: chiuse di default, mostrano solo squadre + stato */
   readonly trattativeEspanse = signal<Set<string>>(new Set());
@@ -264,6 +280,13 @@ export class ScambiPage {
         ? current.filter((id) => id !== playerId)
         : [...current, playerId],
     );
+  }
+
+  rosaEspansa(lato: LatoScambio): boolean {
+    return (lato === 'A' ? this.rosaEspansaA : this.rosaEspansaB)();
+  }
+  setRosaEspansa(lato: LatoScambio, espansa: boolean): void {
+    (lato === 'A' ? this.rosaEspansaA : this.rosaEspansaB).set(espansa);
   }
 
   conguaglioChange(value: number | null): void {

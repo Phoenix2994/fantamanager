@@ -15,7 +15,7 @@
         {{ editingId() ? 'Modifica trattativa' : 'Nuova trattativa' }}
       </h2>
 
-      @if (isAdmin()) {
+      @if (puoVedereAvanzato()) {
         <a matButton="tonal" routerLink="/scambi/avanzato" class="avanzato-link">
           <mat-icon>handshake</mat-icon>
           Trattativa avanzata (prestiti e bonus)
@@ -83,33 +83,49 @@
               @if ((lato === 'A' ? opzioniA() : opzioniB()).length === 0) {
                 <p class="vuoto">Seleziona una squadra per vedere la rosa.</p>
               } @else {
-                <ul class="player-list">
-                  @for (p of lato === 'A' ? opzioniA() : opzioniB(); track p.id) {
-                    <li>
-                      <label
-                        class="player-row"
-                        [class.selected]="(lato === 'A' ? selezioneA() : selezioneB()).includes(p.id)"
-                      >
-                        <input
-                          type="checkbox"
-                          [checked]="(lato === 'A' ? selezioneA() : selezioneB()).includes(p.id)"
-                          (change)="toggleGiocatore(lato, p.id)"
-                        />
-                        <span class="chips">
-                          @for (r of rolesOf(p.ruolo); track r) {
-                            <span
-                              class="chip small"
-                              [style.border-color]="colorFor(r)"
-                              [style.color]="colorFor(r)"
-                            >{{ r }}</span>
-                          }
-                        </span>
-                        <span class="nome">{{ p.name }}</span>
-                        <span class="valore">{{ p.valoreAttuale | number: '1.0-1' }} €</span>
-                      </label>
-                    </li>
-                  }
-                </ul>
+                <mat-expansion-panel
+                  class="rosa-panel"
+                  [expanded]="rosaEspansa(lato)"
+                  (opened)="setRosaEspansa(lato, true)"
+                  (closed)="setRosaEspansa(lato, false)"
+                >
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>Rosa</mat-panel-title>
+                    <mat-panel-description>
+                      {{ (lato === 'A' ? selezioneA() : selezioneB()).length }} selezionat{{
+                        (lato === 'A' ? selezioneA() : selezioneB()).length === 1 ? 'o' : 'i'
+                      }}
+                      · {{ (lato === 'A' ? opzioniA() : opzioniB()).length }} giocatori
+                    </mat-panel-description>
+                  </mat-expansion-panel-header>
+                  <ul class="player-list">
+                    @for (p of lato === 'A' ? opzioniA() : opzioniB(); track p.id) {
+                      <li>
+                        <label
+                          class="player-row"
+                          [class.selected]="(lato === 'A' ? selezioneA() : selezioneB()).includes(p.id)"
+                        >
+                          <input
+                            type="checkbox"
+                            [checked]="(lato === 'A' ? selezioneA() : selezioneB()).includes(p.id)"
+                            (change)="toggleGiocatore(lato, p.id)"
+                          />
+                          <span class="chips">
+                            @for (r of rolesOf(p.ruolo); track r) {
+                              <span
+                                class="chip small"
+                                [style.border-color]="colorFor(r)"
+                                [style.color]="colorFor(r)"
+                              >{{ r }}</span>
+                            }
+                          </span>
+                          <span class="nome">{{ p.name }}</span>
+                          <span class="valore">{{ p.valoreAttuale | number: '1.0-1' }} €</span>
+                        </label>
+                      </li>
+                    }
+                  </ul>
+                </mat-expansion-panel>
                 <p class="totale-lato">
                   Selezionati:
                   {{

@@ -87,6 +87,43 @@
   }
 }
 
+/* La rosa vive già dentro il riquadro .picker: il pannello a scomparsa non
+   deve aggiungere un'altra "scatola" (niente ombra/sfondo propri). Condiviso
+   tra scambi semplici e avanzati. */
+.rosa-panel {
+  background: transparent;
+  box-shadow: none !important;
+  margin-top: 8px;
+
+  &::ng-deep .mat-expansion-panel-header {
+    padding: 8px 4px;
+    height: auto;
+
+    .mat-content {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  &::ng-deep .mat-expansion-panel-header-title {
+    margin: 0;
+  }
+
+  &::ng-deep .mat-expansion-panel-header-description {
+    margin: 2px 0 0;
+    flex: none;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  &::ng-deep .mat-expansion-panel-body {
+    padding: 0 0 8px;
+  }
+
+  .player-list {
+    margin-top: 4px;
+  }
+}
+
 .picker-logo {
   width: 32px;
   height: 32px;

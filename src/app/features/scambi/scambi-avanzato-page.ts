@@ -1,8 +1,10 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -40,6 +42,7 @@ import {
 import { roleColor, splitRoles } from '../../core/roles';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
+import { DettagliContrattoSheet } from './dettagli-contratto-sheet';
 
 /** Lato del form: A o B */
 type Lato = 'A' | 'B';
@@ -63,6 +66,7 @@ let contatoreBonusId = 0;
     DecimalPipe,
     MatButtonModule,
     MatCheckboxModule,
+    MatExpansionModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -80,6 +84,7 @@ export class ScambiAvanzatoPage {
   private readonly scambiService = inject(ScambiService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
+  private readonly bottomSheet = inject(MatBottomSheet);
 
   readonly leagueName = environment.leagueName;
   readonly LATI: readonly Lato[] = ['A', 'B'];
@@ -104,7 +109,9 @@ export class ScambiAvanzatoPage {
   readonly termini = signal<Record<string, TerminiGiocatoreAvanzato>>({});
   readonly conguaglioA = signal(0);
   readonly conguaglioB = signal(0);
-  readonly pannelliAperti = signal<ReadonlySet<string>>(new Set());
+  /** Rosa espansa/richiusa (per liberare spazio dopo aver scelto i giocatori) — aperta di default */
+  readonly rosaEspansaA = signal(true);
+  readonly rosaEspansaB = signal(true);
   /** id della bozza in correzione (via ?edit=), null per una trattativa nuova */
   readonly editingId = signal<string | null>(null);
 
@@ -146,10 +153,6 @@ export class ScambiAvanzatoPage {
       mappaTermini[t.playerId] = t;
     }
     this.termini.set(mappaTermini);
-    // Apre subito i pannelli dettaglio di tutti i giocatori già selezionati,
-    // altrimenti in modifica sembrerebbero senza termini finché non si clicca
-    // manualmente la freccia di ciascuno.
-    this.pannelliAperti.set(new Set(Object.keys(mappaTermini)));
   }
 
   /** Esce dalla modalità modifica senza salvare, tornando a una trattativa nuova vuota */
@@ -194,6 +197,13 @@ export class ScambiAvanzatoPage {
     return (lato === 'A' ? this.selezioneA() : this.selezioneB()).includes(playerId);
   }
 
+  rosaEspansa(lato: Lato): boolean {
+    return (lato === 'A' ? this.rosaEspansaA : this.rosaEspansaB)();
+  }
+  setRosaEspansa(lato: Lato, espansa: boolean): void {
+    (lato === 'A' ? this.rosaEspansaA : this.rosaEspansaB).set(espansa);
+  }
+
   toggleGiocatore(lato: Lato, player: Player): void {
     const sel = lato === 'A' ? this.selezioneA : this.selezioneB;
     const attuale = sel();
@@ -212,8 +222,16 @@ export class ScambiAvanzatoPage {
           quotazioneFinale: player.quotazioneAttuale,
         },
       });
-      this.apriPannello(player.id);
+      this.apriDettagliSheet(player);
     }
+  }
+
+  /** Apre il drawer con contratto, riscatto e bonus di un giocatore già selezionato */
+  apriDettagliSheet(player: Player): void {
+    this.bottomSheet.open(DettagliContrattoSheet, {
+      data: { player, page: this },
+      panelClass: 'dettagli-contratto-sheet-panel',
+    });
   }
 
   squadraChange(lato: Lato, teamId: string): void {
@@ -232,24 +250,6 @@ export class ScambiAvanzatoPage {
       altroSig.set(null);
       (lato === 'A' ? this.selezioneB : this.selezioneA).set([]);
     }
-  }
-
-  pannelloAperto(playerId: string): boolean {
-    return this.pannelliAperti().has(playerId);
-  }
-  apriPannello(playerId: string): void {
-    const set = new Set(this.pannelliAperti());
-    set.add(playerId);
-    this.pannelliAperti.set(set);
-  }
-  togglePannello(playerId: string): void {
-    const set = new Set(this.pannelliAperti());
-    if (set.has(playerId)) {
-      set.delete(playerId);
-    } else {
-      set.add(playerId);
-    }
-    this.pannelliAperti.set(set);
   }
 
   terminiDi(playerId: string): TerminiGiocatoreAvanzato {
@@ -585,7 +585,8 @@ export class ScambiAvanzatoPage {
     }
   }
 
-  private etichettaBreve(playerId: string): string {
+  /** Etichetta sintetica del contratto pattuito, per il riepilogo compatto nella riga giocatore */
+  etichettaBreve(playerId: string): string {
     const t = this.termini()[playerId];
     if (!t || t.tipoContratto === 'definitivo') {
       return 'Definitivo';

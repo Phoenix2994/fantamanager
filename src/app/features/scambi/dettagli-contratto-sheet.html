@@ -1,0 +1,169 @@
+<div class="sheet-content">
+  <div class="sheet-header">
+    <h3>{{ player.name }}</h3>
+    <button type="button" matIconButton (click)="chiudi()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div class="riga-campi">
+    <mat-form-field appearance="fill" subscriptSizing="dynamic">
+      <mat-label>Contratto</mat-label>
+      <mat-select
+        [value]="page.terminiDi(playerId).tipoContratto"
+        (selectionChange)="page.setTipoContratto(playerId, $event.value)"
+      >
+        @for (tipo of page.TIPI_CONTRATTO; track tipo) {
+          <mat-option [value]="tipo">{{ page.etichettaContratto(tipo) }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    @if (page.terminiDi(playerId).tipoContratto !== 'definitivo') {
+      <mat-form-field appearance="fill" subscriptSizing="dynamic">
+        <mat-label>Durata (mesi)</mat-label>
+        <mat-select
+          [value]="page.terminiDi(playerId).durataPrestito"
+          (selectionChange)="page.setDurata(playerId, $event.value)"
+        >
+          @for (d of page.DURATE; track d) {
+            <mat-option [value]="d">{{ d }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+  </div>
+
+  @if (
+    page.terminiDi(playerId).tipoContratto === 'prestitoObbligo' ||
+    page.terminiDi(playerId).tipoContratto === 'prestitoDiritto'
+  ) {
+    <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-stretto">
+      <mat-label>Cifra di riscatto (€)</mat-label>
+      <input
+        matInput
+        type="number"
+        min="0"
+        step="0.5"
+        [value]="page.terminiDi(playerId).cifraRiscatto ?? 0"
+        (input)="page.setCifraRiscatto(playerId, $any($event.target).valueAsNumber)"
+      />
+    </mat-form-field>
+  }
+  @if (page.terminiDi(playerId).tipoContratto === 'prestitoDiritto') {
+    <p class="hint-campo-futuro">
+      La cifra è il prezzo pattuito per il riscatto; SE verrà davvero
+      esercitato si decide più avanti, a trattativa già confermata (o si prova
+      in anteprima con "Simula cambio valori").
+    </p>
+    @if (page.simulazioneAttiva()) {
+      <label class="checkbox-riga sim-campo">
+        <input
+          type="checkbox"
+          [checked]="!!page.terminiSimulati(playerId).riscattato"
+          (change)="page.impostaSimRiscattato(playerId, $any($event.target).checked)"
+        />
+        Simula: riscattato
+      </label>
+    }
+  }
+
+  <div class="bonus-section">
+    <p class="hint-campo-futuro">
+      Qui si fissano solo tipo e ricompensa: quanti eventi si verificheranno (o
+      se la soglia viene superata) si segna più avanti, quando succede davvero.
+    </p>
+    <div class="bonus-header">
+      <span>Aggiungi bonus:</span>
+      <div class="bonus-add-buttons">
+        @for (t of page.TIPI_BONUS_EVENTI; track t) {
+          <button type="button" matButton (click)="page.aggiungiBonusEventi(playerId, t)">
+            <mat-icon>add</mat-icon>
+            {{ t }}
+          </button>
+        }
+        @for (t of page.TIPI_BONUS_SOGLIA; track t) {
+          <button type="button" matButton (click)="page.aggiungiBonusSoglia(playerId, t)">
+            <mat-icon>add</mat-icon>
+            {{ t }} soglia
+          </button>
+        }
+      </div>
+    </div>
+
+    @for (b of page.terminiDi(playerId).bonus ?? []; track b.id) {
+      <div class="bonus-row">
+        <span class="bonus-tipo">{{ b.tipo }}</span>
+        @if (page.isBonusEventi(b)) {
+          <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+            <mat-label>€/evento</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="0.1"
+              [value]="b.rewardPerEvento"
+              (input)="page.aggiornaBonus(playerId, b.id, { rewardPerEvento: $any($event.target).valueAsNumber || 0 })"
+            />
+          </mat-form-field>
+        } @else {
+          <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+            <mat-label>Soglia</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="0.1"
+              [value]="b.soglia"
+              (input)="page.aggiornaBonus(playerId, b.id, { soglia: $any($event.target).valueAsNumber || 0 })"
+            />
+          </mat-form-field>
+          <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
+            <mat-label>Bonus fisso (€)</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="0.5"
+              [value]="b.rewardUnaTantum"
+              (input)="page.aggiornaBonus(playerId, b.id, { rewardUnaTantum: $any($event.target).valueAsNumber || 0 })"
+            />
+          </mat-form-field>
+        }
+        @if (page.simulazioneAttiva()) {
+          @if (page.isBonusEventi(b)) {
+            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini sim-campo">
+              <mat-label>Sim: eventi verificati</mat-label>
+              <input
+                matInput
+                type="number"
+                min="0"
+                [value]="$any(page.bonusSimulato(playerId, b.id))?.eventiVerificati ?? 0"
+                (input)="page.impostaSimEventiVerificati(playerId, b.id, $any($event.target).valueAsNumber || 0)"
+              />
+            </mat-form-field>
+          } @else {
+            <label class="checkbox-riga sim-campo">
+              <input
+                type="checkbox"
+                [checked]="!!$any(page.bonusSimulato(playerId, b.id))?.verificato"
+                (change)="page.impostaSimSogliaSuperata(playerId, b.id, $any($event.target).checked)"
+              />
+              Sim: superata
+            </label>
+          }
+        }
+        <button type="button" matIconButton (click)="page.rimuoviBonus(playerId, b.id)">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </div>
+    }
+  </div>
+
+  <div class="sheet-footer">
+    <button matButton="filled" type="button" (click)="chiudi()">
+      <mat-icon>check</mat-icon>
+      Fatto
+    </button>
+  </div>
+</div>

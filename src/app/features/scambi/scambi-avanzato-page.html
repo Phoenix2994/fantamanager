@@ -8,7 +8,7 @@
   </header>
 
   <main class="content">
-    <a matButton routerLink="/scambi" class="torna-link">
+    <a matButton="tonal" routerLink="/scambi" class="torna-link">
       <mat-icon>arrow_back</mat-icon>
       Torna agli scambi semplici
     </a>
@@ -80,6 +80,21 @@
               @if ((lato === 'A' ? opzioniA() : opzioniB()).length === 0) {
                 <p class="vuoto">Seleziona una squadra per vedere la rosa.</p>
               } @else {
+                <mat-expansion-panel
+                  class="rosa-panel"
+                  [expanded]="rosaEspansa(lato)"
+                  (opened)="setRosaEspansa(lato, true)"
+                  (closed)="setRosaEspansa(lato, false)"
+                >
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>Rosa</mat-panel-title>
+                    <mat-panel-description>
+                      {{ (lato === 'A' ? selezioneA() : selezioneB()).length }} selezionat{{
+                        (lato === 'A' ? selezioneA() : selezioneB()).length === 1 ? 'o' : 'i'
+                      }}
+                      · {{ (lato === 'A' ? opzioniA() : opzioniB()).length }} giocatori
+                    </mat-panel-description>
+                  </mat-expansion-panel-header>
                 <ul class="player-list">
                   @for (p of lato === 'A' ? opzioniA() : opzioniB(); track p.id) {
                     <li>
@@ -109,173 +124,28 @@
                             type="button"
                             matIconButton
                             class="panel-toggle"
-                            (click)="togglePannello(p.id); $event.preventDefault()"
+                            (click)="apriDettagliSheet(p); $event.preventDefault()"
                           >
-                            <mat-icon>{{ pannelloAperto(p.id) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                            <mat-icon>tune</mat-icon>
                           </button>
                         }
                       </label>
 
-                      @if (giocatoreSelezionato(lato, p.id) && pannelloAperto(p.id)) {
-                        <div class="dettagli-contratto">
-                          <div class="riga-campi">
-                            <mat-form-field appearance="fill" subscriptSizing="dynamic">
-                              <mat-label>Contratto</mat-label>
-                              <mat-select
-                                [value]="terminiDi(p.id).tipoContratto"
-                                (selectionChange)="setTipoContratto(p.id, $event.value)"
-                              >
-                                @for (tipo of TIPI_CONTRATTO; track tipo) {
-                                  <mat-option [value]="tipo">{{ etichettaContratto(tipo) }}</mat-option>
-                                }
-                              </mat-select>
-                            </mat-form-field>
-
-                            @if (terminiDi(p.id).tipoContratto !== 'definitivo') {
-                              <mat-form-field appearance="fill" subscriptSizing="dynamic">
-                                <mat-label>Durata (mesi)</mat-label>
-                                <mat-select
-                                  [value]="terminiDi(p.id).durataPrestito"
-                                  (selectionChange)="setDurata(p.id, $event.value)"
-                                >
-                                  @for (d of DURATE; track d) {
-                                    <mat-option [value]="d">{{ d }}</mat-option>
-                                  }
-                                </mat-select>
-                              </mat-form-field>
-                            }
-                          </div>
-
-                          @if (
-                            terminiDi(p.id).tipoContratto === 'prestitoObbligo' ||
-                            terminiDi(p.id).tipoContratto === 'prestitoDiritto'
-                          ) {
-                            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-stretto">
-                              <mat-label>Cifra di riscatto (€)</mat-label>
-                              <input
-                                matInput
-                                type="number"
-                                min="0"
-                                step="0.5"
-                                [value]="terminiDi(p.id).cifraRiscatto ?? 0"
-                                (input)="setCifraRiscatto(p.id, $any($event.target).valueAsNumber)"
-                              />
-                            </mat-form-field>
+                      @if (giocatoreSelezionato(lato, p.id)) {
+                        <button type="button" class="riepilogo-mini" (click)="apriDettagliSheet(p)">
+                          <span class="contratto-mini">{{ etichettaBreve(p.id) }}</span>
+                          @for (b of terminiDi(p.id).bonus ?? []; track b.id) {
+                            <span class="bonus-chip-mini">{{ etichettaBonusRiga(b) }}</span>
                           }
-                          @if (terminiDi(p.id).tipoContratto === 'prestitoDiritto') {
-                            <p class="hint-campo-futuro">
-                              La cifra è il prezzo pattuito per il riscatto; SE verrà davvero
-                              esercitato si decide più avanti, a trattativa già confermata (o si prova
-                              in anteprima con "Simula cambio valori").
-                            </p>
-                            @if (simulazioneAttiva()) {
-                              <label class="checkbox-riga sim-campo">
-                                <input
-                                  type="checkbox"
-                                  [checked]="!!terminiSimulati(p.id).riscattato"
-                                  (change)="impostaSimRiscattato(p.id, $any($event.target).checked)"
-                                />
-                                Simula: riscattato
-                              </label>
-                            }
+                          @if (!terminiDi(p.id).bonus?.length) {
+                            <span class="bonus-chip-mini muted">nessun bonus</span>
                           }
-
-                          <div class="bonus-section">
-                            <p class="hint-campo-futuro">
-                              Qui si fissano solo tipo e ricompensa: quanti eventi si verificheranno (o
-                              se la soglia viene superata) si segna più avanti, quando succede davvero.
-                            </p>
-                            <div class="bonus-header">
-                              <span>Aggiungi bonus:</span>
-                              <div class="bonus-add-buttons">
-                                @for (t of TIPI_BONUS_EVENTI; track t) {
-                                  <button type="button" matButton (click)="aggiungiBonusEventi(p.id, t)">
-                                    <mat-icon>add</mat-icon>
-                                    {{ t }}
-                                  </button>
-                                }
-                                @for (t of TIPI_BONUS_SOGLIA; track t) {
-                                  <button type="button" matButton (click)="aggiungiBonusSoglia(p.id, t)">
-                                    <mat-icon>add</mat-icon>
-                                    {{ t }} soglia
-                                  </button>
-                                }
-                              </div>
-                            </div>
-
-                            @for (b of terminiDi(p.id).bonus ?? []; track b.id) {
-                              <div class="bonus-row">
-                                <span class="bonus-tipo">{{ b.tipo }}</span>
-                                @if (isBonusEventi(b)) {
-                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
-                                    <mat-label>€/evento</mat-label>
-                                    <input
-                                      matInput
-                                      type="number"
-                                      min="0"
-                                      step="0.1"
-                                      [value]="b.rewardPerEvento"
-                                      (input)="aggiornaBonus(p.id, b.id, { rewardPerEvento: $any($event.target).valueAsNumber || 0 })"
-                                    />
-                                  </mat-form-field>
-                                } @else {
-                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
-                                    <mat-label>Soglia</mat-label>
-                                    <input
-                                      matInput
-                                      type="number"
-                                      min="0"
-                                      step="0.1"
-                                      [value]="b.soglia"
-                                      (input)="aggiornaBonus(p.id, b.id, { soglia: $any($event.target).valueAsNumber || 0 })"
-                                    />
-                                  </mat-form-field>
-                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
-                                    <mat-label>Bonus fisso (€)</mat-label>
-                                    <input
-                                      matInput
-                                      type="number"
-                                      min="0"
-                                      step="0.5"
-                                      [value]="b.rewardUnaTantum"
-                                      (input)="aggiornaBonus(p.id, b.id, { rewardUnaTantum: $any($event.target).valueAsNumber || 0 })"
-                                    />
-                                  </mat-form-field>
-                                }
-                                @if (simulazioneAttiva()) {
-                                  @if (isBonusEventi(b)) {
-                                    <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini sim-campo">
-                                      <mat-label>Sim: eventi verificati</mat-label>
-                                      <input
-                                        matInput
-                                        type="number"
-                                        min="0"
-                                        [value]="$any(bonusSimulato(p.id, b.id))?.eventiVerificati ?? 0"
-                                        (input)="impostaSimEventiVerificati(p.id, b.id, $any($event.target).valueAsNumber || 0)"
-                                      />
-                                    </mat-form-field>
-                                  } @else {
-                                    <label class="checkbox-riga sim-campo">
-                                      <input
-                                        type="checkbox"
-                                        [checked]="!!$any(bonusSimulato(p.id, b.id))?.verificato"
-                                        (change)="impostaSimSogliaSuperata(p.id, b.id, $any($event.target).checked)"
-                                      />
-                                      Sim: superata
-                                    </label>
-                                  }
-                                }
-                                <button type="button" matIconButton (click)="rimuoviBonus(p.id, b.id)">
-                                  <mat-icon>delete</mat-icon>
-                                </button>
-                              </div>
-                            }
-                          </div>
-                        </div>
+                        </button>
                       }
                     </li>
                   }
                 </ul>
+                </mat-expansion-panel>
               }
             </div>
           }
