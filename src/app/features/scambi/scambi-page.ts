@@ -673,6 +673,29 @@ export class ScambiPage {
     return { ...reali, ...(this.draftTermini()[playerId] ?? {}) };
   }
 
+  /** Bonus con l'eventuale ipotesi "Sim:" applicata, per un dato id (solo per "Simula", non per "Applica") */
+  bonusConDraft(scambio: Scambio, playerId: string, bonusId: string): BonusScambio | undefined {
+    return this.terminiConDraft(scambio, playerId)?.bonus?.find((b) => b.id === bonusId);
+  }
+
+  impostaDraftEventiVerificati(scambio: Scambio, playerId: string, bonusId: string, eventiVerificati: number): void {
+    const bonusBase = this.terminiConDraft(scambio, playerId)?.bonus ?? [];
+    const bonusAggiornato = bonusBase.map((b) => (b.id === bonusId ? { ...b, eventiVerificati } : b));
+    this.draftTermini.set({
+      ...this.draftTermini(),
+      [playerId]: { ...this.draftTermini()[playerId], bonus: bonusAggiornato },
+    });
+  }
+
+  impostaDraftSogliaSuperata(scambio: Scambio, playerId: string, bonusId: string, verificato: boolean): void {
+    const bonusBase = this.terminiConDraft(scambio, playerId)?.bonus ?? [];
+    const bonusAggiornato = bonusBase.map((b) => (b.id === bonusId ? { ...b, verificato } : b));
+    this.draftTermini.set({
+      ...this.draftTermini(),
+      [playerId]: { ...this.draftTermini()[playerId], bonus: bonusAggiornato },
+    });
+  }
+
   haDraftPendente(playerId: string): boolean {
     return !!this.draftTermini()[playerId] && Object.keys(this.draftTermini()[playerId]).length > 0;
   }
@@ -741,9 +764,11 @@ export class ScambiPage {
     if (!draft) {
       return;
     }
-    // Solo riscatto e cifra sono termini "reali" applicabili: la quotazione
-    // finale drafted qui sopra è solo per la simulazione, vedi
-    // impostaDraftQuotazioneFinale.
+    // Solo riscatto e cifra sono termini "reali" applicabili qui: la
+    // quotazione finale e i bonus drafted sopra servono solo alla
+    // simulazione (vedi impostaDraftQuotazioneFinale, impostaDraftEventiVerificati,
+    // impostaDraftSogliaSuperata) — per confermare davvero un bonus si usano
+    // i pulsanti/il checkbox principali della riga bonus.
     const patch: { riscattato?: boolean; cifraRiscatto?: number } = {};
     if (draft.riscattato !== undefined) {
       patch.riscattato = draft.riscattato;
@@ -753,9 +778,9 @@ export class ScambiPage {
     }
     if (Object.keys(patch).length === 0) {
       this.snackBar.open(
-        'La quotazione finale simulata non si applica: nei ricalcoli reali si usa sempre quella attuale del giocatore.',
+        'Le ipotesi "Sim:" (quotazione finale, eventi bonus) non si applicano da qui: servono solo a "Simula cambio valori". Per confermare davvero un bonus usa i pulsanti/il checkbox sulla riga del bonus; per riscatto e cifra modifica quei campi.',
         'Chiudi',
-        { duration: 5000 },
+        { duration: 6000 },
       );
       return;
     }

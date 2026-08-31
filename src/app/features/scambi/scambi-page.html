@@ -423,6 +423,11 @@
               @if (s.avanzato && s.stato === 'confermata' && isAdmin()) {
                 <div class="avanzato-gestione">
                   <h4>Prestiti e bonus</h4>
+                  <p class="hint-campo-futuro">
+                    I campi "Sim:" sotto ogni bonus servono solo a provare l'effetto in "Simula
+                    cambio valori"; per confermare davvero un evento bonus usa i pulsanti o il
+                    checkbox principali qui accanto.
+                  </p>
                   @for (g of giocatoriDellaTrattativa(s); track g.playerId) {
                     @if (g.playerId; as pid) {
                       @if (terminiDiGiocatore(s, pid); as t) {
@@ -474,6 +479,16 @@
                                   >
                                     <mat-icon>add_circle_outline</mat-icon>
                                   </button>
+                                  <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini sim-campo">
+                                    <mat-label>Sim: eventi verificati</mat-label>
+                                    <input
+                                      matInput
+                                      type="number"
+                                      min="0"
+                                      [value]="$any(bonusConDraft(s, pid, b.id))?.eventiVerificati ?? $any(b).eventiVerificati"
+                                      (input)="impostaDraftEventiVerificati(s, pid, b.id, $any($event.target).valueAsNumber || 0)"
+                                    />
+                                  </mat-form-field>
                                 } @else {
                                   <span class="bonus-riga-info">
                                     soglia {{ $any(b).soglia }} — {{ $any(b).rewardUnaTantum | number: '1.0-2' }} € una tantum
@@ -485,6 +500,14 @@
                                       (change)="aggiornaSogliaBonus(s, pid, b.id, $any($event.target).checked)"
                                     />
                                     Superata
+                                  </label>
+                                  <label class="checkbox-riga sim-campo">
+                                    <input
+                                      type="checkbox"
+                                      [checked]="$any(bonusConDraft(s, pid, b.id))?.verificato ?? $any(b).verificato"
+                                      (change)="impostaDraftSogliaSuperata(s, pid, b.id, $any($event.target).checked)"
+                                    />
+                                    Sim: superata
                                   </label>
                                 }
                               </div>
