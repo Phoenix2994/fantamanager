@@ -515,18 +515,25 @@
                                     />
                                   </mat-form-field>
                                 }
-                                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
-                                  <mat-label>Quotazione finale</mat-label>
+                                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini sim-campo">
+                                  <mat-label>Sim: quotazione finale</mat-label>
                                   <input
                                     matInput
                                     type="number"
                                     min="0"
                                     step="0.5"
-                                    [value]="terminiConDraft(s, pid)?.quotazioneFinale ?? 0"
-                                    (input)="impostaDraftQuotazioneFinale(pid, $any($event.target).valueAsNumber)"
+                                    placeholder="attuale"
+                                    [value]="draftTermini()[pid]?.quotazioneFinale ?? ''"
+                                    (input)="impostaDraftQuotazioneFinale(pid, $any($event.target).value)"
                                   />
                                 </mat-form-field>
                               </div>
+                              <p class="hint-campo-futuro">
+                                La quotazione finale non si può più fissare: nei ricalcoli reali (bonus,
+                                riscatto) si usa sempre quella attuale del giocatore in quel momento — il
+                                campo qui sopra ("vuoto" = quotazione attuale) serve solo a "Simula cambio
+                                valori", non ha effetto su "Applica".
+                              </p>
 
                               @if (haDraftPendente(pid)) {
                                 <div class="modifica-termini-azioni">

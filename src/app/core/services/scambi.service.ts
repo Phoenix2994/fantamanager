@@ -389,6 +389,27 @@ export class ScambiService {
     const giocatoriA = this.aGiocatoriAvanzati(selezionatiA, avanzato.terminiA);
     const giocatoriB = this.aGiocatoriAvanzati(selezionatiB, avanzato.terminiB);
 
+    // Congela la quotazione iniziale (QI) di ciascun giocatore ORA, al
+    // momento della prima conferma: i ricalcoli futuri (evento bonus,
+    // modifica termini) la useranno così com'è invece di rileggerla live,
+    // che nel frattempo potrebbe essere cambiata (aggiornamento settimanale
+    // delle quotazioni Serie A).
+    const congelaQi = (
+      termini: readonly TerminiGiocatoreAvanzato[],
+      giocatori: readonly GiocatoreAvanzato[],
+    ): TerminiGiocatoreAvanzato[] => {
+      const qiById = new Map(giocatori.map((g) => [g.id, g.quotazioneAttuale] as const));
+      return termini.map((t) => ({
+        ...t,
+        quotazioneInizialeConfermata: qiById.get(t.playerId) ?? t.quotazioneInizialeConfermata,
+      }));
+    };
+    const avanzatoConQiCongelata: ScambioAvanzatoDati = {
+      ...avanzato,
+      terminiA: congelaQi(avanzato.terminiA, giocatoriA),
+      terminiB: congelaQi(avanzato.terminiB, giocatoriB),
+    };
+
     const risultato = calcolaScambioAvanzatoConTetto(
       giocatoriA,
       giocatoriB,
@@ -457,6 +478,7 @@ export class ScambiService {
       [...rivalutazioniById.values()] as import('../scambi-calculator').PlayerRivalutazione[],
       teamIdA,
       teamIdB,
+      avanzatoConQiCongelata,
     );
   }
 
@@ -613,6 +635,8 @@ export class ScambiService {
     rivalutazioni: import('../scambi-calculator').PlayerRivalutazione[],
     teamIdA: string,
     teamIdB: string,
+    /** Solo per lo scambio avanzato: termini con la QI congelata da scrivere insieme alla conferma */
+    avanzatoConQiCongelata?: ScambioAvanzatoDati,
   ): Promise<void> {
     const rivalutazioniById = new Map(
       rivalutazioni.map((r) => [r.player.id, r] as const),
@@ -654,6 +678,7 @@ export class ScambiService {
     batch.update(this.scambioRef(scambio.id), {
       stato: 'confermata',
       confirmedAt: serverTimestamp(),
+      ...(avanzatoConQiCongelata ? { avanzato: rimuoviUndefined(avanzatoConQiCongelata) } : {}),
     });
 
     this.undo.registra(batch, {
@@ -1062,11 +1087,13 @@ export class ScambiService {
   }
 
   /**
-   * Aggiorna riscattato / cifra di riscatto / quotazione finale di UN
-   * giocatore di una trattativa avanzata già confermata (admin) — servono
-   * per correggere dati che al momento della conferma erano solo stime
-   * (es. "non si sa ancora se il diritto sarà esercitato", o la quotazione
-   * finale è solo una proiezione che si affina durante la stagione).
+   * Aggiorna riscattato / cifra di riscatto di UN giocatore di una
+   * trattativa avanzata già confermata (admin) — servono per correggere
+   * dati che al momento della conferma erano solo stime (es. "non si sa
+   * ancora se il diritto sarà esercitato"). La quotazione finale NON è più
+   * un campo qui: nei ricalcoli post-conferma si usa sempre la quotazione
+   * attuale live (vedi aGiocatoreAvanzatoSingolo) — resta solo simulabile
+   * in anteprima, vedi simulaRicalcoloAvanzato.
    * Ricalcola i valori di TUTTI i giocatori coinvolti coi dati REALIZZATI
    * finora (stessa logica di confermaEventoBonus), e se il riscatto cambia
    * (o cambia la sua cifra) sposta la differenza tra le finanze di chi la
@@ -1076,7 +1103,7 @@ export class ScambiService {
   async aggiornaTerminiAvanzati(
     scambio: Scambio,
     playerId: string,
-    patch: { riscattato?: boolean; cifraRiscatto?: number; quotazioneFinale?: number },
+    patch: { riscattato?: boolean; cifraRiscatto?: number },
   ): Promise<void> {
     if (scambio.stato !== 'confermata' || !scambio.avanzato) {
       throw new Error('Questa trattativa non è ancora confermata.');
@@ -1283,12 +1310,22 @@ export class ScambiService {
       return { risultati: [], errore: `Un giocatore della trattativa non è più in nessuna rosa (id ${mancante.termini.playerId}).` };
     }
 
+    // La QF è sempre quella attuale live per default (vedi
+    // aGiocatoreAvanzatoSingolo); qui si sovrascrive SOLO se la simulazione
+    // ha esplicitamente provato un'ipotesi diversa per questo giocatore —
+    // si legge da `overrides` (grezzo, prima del merge in `t`) apposta, per
+    // distinguere "ipotesi voluta" da "valore congelato alla creazione, mai
+    // toccato" che altrimenti avrebbero lo stesso campo `quotazioneFinale`.
+    const conQfSimulata = (g: GiocatoreAvanzato, playerId: string): GiocatoreAvanzato => {
+      const qfSimulata = overrides[playerId]?.quotazioneFinale;
+      return qfSimulata !== undefined ? { ...g, quotazioneFinale: qfSimulata } : g;
+    };
     const giocatoriA = giocatoriCorrenti
       .filter((g) => terminiA.some((x) => x.playerId === g.termini.playerId))
-      .map((g) => this.aGiocatoreAvanzatoSingolo(g.player!, g.termini));
+      .map((g) => conQfSimulata(this.aGiocatoreAvanzatoSingolo(g.player!, g.termini), g.termini.playerId));
     const giocatoriB = giocatoriCorrenti
       .filter((g) => terminiB.some((x) => x.playerId === g.termini.playerId))
-      .map((g) => this.aGiocatoreAvanzatoSingolo(g.player!, g.termini));
+      .map((g) => conQfSimulata(this.aGiocatoreAvanzatoSingolo(g.player!, g.termini), g.termini.playerId));
 
     const risultato = calcolaScambioAvanzatoConTetto(
       giocatoriA,
@@ -1300,15 +1337,28 @@ export class ScambiService {
     return { risultati: risultato.risultati, errore: risultato.errore };
   }
 
-  /** Converte un singolo giocatore + i suoi termini nel formato richiesto dal calcolatore avanzato */
+  /**
+   * Converte un singolo giocatore + i suoi termini nel formato richiesto dal
+   * calcolatore avanzato, per un RICALCOLO POST-CONFERMA (evento bonus,
+   * modifica termini, simulazione). A differenza del calcolo iniziale:
+   * - la quotazione INIZIALE (QI) è quella congelata alla prima conferma
+   *   (`quotazioneInizialeConfermata`), non quella attuale live — che nel
+   *   frattempo può essere cambiata; ripiega sulla live SOLO per le
+   *   trattative confermate prima dell'introduzione di questo campo.
+   * - la quotazione FINALE (QF) è sempre quella attuale live in questo
+   *   preciso momento: è la miglior stima disponibile di "finale" per un
+   *   ricalcolo che avviene DAVVERO oggi (niente più stima congelata alla
+   *   creazione). Chi chiama può sovrascriverla per una simulazione — vedi
+   *   simulaRicalcoloAvanzato.
+   */
   private aGiocatoreAvanzatoSingolo(p: Player, t: TerminiGiocatoreAvanzato): GiocatoreAvanzato {
     return {
       id: p.id,
       name: p.name,
       ruolo: p.ruolo,
       valoreAttuale: p.valoreAttuale,
-      quotazioneAttuale: p.quotazioneAttuale,
-      quotazioneFinale: t.quotazioneFinale || p.quotazioneAttuale,
+      quotazioneAttuale: t.quotazioneInizialeConfermata ?? p.quotazioneAttuale,
+      quotazioneFinale: p.quotazioneAttuale,
       tipoContratto: t.tipoContratto,
       durataPrestito: t.durataPrestito,
       riscattato: t.riscattato,

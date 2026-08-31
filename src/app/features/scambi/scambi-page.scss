@@ -124,6 +124,23 @@
   }
 }
 
+/* Campo di sola simulazione (mai salvato/applicato per davvero) — bordo
+   tratteggiato per distinguerlo dai campi reali. Condiviso tra scambi
+   semplici (pannello admin post-conferma) e avanzati (form di creazione). */
+.sim-campo {
+  border: 1px dashed var(--mat-sys-tertiary, var(--mat-sys-primary));
+
+  ::ng-deep .mat-mdc-text-field-wrapper {
+    background: transparent;
+  }
+}
+
+label.sim-campo {
+  border-radius: 8px;
+  padding: 2px 8px;
+  border-style: dashed;
+}
+
 .picker-logo {
   width: 32px;
   height: 32px;

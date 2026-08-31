@@ -160,20 +160,6 @@
   width: 100px;
 }
 
-.sim-campo {
-  border: 1px dashed var(--mat-sys-tertiary, var(--mat-sys-primary));
-
-  ::ng-deep .mat-mdc-text-field-wrapper {
-    background: transparent;
-  }
-}
-
-label.sim-campo {
-  border-radius: 8px;
-  padding: 2px 8px;
-  border-style: dashed;
-}
-
 .anteprima-header {
   display: flex;
   align-items: center;

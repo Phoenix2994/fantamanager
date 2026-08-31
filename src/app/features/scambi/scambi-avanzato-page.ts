@@ -438,6 +438,18 @@ export class ScambiAvanzatoPage {
     this.simOverrides.set({ ...this.simOverrides(), [playerId]: { ...this.simOverrides()[playerId], riscattato } });
   }
 
+  /** Quotazione finale simulata; vuota = usa quella reale (già la quotazione attuale al momento della selezione) */
+  impostaSimQuotazioneFinale(playerId: string, valore: string): void {
+    const attuale = { ...this.simOverrides()[playerId] };
+    const numero = valore === '' ? NaN : Number(valore);
+    if (Number.isNaN(numero)) {
+      delete attuale.quotazioneFinale;
+    } else {
+      attuale.quotazioneFinale = numero;
+    }
+    this.simOverrides.set({ ...this.simOverrides(), [playerId]: attuale });
+  }
+
   impostaSimEventiVerificati(playerId: string, bonusId: string, eventiVerificati: number): void {
     const bonusBase = this.terminiSimulati(playerId).bonus ?? [];
     const bonusAggiornato = bonusBase.map((b) => (b.id === bonusId ? { ...b, eventiVerificati } : b));

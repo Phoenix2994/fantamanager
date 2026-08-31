@@ -296,13 +296,26 @@ export interface TerminiGiocatoreAvanzato {
   playerId: string;
   tipoContratto: TipoContrattoScambio;
   /**
-   * Quotazione finale proiettata (fine stagione), stimata al momento
-   * dell'accordo: serve al passaggio 2 del calcolo (vedi
-   * scambi-avanzati-calculator.ts) e resta fissata qui per rendere
-   * ripetibile un ricalcolo futuro. Default: la quotazione attuale del
-   * giocatore al momento dell'accordo, se non stimata diversamente.
+   * Quotazione finale proiettata (fine stagione) usata SOLO nel calcolo
+   * iniziale (bozza/prima conferma) — serve al passaggio 2 del calcolo
+   * (vedi scambi-avanzati-calculator.ts). Default: la quotazione attuale
+   * del giocatore al momento dell'accordo. Nei ricalcoli DOPO la conferma
+   * (evento bonus, modifica termini) questo campo non viene più usato: si
+   * prende sempre la quotazione attuale live in quel momento, che a quel
+   * punto è la miglior stima disponibile di "finale" — resta simulabile
+   * (mai salvata) nel pannello di simulazione.
    */
   quotazioneFinale: number;
+  /**
+   * Quotazione iniziale (QI) del giocatore, congelata al momento della
+   * PRIMA conferma (confermaAvanzato) — da lì in poi i ricalcoli (evento
+   * bonus, modifica termini) usano questa e non più la quotazione attuale
+   * live, che nel frattempo può essere cambiata (aggiornamento settimanale
+   * delle quotazioni). Assente per le trattative confermate prima
+   * dell'introduzione di questo campo: in quel caso si ripiega sulla
+   * quotazione attuale live, come sempre accaduto.
+   */
+  quotazioneInizialeConfermata?: number;
   /** obbligatoria per tipoContratto diverso da 'definitivo' */
   durataPrestito?: DurataPrestitoScambio;
   /** solo per 'prestitoDiritto': se il diritto è già stato esercitato (admin, dopo la conferma) */

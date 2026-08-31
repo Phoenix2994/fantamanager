@@ -686,11 +686,21 @@ export class ScambiPage {
       [playerId]: { ...this.draftTermini()[playerId], cifraRiscatto: cifraRiscatto || 0 },
     });
   }
-  impostaDraftQuotazioneFinale(playerId: string, quotazioneFinale: number): void {
-    this.draftTermini.set({
-      ...this.draftTermini(),
-      [playerId]: { ...this.draftTermini()[playerId], quotazioneFinale: quotazioneFinale || 0 },
-    });
+  /**
+   * Quotazione finale simulata (solo "Simula cambio valori": nei ricalcoli
+   * reali si usa sempre quella attuale, vedi ScambiService). Campo vuoto =
+   * nessuna ipotesi: la simulazione userà quella attuale, come farebbe un
+   * aggiornamento vero.
+   */
+  impostaDraftQuotazioneFinale(playerId: string, valore: string): void {
+    const attuale = { ...this.draftTermini()[playerId] };
+    const numero = valore === '' ? NaN : Number(valore);
+    if (Number.isNaN(numero)) {
+      delete attuale.quotazioneFinale;
+    } else {
+      attuale.quotazioneFinale = numero;
+    }
+    this.draftTermini.set({ ...this.draftTermini(), [playerId]: attuale });
   }
 
   annullaDraft(playerId: string): void {
@@ -727,8 +737,26 @@ export class ScambiPage {
   }
 
   applicaTermini(scambio: Scambio, playerName: string, playerId: string): void {
-    const patch = this.draftTermini()[playerId];
-    if (!patch) {
+    const draft = this.draftTermini()[playerId];
+    if (!draft) {
+      return;
+    }
+    // Solo riscatto e cifra sono termini "reali" applicabili: la quotazione
+    // finale drafted qui sopra è solo per la simulazione, vedi
+    // impostaDraftQuotazioneFinale.
+    const patch: { riscattato?: boolean; cifraRiscatto?: number } = {};
+    if (draft.riscattato !== undefined) {
+      patch.riscattato = draft.riscattato;
+    }
+    if (draft.cifraRiscatto !== undefined) {
+      patch.cifraRiscatto = draft.cifraRiscatto;
+    }
+    if (Object.keys(patch).length === 0) {
+      this.snackBar.open(
+        'La quotazione finale simulata non si applica: nei ricalcoli reali si usa sempre quella attuale del giocatore.',
+        'Chiudi',
+        { duration: 5000 },
+      );
       return;
     }
     const ref = this.dialog.open(ConfirmDialog, {
