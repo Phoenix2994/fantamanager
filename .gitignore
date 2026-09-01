@@ -47,7 +47,7 @@ scripts/serviceAccountKey.json
 scripts/team-credentials.local.json
 
 # Snapshot Firestore locali (vanno solo sul branch data-backups)
-/backups
+# /backups
 
 # Bytecode Python
 scripts/__pycache__/
