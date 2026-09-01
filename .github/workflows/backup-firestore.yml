@@ -65,7 +65,9 @@ jobs:
 
           TS=$(date -u +%Y%m%dT%H%M%SZ)
           mkdir -p backups
-          mv "$BACKUP_FILE" "backups/firestore-$TS.json"
+          # cp (non mv): il passo "Riepilogo" successivo deve poter
+          # riaprire $BACKUP_FILE nel path originale.
+          cp "$BACKUP_FILE" "backups/firestore-$TS.json"
 
           # Retention: elimina i backup piu' vecchi oltre KEEP_BACKUPS
           ls -1t backups/firestore-*.json 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r git rm -q -- || true
