@@ -76,7 +76,7 @@ jobs:
             exit 0
           fi
           git commit -m "chore(backup): snapshot Firestore $TS [skip ci]"
-          git push origin "$BACKUP_BRANCH"
+          git push --set-upstream origin "$BACKUP_BRANCH"
 
       - name: Riepilogo
         run: |
