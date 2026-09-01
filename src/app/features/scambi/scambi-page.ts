@@ -108,14 +108,14 @@ export class ScambiPage {
   readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
   /**
    * TEMPORANEO: solo permesso FRONTEND (nessuna regola Firestore toccata) per
-   * far provare a Nicaragua Pacamara Gigante il pulsante "Trattativa avanzata",
+   * far provare ad alcune squadre il pulsante "Trattativa avanzata",
    * normalmente visibile solo agli admin — vedi puoVedereAvanzato(). Da
    * togliere quando le prove sono finite (basta rimuovere questo blocco e
-   * l'uso di TEAM_ID_TEST_AVANZATO in puoVedereAvanzato).
+   * l'uso di TEAM_IDS_TEST_AVANZATO in puoVedereAvanzato).
    */
-  private readonly TEAM_ID_TEST_AVANZATO = 'nicaragua-pacamara-gigante';
+  private readonly TEAM_IDS_TEST_AVANZATO = ['nicaragua-pacamara-gigante', 'cispo-s-vision'];
   readonly puoVedereAvanzato = computed(
-    () => this.isAdmin() || this.myTeam()?.id === this.TEAM_ID_TEST_AVANZATO,
+    () => this.isAdmin() || this.TEAM_IDS_TEST_AVANZATO.includes(this.myTeam()?.id ?? ''),
   );
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
   readonly trattative = toSignal(this.scambiService.scambi$, { initialValue: [] as Scambio[] });
