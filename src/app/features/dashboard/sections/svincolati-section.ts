@@ -20,6 +20,7 @@ import { TeamService } from '../../../core/services/team.service';
 import { normalize } from '../../../core/text-utils';
 import { ConfirmDialog } from '../dialogs/confirm-dialog';
 import { ExpandablePlayerCard } from '../../../shared/expandable-player-card';
+import { SerieALogo } from '../../../shared/serie-a-logo';
 
 /** Giocatore di rosa, con il nome della squadra che lo possiede */
 interface RosterEntry {
@@ -45,6 +46,7 @@ interface RosterEntry {
     MatSelectModule,
     RouterLink,
     ExpandablePlayerCard,
+    SerieALogo,
   ],
   template: `
     <div class="section-header">
@@ -98,6 +100,23 @@ interface RosterEntry {
         </mat-select>
       </mat-form-field>
 
+      <!-- Filtro multiplo per squadra di Serie A -->
+      <mat-form-field appearance="fill" subscriptSizing="dynamic">
+        <mat-label>Squadre</mat-label>
+        <mat-select
+          [value]="filterSquadre()"
+          (selectionChange)="filterSquadre.set($event.value)"
+          multiple
+        >
+          @for (squadra of squadreDisponibili(); track squadra) {
+            <mat-option [value]="squadra">
+              <app-serie-a-logo [sigla]="squadra" class="option-logo" />
+              {{ squadra }}
+            </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
       <!-- Filtro "solo valutati": ha senso solo per chi ha fatto login come
            squadra (le stelle sono private, vedi TeamNotesService) -->
       @if (myTeam()) {
@@ -114,8 +133,24 @@ interface RosterEntry {
         </button>
       }
 
+      <!-- Ordina per stelle: mostrato solo se ha senso (esiste almeno una
+           valutazione), altrimenti non cambierebbe nulla -->
+      @if (myTeam() && esisteAlmenoUnaValutazione()) {
+        <button
+          type="button"
+          matButton="tonal"
+          class="filter-toggle"
+          [class.active]="ordinaPerStelle()"
+          [attr.aria-pressed]="ordinaPerStelle()"
+          (click)="ordinaPerStelle.set(!ordinaPerStelle())"
+        >
+          <mat-icon>sort</mat-icon>
+          Ordina per stelle
+        </button>
+      }
+
       <!-- Reset rapido filtri: visibile solo se qualche filtro è attivo -->
-      @if (filterRuoli().length > 0 || search() || soloValutati()) {
+      @if (filterRuoli().length > 0 || filterSquadre().length > 0 || search() || soloValutati()) {
         <button matIconButton aria-label="Azzera filtri" class="reset-filters" (click)="azzeraFiltri()">
           <mat-icon>filter_alt_off</mat-icon>
         </button>
@@ -155,7 +190,6 @@ interface RosterEntry {
                 }
               </span>
               <span class="name">{{ p.name }}</span>
-              <span class="team">{{ p.squadra }}</span>
               <!-- Riepilogo stelle SOLO in lettura: solo le stelle DATE (es.
                    2/3 → 2 stelle piene, non 2 piene + 1 vuota). La
                    valutazione vera, con tutte e 3 le stelle visibili per
@@ -169,6 +203,7 @@ interface RosterEntry {
                   }
                 </span>
               }
+              <app-serie-a-logo [sigla]="p.squadra" class="row-logo" />
               <span class="quota">{{ p.quotazioneAttuale | number: '1.0-0' }}</span>
               <!-- Indicatore puramente visivo: il click che apre/chiude è
                    già sull'intera riga, non serve un bottone separato -->
@@ -434,10 +469,16 @@ interface RosterEntry {
       white-space: nowrap;
     }
 
-    .team {
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.8rem;
-      white-space: nowrap;
+    .row-logo {
+      width: 18px;
+      height: 18px;
+    }
+
+    .option-logo {
+      width: 18px;
+      height: 18px;
+      margin-right: 6px;
+      vertical-align: middle;
     }
 
     .auction-btn {
@@ -550,9 +591,12 @@ export class SvincolatiSection {
 
   /** Ruoli selezionati nel filtro (vuoto = tutti) */
   readonly filterRuoli = signal<string[]>([]);
+  readonly filterSquadre = signal<string[]>([]);
   readonly search = signal('');
   /** true = mostra solo gli svincolati a cui la propria squadra ha dato almeno una stella */
   readonly soloValutati = signal(false);
+  /** true = ordina per stelle (poi per quotazione a parità), invece che per sola quotazione */
+  readonly ordinaPerStelle = signal(false);
 
   /** Ruoli distinti presenti nella lista, nell'ordine canonico */
   readonly ruoliDisponibili = computed(() => {
@@ -565,20 +609,54 @@ export class SvincolatiSection {
     return [...set].sort((a, b) => ROLE_ORDER.indexOf(a) - ROLE_ORDER.indexOf(b));
   });
 
-  /** Lista filtrata e ordinata per quotazione decrescente */
+  /** Squadre di Serie A distinte presenti nella lista, in ordine alfabetico */
+  readonly squadreDisponibili = computed(() => {
+    const set = new Set<string>();
+    for (const p of this.svincolati()) {
+      if (p.squadra) {
+        set.add(p.squadra);
+      }
+    }
+    return [...set].sort();
+  });
+
+  /**
+   * L'ordinamento per stelle ha senso mostrarlo solo se la propria squadra
+   * ha già valutato almeno un giocatore (altrimenti sarebbe un pulsante
+   * senza alcun effetto visibile).
+   */
+  readonly esisteAlmenoUnaValutazione = computed(() => this.svincolati().some((p) => this.stelleDi(p.id) > 0));
+
+  /**
+   * Lista filtrata, ordinata per quotazione decrescente — oppure, se
+   * ordinaPerStelle è attivo, prima per stelle decrescenti (chi non è stato
+   * valutato ha 0 stelle e scivola in fondo da solo, senza bisogno di un
+   * ramo a parte) e a parità di stelle sempre per quotazione decrescente.
+   */
   readonly filtered = computed(() => {
     const ruoli = this.filterRuoli();
+    const squadre = this.filterSquadre();
     const term = normalize(this.search());
     const soloValutati = this.soloValutati();
+    const perStelle = this.ordinaPerStelle();
     return this.svincolati()
       .filter(
         (p) =>
           // il filtro matcha se il giocatore ha ALMENO UNO dei ruoli selezionati
           (!ruoli.length || splitRoles(p.ruolo).some((r) => ruoli.includes(r))) &&
+          (!squadre.length || squadre.includes(p.squadra)) &&
           (!term || normalize(p.name).includes(term)) &&
           (!soloValutati || this.stelleDi(p.id) > 0),
       )
-      .sort((a, b) => b.quotazioneAttuale - a.quotazioneAttuale);
+      .sort((a, b) => {
+        if (perStelle) {
+          const diffStelle = this.stelleDi(b.id) - this.stelleDi(a.id);
+          if (diffStelle !== 0) {
+            return diffStelle;
+          }
+        }
+        return b.quotazioneAttuale - a.quotazioneAttuale;
+      });
   });
 
   /** Sottoinsieme di `filtered` non ancora chiamato — il pool del random */
@@ -660,6 +738,7 @@ export class SvincolatiSection {
   /** Azzera i filtri ruoli, ricerca e "solo valutati" */
   azzeraFiltri(): void {
     this.filterRuoli.set([]);
+    this.filterSquadre.set([]);
     this.search.set('');
     this.soloValutati.set(false);
   }
