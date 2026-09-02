@@ -148,6 +148,21 @@ describe('scambi-calculator', () => {
       expect(sommaNuova).toBe(13);
     });
 
+    it('un giocatore la cui quota si arrotonda a 0 non compare tra i rivalutati', () => {
+      // a1 ha una quotazione enormemente più alta di a2: quasi tutto l'aumento
+      // (1 €) va a lui, la quota di a2 si arrotonda a 0.0 — non è "rivalutato"
+      // (mostrarlo sarebbe un falso "prima → dopo" con lo stesso numero).
+      const a = [player('a1', 5, 999), player('a2', 5, 1)];
+      const b = [player('b1', 11, 11)];
+
+      const anteprima = calcolaAnteprima(a, b, 0, null);
+
+      expect(anteprima.aumentoComplessivo).toBe(1);
+      expect(anteprima.rivalutazioni.length).toBe(1);
+      expect(anteprima.rivalutazioni[0].player.id).toBe('a1');
+      expect(anteprima.rivalutazioni.some((r) => r.player.id === 'a2')).toBe(false);
+    });
+
     it('se paga il conguaglio la parte più ricca, la rivalutazione copre tutto lo scambio', () => {
       const a = [player('a1', 5, 50)];
       const b = [player('b1', 20, 20)];

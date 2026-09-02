@@ -173,6 +173,10 @@ export function calcolaAnteprima(
  * Distribuisce `aumento` sui giocatori proporzionalmente alla quotazione
  * attuale. Le quote sono arrotondate a 1 decimale (convenzione V.A.);
  * il residuo di arrotondamento va al giocatore con quotazione più alta.
+ * Chi finisce con lo stesso V.A. di prima (la propria quota era troppo
+ * piccola per sopravvivere all'arrotondamento) non è considerato rivalutato:
+ * mostrarlo come tale sarebbe fuorviante, e non c'è motivo di resettargli
+ * la Q.I. (vedi patchGiocatore) per un valore che di fatto non cambia.
  */
 function distribuisciAumento(
   players: readonly Player[],
@@ -205,7 +209,7 @@ function distribuisciAumento(
   for (const r of result) {
     r.valoreDopo = Math.max(round1(r.valorePrima + r.aumento), MIN_VALORE);
   }
-  return result;
+  return result.filter((r) => r.valoreDopo !== r.valorePrima);
 }
 
 /** Campi Firestore da aggiornare per un giocatore coinvolto in uno scambio */

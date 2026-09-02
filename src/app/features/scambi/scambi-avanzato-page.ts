@@ -13,7 +13,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { switchMap, of, take } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { round2 } from '../../core/finance-calculator';
+import { round1, round2 } from '../../core/finance-calculator';
 import { AuthService } from '../../core/services/auth.service';
 import { ScambiService } from '../../core/services/scambi.service';
 import { TeamService } from '../../core/services/team.service';
@@ -404,6 +404,17 @@ export class ScambiAvanzatoPage {
     return this.risultatiMostrati().risultati.find((r) => r.giocatore.id === playerId)?.valoreDopo ?? null;
   }
 
+  /**
+   * true solo se il nuovo V.A. differisce da quello attuale ANCHE dopo
+   * l'arrotondamento a 1 decimale (la precisione mostrata in rosa) — senza
+   * questo confronto un giocatore passato ad es. da 17.5 a 17.53 mostrerebbe
+   * comunque la freccia, pur restando visivamente lo stesso numero.
+   */
+  mostraFrecciaValore(playerId: string, valoreAttuale: number): boolean {
+    const dopo = this.valoreDopoDi(playerId);
+    return dopo !== null && round1(dopo) !== round1(valoreAttuale);
+  }
+
   /** Riepilogo di TUTTI i giocatori coinvolti (entrambe le squadre), per il pannello "Anteprima dello scambio" */
   readonly riepilogoGiocatori = computed(() => {
     const risultati = this.risultatiMostrati().risultati;
@@ -424,7 +435,10 @@ export class ScambiAvanzatoPage {
         bonus: g.bonus ?? [],
         valorePrima: r?.valorePrima ?? g.valoreAttuale,
         valoreDopo: r?.valoreDopo ?? g.valoreAttuale,
-        rivalutato: !!r && round2(r.valoreDopo) !== round2(r.valorePrima),
+        // Confronto a 1 decimale: è la precisione mostrata (vedi template), un
+        // giocatore il cui V.A. cambia solo al 2° decimale non va segnalato
+        // come rivalutato — visivamente resterebbe lo stesso numero.
+        rivalutato: !!r && round1(r.valoreDopo) !== round1(r.valorePrima),
       };
     };
     return [
@@ -609,7 +623,7 @@ export class ScambiAvanzatoPage {
         valoreTotaleA: round2(this.giocatoriA().reduce((s, g) => s + g.valoreAttuale, 0)),
         valoreTotaleB: round2(this.giocatoriB().reduce((s, g) => s + g.valoreAttuale, 0)),
         rivalutazioni: risultati
-          .filter((r) => round2(r.valoreDopo) !== round2(r.valorePrima))
+          .filter((r) => round1(r.valoreDopo) !== round1(r.valorePrima))
           .map((r) => ({
             playerId: r.giocatore.id,
             playerName: r.giocatore.name,
