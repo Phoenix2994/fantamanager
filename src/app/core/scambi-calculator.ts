@@ -1,4 +1,4 @@
-import { Player } from './models';
+import { Player, Scambio } from './models';
 import {
   MIN_VALORE,
   calcolaProssimaSpesaRinnovo,
@@ -23,6 +23,44 @@ import {
 export const PERC_RINNOVO_SCAMBIO = 0.6;
 
 export type LatoScambio = 'A' | 'B';
+
+/**
+ * Vero solo se la squadra possiede il giocatore A TITOLO DEFINITIVO (non un
+ * prestito ricevuto, con o senza diritto/obbligo di riscatto): solo in quel
+ * caso può cederlo in un nuovo scambio — un prestito in rosa non è suo da
+ * rivendere.
+ */
+export function possedutoATitoloDefinitivo(player: Player): boolean {
+  return (
+    player.contractType === 'TITOLO DEFINITIVO' ||
+    player.contractType === 'TITOLO DEFINITIVO (RECOMPRA)'
+  );
+}
+
+/**
+ * Id di tutti i giocatori con un bonus pattuito in una trattativa avanzata
+ * CONFERMATA della stagione corrente: la finestra in cui un bonus viene
+ * verificato/pagato è implicitamente la stagione in corso (chi lo riceve e
+ * chi lo versa sono le due squadre originarie dello scambio), quindi finché
+ * la stagione non cambia questi giocatori non possono essere coinvolti in
+ * un ALTRO scambio — anche dal presidente che li possiede a titolo
+ * definitivo — o il meccanismo di conferma bonus (confermaEventoBonus)
+ * perderebbe la squadra giusta a cui addebitarlo/accreditarlo.
+ */
+export function giocatoriConBonusAttivo(scambi: readonly Scambio[], season: string): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const s of scambi) {
+    if (s.stato !== 'confermata' || s.season !== season || !s.avanzato) {
+      continue;
+    }
+    for (const t of [...s.avanzato.terminiA, ...s.avanzato.terminiB]) {
+      if ((t.bonus ?? []).length > 0) {
+        ids.add(t.playerId);
+      }
+    }
+  }
+  return ids;
+}
 
 /** Rivalutazione di un singolo giocatore della parte più "povera" */
 export interface PlayerRivalutazione {
@@ -181,7 +219,11 @@ export interface PlayerScambioPatch {
 
 /**
  * Patch da applicare a un giocatore coinvolto nello scambio:
- * - TUTTI i giocatori coinvolti: prossimaPercRinnovo = 60%;
+ * - i giocatori che cambiano proprietà A TITOLO DEFINITIVO (scambio semplice,
+ *   o lato "definitivo"/riscattato di uno scambio avanzato): prossimaPercRinnovo
+ *   = 60%. Un prestito NON ancora riscattato non tocca questo campo — la
+ *   squadra che possiede davvero il contratto (l'origine) resta quella che
+ *   lo rinnoverà, il prestito è solo temporaneo;
  * - i giocatori RIVALUTATI: valoreIniziale = nuovo valore e
  *   quotazioneIniziale = quotazioneAttuale (il futuro V.A. seguirà le nuove
  *   quotazioni partendo dal nuovo valore, stessa meccanica del rinnovo).
@@ -189,10 +231,12 @@ export interface PlayerScambioPatch {
 export function patchGiocatore(
   player: Player,
   rivalutazione?: PlayerRivalutazione,
+  resettaPercRinnovo = true,
 ): PlayerScambioPatch {
-  const patch: PlayerScambioPatch = {
-    prossimaPercRinnovo: PERC_RINNOVO_SCAMBIO,
-  };
+  const patch: PlayerScambioPatch = {};
+  if (resettaPercRinnovo) {
+    patch.prossimaPercRinnovo = PERC_RINNOVO_SCAMBIO;
+  }
 
   if (rivalutazione) {
     const nuovoValore = rivalutazione.valoreDopo;
@@ -207,7 +251,7 @@ export function patchGiocatore(
 
   patch.prossimaSpesaRinnovo = calcolaProssimaSpesaRinnovo(
     patch.valoreAttuale ?? player.valoreAttuale,
-    PERC_RINNOVO_SCAMBIO,
+    patch.prossimaPercRinnovo ?? player.prossimaPercRinnovo,
   );
   return patch;
 }

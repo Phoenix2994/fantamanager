@@ -27,6 +27,8 @@ import {
   PERC_RINNOVO_SCAMBIO,
   ScambioAnteprima,
   calcolaAnteprima,
+  giocatoriConBonusAttivo,
+  possedutoATitoloDefinitivo,
 } from '../../core/scambi-calculator';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
@@ -121,6 +123,8 @@ export class ScambiPage {
   readonly trattative = toSignal(this.scambiService.scambi$, { initialValue: [] as Scambio[] });
   /** Elenco visibile: le trattative annullate restano nello storico/undo ma non intasano questa lista */
   readonly trattativeVisibili = computed(() => this.trattative().filter((s) => s.stato !== 'annullata'));
+  /** Id dei giocatori con un bonus attivo (stagione corrente): non cedibili in un nuovo scambio, vedi toOptions */
+  readonly bonusAttivoIds = computed(() => giocatoriConBonusAttivo(this.trattative(), environment.season));
 
   // ---------- Stato del form "nuova trattativa" ----------
   // Chi ha fatto login come squadra propone SEMPRE per la propria: Squadra A
@@ -400,7 +404,9 @@ export class ScambiPage {
         scambio.snapshot.giocatoriA.length + scambio.snapshot.giocatoriB.length
       } giocatori;` +
       (riv ? `\n• rivalutazioni: ${riv};` : '') +
-      `\n• prossima percentuale rinnovo al 60% per tutti i coinvolti` +
+      (scambio.avanzato
+        ? `\n• prossima percentuale rinnovo al 60% solo per i giocatori a titolo definitivo o già riscattati (i prestiti restano invariati finché non lo sono)`
+        : `\n• prossima percentuale rinnovo al 60% per tutti i coinvolti`) +
       (scambio.conguaglio > 0
         ? `;\n• conguaglio di ${scambio.conguaglio} € da ${
             scambio.conguaglioPagante === 'A'
@@ -547,6 +553,14 @@ export class ScambiPage {
     const conta = (t: TerminiGiocatoreAvanzato) =>
       t.tipoContratto === 'prestitoObbligo' || (t.tipoContratto === 'prestitoDiritto' && t.riscattato === true);
     return [...scambio.avanzato.terminiA, ...scambio.avanzato.terminiB].some(conta);
+  }
+
+  /** true se ALMENO UN giocatore della trattativa ha almeno un bonus pattuito */
+  trattativaHaBonus(scambio: Scambio): boolean {
+    if (!scambio.avanzato) {
+      return false;
+    }
+    return [...scambio.avanzato.terminiA, ...scambio.avanzato.terminiB].some((t) => (t.bonus ?? []).length > 0);
   }
 
   /**
@@ -855,8 +869,9 @@ export class ScambiPage {
   // ---------- Helper ----------
 
   private toOptions(roster: Player[]): PlayerOption[] {
+    const bonusAttivo = this.bonusAttivoIds();
     return roster
-      .filter((p) => !p.fuoriSerieA)
+      .filter((p) => !p.fuoriSerieA && possedutoATitoloDefinitivo(p) && !bonusAttivo.has(p.id))
       .slice()
       .sort((a, b) => b.valoreAttuale - a.valoreAttuale)
       .map((p) => ({

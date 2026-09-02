@@ -423,11 +423,13 @@
               @if (s.avanzato && s.stato === 'confermata' && isAdmin()) {
                 <div class="avanzato-gestione">
                   <h4>Prestiti e bonus</h4>
-                  <p class="hint-campo-futuro">
-                    I campi "Sim:" sotto ogni bonus servono solo a provare l'effetto in "Simula
-                    cambio valori"; per confermare davvero un evento bonus usa i pulsanti o il
-                    checkbox principali qui accanto.
-                  </p>
+                  @if (trattativaHaBonus(s)) {
+                    <p class="hint-campo-futuro">
+                      I campi "Sim:" sotto ogni bonus servono solo a provare l'effetto in "Simula
+                      cambio valori"; per confermare davvero un evento bonus usa i pulsanti o il
+                      checkbox principali qui accanto.
+                    </p>
+                  }
                   @for (g of giocatoriDellaTrattativa(s); track g.playerId) {
                     @if (g.playerId; as pid) {
                       @if (terminiDiGiocatore(s, pid); as t) {

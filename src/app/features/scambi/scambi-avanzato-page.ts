@@ -39,6 +39,7 @@ import {
   calcolaScambioAvanzatoConTetto,
   etichettaContratto,
 } from '../../core/scambi-avanzati-calculator';
+import { giocatoriConBonusAttivo, possedutoATitoloDefinitivo } from '../../core/scambi-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
@@ -179,8 +180,16 @@ export class ScambiAvanzatoPage {
   readonly nomeSquadraA = computed(() => this.teams().find((t) => t.id === this.squadraAId())?.name ?? '');
   readonly nomeSquadraB = computed(() => this.teams().find((t) => t.id === this.squadraBId())?.name ?? '');
 
+  /** Trattative note (realtime), per escludere dalla selezione i giocatori con un bonus attivo — vedi toOptions */
+  readonly trattative = toSignal(this.scambiService.scambi$, { initialValue: [] as Scambio[] });
+  readonly bonusAttivoIds = computed(() => giocatoriConBonusAttivo(this.trattative(), environment.season));
+
   private toOptions(roster: Player[]): Player[] {
-    return roster.filter((p) => !p.fuoriSerieA).slice().sort((a, b) => b.valoreAttuale - a.valoreAttuale);
+    const bonusAttivo = this.bonusAttivoIds();
+    return roster
+      .filter((p) => !p.fuoriSerieA && possedutoATitoloDefinitivo(p) && !bonusAttivo.has(p.id))
+      .slice()
+      .sort((a, b) => b.valoreAttuale - a.valoreAttuale);
   }
 
   rolesOf(ruolo: string): string[] {

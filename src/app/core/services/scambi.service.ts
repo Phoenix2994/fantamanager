@@ -203,6 +203,22 @@ export class ScambiService {
   }
 
   /**
+   * Vero solo se il giocatore passa (o è già passato) di proprietà in modo
+   * DEFINITIVO: titolo definitivo, prestito con obbligo di riscatto (il
+   * riscatto avverrà comunque), o prestito con diritto già riscattato.
+   * Un prestito semplice — o un diritto non ancora esercitato — è
+   * temporaneo: il contratto resta di chi lo ha ceduto, quindi non deve
+   * far scattare il reset della percentuale di rinnovo (vedi patchGiocatore).
+   */
+  private eProprietaDefinitiva(t: { tipoContratto: TipoContrattoScambio; riscattato?: boolean }): boolean {
+    return (
+      t.tipoContratto === 'definitivo' ||
+      t.tipoContratto === 'prestitoObbligo' ||
+      (t.tipoContratto === 'prestitoDiritto' && t.riscattato === true)
+    );
+  }
+
+  /**
    * Salva una nuova bozza di trattativa. Richiede di essere loggati come
    * una delle due squadre coinvolte (controllo anche lato client, oltre
    * che nelle security rules: qui fallisce prima, con un messaggio chiaro).
@@ -475,12 +491,15 @@ export class ScambiService {
     const movimenti = [
       ...selezionatiA.map((p) => ({ player: p, fromTeamId: teamIdA, toTeamId: teamIdB })),
       ...selezionatiB.map((p) => ({ player: p, fromTeamId: teamIdB, toTeamId: teamIdA })),
-    ].map((m) => ({
-      ...m,
-      contractTypeOverride: this.contractTypePerTipoContrattoAvanzato(
-        terminiByPlayerId.get(m.player.id)?.tipoContratto ?? 'definitivo',
-      ),
-    }));
+    ].map((m) => {
+      const termini = terminiByPlayerId.get(m.player.id);
+      const tipoContratto = termini?.tipoContratto ?? 'definitivo';
+      return {
+        ...m,
+        contractTypeOverride: this.contractTypePerTipoContrattoAvanzato(tipoContratto),
+        resettaPercRinnovo: this.eProprietaDefinitiva({ tipoContratto, riscattato: termini?.riscattato }),
+      };
+    });
     // Completa il campo `player` di ogni rivalutazione (serve a patchGiocatore)
     for (const m of movimenti) {
       const r = rivalutazioniById.get(m.player.id);
@@ -702,7 +721,14 @@ export class ScambiService {
   /** Scrittura atomica: giocatori + finanze + stato trattativa + undoLog */
   private async scriviBatch(
     scambio: Scambio,
-    movimenti: { player: Player; fromTeamId: string; toTeamId: string; contractTypeOverride?: ContractType }[],
+    movimenti: {
+      player: Player;
+      fromTeamId: string;
+      toTeamId: string;
+      contractTypeOverride?: ContractType;
+      /** false solo per un prestito ancora temporaneo — vedi eProprietaDefinitiva */
+      resettaPercRinnovo?: boolean;
+    }[],
     financeUpdates: {
       teamId: string;
       campo: 'trasferimentiUscita' | 'trasferimentiEntrata';
@@ -725,7 +751,7 @@ export class ScambiService {
 
     for (const m of movimenti) {
       const { id: _id, ...playerData } = m.player;
-      const patch = patchGiocatore(m.player, rivalutazioniById.get(m.player.id));
+      const patch = patchGiocatore(m.player, rivalutazioniById.get(m.player.id), m.resettaPercRinnovo ?? true);
       const nuovoRef = doc(this.firestore, this.playerPath(m.toTeamId, m.player.id));
       const vecchioRef = doc(this.firestore, this.playerPath(m.fromTeamId, m.player.id));
       batch.set(nuovoRef, {
@@ -907,11 +933,7 @@ export class ScambiService {
     if (!termini) {
       throw new Error('Giocatore non trovato in questa trattativa.');
     }
-    const eDefinitivo =
-      termini.tipoContratto === 'definitivo' ||
-      termini.tipoContratto === 'prestitoObbligo' ||
-      (termini.tipoContratto === 'prestitoDiritto' && termini.riscattato === true);
-    if (eDefinitivo) {
+    if (this.eProprietaDefinitiva(termini)) {
       throw new Error('Questo giocatore non è (più) in prestito: è di proprietà definitiva.');
     }
     if (termini.prestitoConcluso) {
@@ -1115,12 +1137,16 @@ export class ScambiService {
         continue;
       }
       const playerRef = doc(this.firestore, this.playerPath(g.teamIdAttuale, g.termini.playerId));
-      const patch = patchGiocatore(g.player!, {
-        player: g.player!,
-        valorePrima: r.valorePrima,
-        aumento: round2(r.valoreDopo - r.valorePrima),
-        valoreDopo: r.valoreDopo,
-      });
+      const patch = patchGiocatore(
+        g.player!,
+        {
+          player: g.player!,
+          valorePrima: r.valorePrima,
+          aumento: round2(r.valoreDopo - r.valorePrima),
+          valoreDopo: r.valoreDopo,
+        },
+        this.eProprietaDefinitiva(g.termini),
+      );
       undoDocs.push({ path: playerRef.path, before: g.player as unknown as Record<string, unknown> });
       batch.update(playerRef, { ...patch, updatedAt: serverTimestamp() });
     }
@@ -1292,12 +1318,16 @@ export class ScambiService {
         continue;
       }
       const playerRef = doc(this.firestore, this.playerPath(g.teamIdAttuale, g.termini.playerId));
-      const patchValori = patchGiocatore(g.player!, {
-        player: g.player!,
-        valorePrima: r.valorePrima,
-        aumento: round2(r.valoreDopo - r.valorePrima),
-        valoreDopo: r.valoreDopo,
-      });
+      const patchValori = patchGiocatore(
+        g.player!,
+        {
+          player: g.player!,
+          valorePrima: r.valorePrima,
+          aumento: round2(r.valoreDopo - r.valorePrima),
+          valoreDopo: r.valoreDopo,
+        },
+        this.eProprietaDefinitiva(g.termini),
+      );
       undoDocs.push({ path: playerRef.path, before: g.player as unknown as Record<string, unknown> });
       batch.update(playerRef, { ...patchValori, updatedAt: serverTimestamp() });
     }

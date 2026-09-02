@@ -1,8 +1,11 @@
+import { ContractType, Scambio, ScambioStato, TerminiGiocatoreAvanzato } from './models';
 import { Player } from './models';
 import {
   PERC_RINNOVO_SCAMBIO,
   calcolaAnteprima,
+  giocatoriConBonusAttivo,
   patchGiocatore,
+  possedutoATitoloDefinitivo,
 } from './scambi-calculator';
 
 /** Factory di un giocatore con i soli campi usati dai calcoli dello scambio */
@@ -10,12 +13,13 @@ function player(
   id: string,
   valoreAttuale: number,
   quotazioneAttuale: number,
+  contractType: ContractType = 'TITOLO DEFINITIVO',
 ): Player {
   return {
     id,
     name: `Giocatore ${id}`,
     ruolo: 'Cc',
-    contractType: 'TITOLO DEFINITIVO',
+    contractType,
     acquistoRinnovoSpesa: 0,
     prossimaPercRinnovo: 1.1,
     prossimaSpesaRinnovo: 0,
@@ -23,6 +27,57 @@ function player(
     quotazioneAttuale,
     valoreIniziale: valoreAttuale,
     valoreAttuale,
+  };
+}
+
+/** Factory di una trattativa avanzata, con i soli campi usati da giocatoriConBonusAttivo */
+function scambioAvanzato(
+  stato: ScambioStato,
+  season: string,
+  terminiA: TerminiGiocatoreAvanzato[],
+  terminiB: TerminiGiocatoreAvanzato[] = [],
+): Scambio {
+  return {
+    id: 's1',
+    season,
+    squadraA: { teamId: 'a', playerIds: [], ownerUid: null },
+    squadraB: { teamId: 'b', playerIds: [], ownerUid: null },
+    conguaglio: 0,
+    conguaglioPagante: null,
+    stato,
+    snapshot: {
+      nomeSquadraA: 'A',
+      nomeSquadraB: 'B',
+      giocatoriA: [],
+      giocatoriB: [],
+      valoreTotaleA: 0,
+      valoreTotaleB: 0,
+      rivalutazioni: [],
+    },
+    avanzato: {
+      terminiA,
+      terminiB,
+      conguaglioA: 0,
+      conguaglioB: 0,
+    },
+  };
+}
+
+/** Termini minimi per un giocatore in una trattativa avanzata */
+function termini(playerId: string, bonusCount: number): TerminiGiocatoreAvanzato {
+  return {
+    playerId,
+    tipoContratto: 'definitivo',
+    quotazioneFinale: 10,
+    bonus: bonusCount > 0
+      ? Array.from({ length: bonusCount }, (_, i) => ({
+          id: `b${i}`,
+          tipo: 'gol' as const,
+          eventiAttesi: 5,
+          eventiVerificati: 0,
+          rewardPerEvento: 1,
+        }))
+      : [],
   };
 }
 
@@ -172,6 +227,73 @@ describe('scambi-calculator', () => {
       expect(patch.valoreAttuale).toBe(14);
       expect(patch.prossimaPercRinnovo).toBe(0.6);
       expect(patch.prossimaSpesaRinnovo).toBeCloseTo(14 * 0.6, 1);
+    });
+
+    it('con resettaPercRinnovo=false (prestito non riscattato) non tocca la percentuale', () => {
+      const p = player('p1', 10, 100); // prossimaPercRinnovo di fabbrica: 1.1
+      const patch = patchGiocatore(p, undefined, false);
+
+      expect(patch.prossimaPercRinnovo).toBeUndefined();
+      // Spesa rinnovo ricalcolata sulla percentuale ESISTENTE del giocatore, non sul 60%
+      expect(patch.prossimaSpesaRinnovo).toBeCloseTo(10 * 1.1, 1);
+    });
+
+    it('con resettaPercRinnovo=false ma rivalutato: valore cambia, percentuale no', () => {
+      const p = player('p1', 5, 50);
+      const anteprima = calcolaAnteprima([p], [player('p2', 20, 20)], 6, 'A');
+      const patch = patchGiocatore(p, anteprima.rivalutazioni[0], false);
+
+      expect(patch.valoreIniziale).toBe(14);
+      expect(patch.prossimaPercRinnovo).toBeUndefined();
+      // Spesa rinnovo sul nuovo V.A. (14) ma con la percentuale esistente (1.1), non 60%
+      expect(patch.prossimaSpesaRinnovo).toBeCloseTo(14 * 1.1, 1);
+    });
+  });
+
+  describe('possedutoATitoloDefinitivo', () => {
+    it('vero per titolo definitivo (anche recompra)', () => {
+      expect(possedutoATitoloDefinitivo(player('p1', 10, 100, 'TITOLO DEFINITIVO'))).toBe(true);
+      expect(possedutoATitoloDefinitivo(player('p1', 10, 100, 'TITOLO DEFINITIVO (RECOMPRA)'))).toBe(true);
+    });
+
+    it('falso per qualunque tipo di prestito', () => {
+      expect(possedutoATitoloDefinitivo(player('p1', 10, 100, 'PRESTITO'))).toBe(false);
+      expect(possedutoATitoloDefinitivo(player('p1', 10, 100, 'PRESTITO (DIRITTO)'))).toBe(false);
+      expect(possedutoATitoloDefinitivo(player('p1', 10, 100, 'PRESTITO (OBBLIGO)'))).toBe(false);
+    });
+  });
+
+  describe('giocatoriConBonusAttivo', () => {
+    it('include solo i giocatori con bonus di una trattativa CONFERMATA della stagione corrente', () => {
+      const scambi = [
+        scambioAvanzato('confermata', '2026-27', [termini('p1', 2)], [termini('p2', 0)]),
+      ];
+      const ids = giocatoriConBonusAttivo(scambi, '2026-27');
+      expect(ids.has('p1')).toBe(true);
+      expect(ids.has('p2')).toBe(false);
+    });
+
+    it('ignora le trattative non confermate (bozza/ufficializzata/annullata)', () => {
+      const scambi = [
+        scambioAvanzato('bozza', '2026-27', [termini('p1', 1)]),
+        scambioAvanzato('ufficializzata', '2026-27', [termini('p2', 1)]),
+        scambioAvanzato('annullata', '2026-27', [termini('p3', 1)]),
+      ];
+      const ids = giocatoriConBonusAttivo(scambi, '2026-27');
+      expect(ids.size).toBe(0);
+    });
+
+    it('ignora le trattative confermate di stagioni precedenti', () => {
+      const scambi = [scambioAvanzato('confermata', '2025-26', [termini('p1', 1)])];
+      const ids = giocatoriConBonusAttivo(scambi, '2026-27');
+      expect(ids.has('p1')).toBe(false);
+    });
+
+    it('ignora le trattative semplici (senza avanzato)', () => {
+      const semplice = scambioAvanzato('confermata', '2026-27', []);
+      delete (semplice as { avanzato?: unknown }).avanzato;
+      const ids = giocatoriConBonusAttivo([semplice], '2026-27');
+      expect(ids.size).toBe(0);
     });
   });
 });
