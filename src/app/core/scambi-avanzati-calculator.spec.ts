@@ -1,7 +1,11 @@
 import {
+  BonusAtteso,
   GiocatoreAvanzato,
   calcolaScambioAvanzato,
   calcolaScambioAvanzatoConTetto,
+  isBonusEventi,
+  valoreBonusAtteso,
+  valoreBonusRealizzato,
 } from './scambi-avanzati-calculator';
 
 describe('scambi-avanzati-calculator', () => {
@@ -269,6 +273,44 @@ describe('scambi-avanzati-calculator', () => {
       expect(trova('pinamonti')).toBeCloseTo(11.9, 2);
       expect(trova('thuram-k')).toBeCloseTo(22.9, 2);
       expect(trova('butez')).toBeCloseTo(14.8, 2);
+    });
+  });
+
+  describe('bonus "gol" a soglia (oltre alla forma a evento)', () => {
+    it('isBonusEventi distingue in base alla struttura, non al tipo statistico', () => {
+      const golEventi: BonusAtteso = {
+        id: 'b1',
+        tipo: 'gol',
+        eventiAttesi: 0,
+        eventiVerificati: 0,
+        rewardPerEvento: 1,
+      };
+      const golSoglia: BonusAtteso = {
+        id: 'b2',
+        tipo: 'gol',
+        soglia: 10,
+        verificato: false,
+        rewardUnaTantum: 10,
+      };
+      expect(isBonusEventi(golEventi)).toBe(true);
+      expect(isBonusEventi(golSoglia)).toBe(false);
+    });
+
+    it('un bonus "gol" a soglia paga 10€ solo se la soglia è superata, indipendentemente dal numero esatto di gol', () => {
+      // Esempio dell'utente: 10€ se fa più di 10 gol.
+      const nonSuperata: BonusAtteso = {
+        id: 'b1',
+        tipo: 'gol',
+        soglia: 10,
+        verificato: false,
+        rewardUnaTantum: 10,
+      };
+      const superata: BonusAtteso = { ...nonSuperata, verificato: true };
+
+      expect(valoreBonusAtteso(nonSuperata)).toBe(0);
+      expect(valoreBonusRealizzato(nonSuperata)).toBe(0);
+      expect(valoreBonusAtteso(superata)).toBe(10);
+      expect(valoreBonusRealizzato(superata)).toBe(10);
     });
   });
 });

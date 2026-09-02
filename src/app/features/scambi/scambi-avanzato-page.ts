@@ -324,10 +324,11 @@ export class ScambiAvanzatoPage {
     this.aggiornaTermini(playerId, { bonus: [...(attuali.bonus ?? []), nuovo] });
   }
   aggiungiBonusSoglia(playerId: string, tipo: TipoBonusSogliaScambio): void {
+    const sogliaIniziale = tipo === 'presenze' ? 15 : tipo === 'gol' ? 10 : 6;
     const nuovo: BonusScambioSoglia = {
       id: `b${++contatoreBonusId}`,
       tipo,
-      soglia: tipo === 'presenze' ? 15 : 6,
+      soglia: sogliaIniziale,
       verificato: false,
       rewardUnaTantum: 1,
     };
@@ -343,8 +344,13 @@ export class ScambiAvanzatoPage {
     const bonusList = (attuali.bonus ?? []).map((b) => (b.id === bonusId ? ({ ...b, ...patch } as BonusScambio) : b));
     this.aggiornaTermini(playerId, { bonus: bonusList });
   }
+  /**
+   * "gol" può essere pattuito sia a evento sia a soglia (vedi
+   * TIPI_BONUS_SOGLIA_SCAMBIO in models.ts): il discriminante è la
+   * struttura del bonus, non il suo tipo statistico.
+   */
   isBonusEventi(b: BonusScambio): b is BonusScambioEventi {
-    return (TIPI_BONUS_EVENTI_SCAMBIO as readonly string[]).includes(b.tipo);
+    return 'eventiAttesi' in b;
   }
 
   /** Etichetta sintetica di un bonus pattuito, per il riepilogo dell'anteprima */

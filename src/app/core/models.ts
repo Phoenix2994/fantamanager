@@ -263,7 +263,14 @@ export const DURATE_PRESTITO_SCAMBIO = [3, 6, 9, 12] as const;
 export type DurataPrestitoScambio = (typeof DURATE_PRESTITO_SCAMBIO)[number];
 
 export const TIPI_BONUS_EVENTI_SCAMBIO = ['gol', 'assist'] as const;
-export const TIPI_BONUS_SOGLIA_SCAMBIO = ['presenze', 'voto', 'fantavoto'] as const;
+/**
+ * "gol" compare anche qui: può essere pattuito sia a evento (X€ per ogni
+ * gol) sia a soglia (X€ fisso se supera N gol in stagione) — le due
+ * modalità sono lo stesso "tipo" statistico ma bonus strutturalmente
+ * diversi, distinti dal contenuto (eventiAttesi vs soglia), non dal tipo:
+ * vedi isBonusEventi.
+ */
+export const TIPI_BONUS_SOGLIA_SCAMBIO = ['presenze', 'voto', 'fantavoto', 'gol'] as const;
 export type TipoBonusEventiScambio = (typeof TIPI_BONUS_EVENTI_SCAMBIO)[number];
 export type TipoBonusSogliaScambio = (typeof TIPI_BONUS_SOGLIA_SCAMBIO)[number];
 

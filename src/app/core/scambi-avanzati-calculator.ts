@@ -66,8 +66,14 @@ export const SCONTO_PRESTITO = 0.8;
 
 /** Bonus "a eventi": si stima un numero di eventi attesi × ricompensa a evento */
 export const TIPI_BONUS_EVENTI = ['gol', 'assist'] as const;
-/** Bonus "a soglia": ricompensa fissa una tantum se il conteggio (presenze) o la media (voto/fantavoto) supera la soglia */
-export const TIPI_BONUS_SOGLIA = ['presenze', 'voto', 'fantavoto'] as const;
+/**
+ * Bonus "a soglia": ricompensa fissa una tantum se il conteggio (presenze,
+ * gol) o la media (voto/fantavoto) supera la soglia. "gol" compare anche
+ * sopra tra i bonus a evento — stesso tipo statistico, due modalità di
+ * pagamento diverse; il discriminante è la struttura del bonus (vedi
+ * isBonusEventi), non l'appartenenza di `tipo` a questa lista.
+ */
+export const TIPI_BONUS_SOGLIA = ['presenze', 'voto', 'fantavoto', 'gol'] as const;
 export type TipoBonusEventi = (typeof TIPI_BONUS_EVENTI)[number];
 export type TipoBonusSoglia = (typeof TIPI_BONUS_SOGLIA)[number];
 export type TipoBonus = TipoBonusEventi | TipoBonusSoglia;
@@ -97,7 +103,7 @@ export interface BonusSoglia {
 export type BonusAtteso = BonusEventi | BonusSoglia;
 
 export function isBonusEventi(b: BonusAtteso): b is BonusEventi {
-  return (TIPI_BONUS_EVENTI as readonly string[]).includes(b.tipo);
+  return 'eventiAttesi' in b;
 }
 
 /** Valore atteso di un bonus AL MOMENTO DELL'ACCORDO (usa la stima iniziale) */

@@ -621,8 +621,13 @@ export class ScambiPage {
     return new Date() >= unMesePrima;
   }
 
+  /**
+   * "gol" può essere pattuito sia a evento sia a soglia (vedi
+   * TIPI_BONUS_SOGLIA_SCAMBIO in models.ts): il discriminante è la
+   * struttura del bonus, non il suo tipo statistico.
+   */
   isBonusEventi(b: BonusScambio): boolean {
-    return b.tipo === 'gol' || b.tipo === 'assist';
+    return 'eventiAttesi' in b;
   }
 
   confermaRientro(scambio: Scambio, playerName: string, playerId: string): void {
