@@ -531,6 +531,39 @@ export class ScambiPage {
     );
   }
 
+  /**
+   * true se ALMENO UN giocatore della trattativa ha un riscatto che conta
+   * davvero (obbligo, o diritto già esercitato) — solo in quel caso la
+   * quotazione finale (QF) incide sui ricalcoli reali (passaggio 2, vedi
+   * scambi-avanzati-calculator.ts), quindi solo in quel caso ha senso
+   * mostrare il campo "Sim: quotazione finale" per QUALSIASI giocatore
+   * della trattativa (il passaggio 2 tocca entrambi i lati, non solo chi ha
+   * il riscatto).
+   */
+  private trattativaHaRiscatto(scambio: Scambio): boolean {
+    if (!scambio.avanzato) {
+      return false;
+    }
+    const conta = (t: TerminiGiocatoreAvanzato) =>
+      t.tipoContratto === 'prestitoObbligo' || (t.tipoContratto === 'prestitoDiritto' && t.riscattato === true);
+    return [...scambio.avanzato.terminiA, ...scambio.avanzato.terminiB].some(conta);
+  }
+
+  /**
+   * true se per QUESTO giocatore ha senso mostrare la sezione "Modifica
+   * termini" (riscatto e/o simulazione QF): un prestito diritto/obbligo (può
+   * avere/avere già un riscatto pattuito), oppure qualunque giocatore se
+   * ALTROVE nella stessa trattativa c'è già un riscatto attivo — altrimenti
+   * sarebbe solo una simulazione di un valore che non inciderebbe su nulla.
+   */
+  mostraModificaTermini(scambio: Scambio, termini: TerminiGiocatoreAvanzato): boolean {
+    return (
+      termini.tipoContratto === 'prestitoDiritto' ||
+      termini.tipoContratto === 'prestitoObbligo' ||
+      this.trattativaHaRiscatto(scambio)
+    );
+  }
+
   /** Etichetta sintetica di un bonus pattuito, per il riepilogo della trattativa (visibile a tutti) */
   etichettaBonus(b: BonusScambio): string {
     if (this.isBonusEventi(b)) {

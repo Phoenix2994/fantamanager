@@ -329,6 +329,14 @@ export interface TerminiGiocatoreAvanzato {
    * manuale, mai automatico (vedi TeamService.confermaRientroPrestito).
    */
   prestitoConcluso?: boolean;
+  /**
+   * Id del documento in teams/{squadra cedente}/seasons/{stagione}/
+   * loanedPlayers creato alla conferma (solo per contratti di prestito):
+   * serve a confermaRientroPrestito per cancellare la voce giusta quando il
+   * prestito finisce. Assente per 'definitivo' e per le trattative
+   * confermate prima dell'introduzione di questo campo.
+   */
+  loanedPlayerId?: string;
 }
 
 /** Dati aggiuntivi di una trattativa avanzata, in aggiunta a quelli comuni dello Scambio */

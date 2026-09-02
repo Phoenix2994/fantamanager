@@ -1,6 +1,7 @@
 import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
 import {
+  DocumentReference,
   Firestore,
   addDoc,
   collection,
@@ -21,12 +22,14 @@ import { environment } from '../../../environments/environment';
 import { round2 } from '../finance-calculator';
 import {
   AuditEntityType,
+  ContractType,
   Player,
   Scambio,
   ScambioAvanzatoDati,
   ScambioSide,
   ScambioSnapshot,
   TerminiGiocatoreAvanzato,
+  TipoContrattoScambio,
 } from '../models';
 import { AuthService } from './auth.service';
 import { FinanceService } from './finance.service';
@@ -174,6 +177,29 @@ export class ScambiService {
 
   private financePath(teamId: string): string {
     return `teams/${teamId}/seasonFinance/${environment.season}`;
+  }
+
+  private loanedPlayersCollection(teamId: string) {
+    return collection(this.firestore, `teams/${teamId}/seasons/${environment.season}/loanedPlayers`);
+  }
+
+  /**
+   * ContractType da scrivere sul documento giocatore per il tipo di
+   * contratto pattuito in una trattativa avanzata — vedi anche
+   * etichettaContratto in scambi-avanzati-calculator.ts (stessa mappatura,
+   * ma per l'etichetta mostrata in UI invece che per il campo persistito).
+   */
+  private contractTypePerTipoContrattoAvanzato(tipo: TipoContrattoScambio): ContractType {
+    switch (tipo) {
+      case 'definitivo':
+        return 'TITOLO DEFINITIVO';
+      case 'prestito':
+        return 'PRESTITO';
+      case 'prestitoDiritto':
+        return 'PRESTITO (DIRITTO)';
+      case 'prestitoObbligo':
+        return 'PRESTITO (OBBLIGO)';
+    }
   }
 
   /**
@@ -436,10 +462,25 @@ export class ScambiService {
       ),
     );
 
+    // Termini pattuiti per ciascun giocatore coinvolto (chiave playerId):
+    // servono a scrivere il contractType giusto sul documento giocatore e a
+    // creare la voce "ceduto in prestito" per chi non è a titolo definitivo
+    // — prima di questa mappa, quei due passaggi non avvenivano affatto e
+    // il giocatore risultava "titolo definitivo" nella nuova rosa.
+    const terminiByPlayerId = new Map<string, TerminiGiocatoreAvanzato>();
+    for (const t of [...avanzato.terminiA, ...avanzato.terminiB]) {
+      terminiByPlayerId.set(t.playerId, t);
+    }
+
     const movimenti = [
       ...selezionatiA.map((p) => ({ player: p, fromTeamId: teamIdA, toTeamId: teamIdB })),
       ...selezionatiB.map((p) => ({ player: p, fromTeamId: teamIdB, toTeamId: teamIdA })),
-    ];
+    ].map((m) => ({
+      ...m,
+      contractTypeOverride: this.contractTypePerTipoContrattoAvanzato(
+        terminiByPlayerId.get(m.player.id)?.tipoContratto ?? 'definitivo',
+      ),
+    }));
     // Completa il campo `player` di ogni rivalutazione (serve a patchGiocatore)
     for (const m of movimenti) {
       const r = rivalutazioniById.get(m.player.id);
@@ -447,6 +488,41 @@ export class ScambiService {
         (r as { player: Player }).player = m.player;
       }
     }
+
+    // Voce "ceduto in prestito" per la squadra CEDENTE, una per ogni
+    // giocatore che non passa a titolo definitivo — ref generati ORA (id
+    // client-side) così da poterli sia scrivere nel batch sia incollare
+    // subito su TerminiGiocatoreAvanzato.loanedPlayerId, che
+    // confermaRientroPrestito userà per cancellare la voce giusta.
+    const loanWrites: { ref: DocumentReference; data: Record<string, unknown> }[] = [];
+    const loanIdByPlayerId = new Map<string, string>();
+    for (const m of movimenti) {
+      if (m.contractTypeOverride === 'TITOLO DEFINITIVO') {
+        continue;
+      }
+      const nomeSquadraDestinazione = m.toTeamId === teamIdA ? scambio.snapshot.nomeSquadraA : scambio.snapshot.nomeSquadraB;
+      const loanRef = doc(this.loanedPlayersCollection(m.fromTeamId));
+      loanWrites.push({
+        ref: loanRef,
+        data: {
+          playerName: m.player.name,
+          toTeam: nomeSquadraDestinazione,
+          contractType: m.contractTypeOverride,
+          createdAt: serverTimestamp(),
+        },
+      });
+      loanIdByPlayerId.set(m.player.id, loanRef.id);
+    }
+    const incollaLoanId = (termini: readonly TerminiGiocatoreAvanzato[]): TerminiGiocatoreAvanzato[] =>
+      termini.map((t) => {
+        const loanedPlayerId = loanIdByPlayerId.get(t.playerId);
+        return loanedPlayerId ? { ...t, loanedPlayerId } : t;
+      });
+    const avanzatoFinale: ScambioAvanzatoDati = {
+      ...avanzatoConQiCongelata,
+      terminiA: incollaLoanId(avanzatoConQiCongelata.terminiA),
+      terminiB: incollaLoanId(avanzatoConQiCongelata.terminiB),
+    };
 
     const valoreFinale = new Map<string, number>();
     for (const m of movimenti) {
@@ -478,7 +554,8 @@ export class ScambiService {
       [...rivalutazioniById.values()] as import('../scambi-calculator').PlayerRivalutazione[],
       teamIdA,
       teamIdB,
-      avanzatoConQiCongelata,
+      avanzatoFinale,
+      loanWrites,
     );
   }
 
@@ -625,7 +702,7 @@ export class ScambiService {
   /** Scrittura atomica: giocatori + finanze + stato trattativa + undoLog */
   private async scriviBatch(
     scambio: Scambio,
-    movimenti: { player: Player; fromTeamId: string; toTeamId: string }[],
+    movimenti: { player: Player; fromTeamId: string; toTeamId: string; contractTypeOverride?: ContractType }[],
     financeUpdates: {
       teamId: string;
       campo: 'trasferimentiUscita' | 'trasferimentiEntrata';
@@ -637,6 +714,8 @@ export class ScambiService {
     teamIdB: string,
     /** Solo per lo scambio avanzato: termini con la QI congelata da scrivere insieme alla conferma */
     avanzatoConQiCongelata?: ScambioAvanzatoDati,
+    /** Solo per lo scambio avanzato: voci "ceduto in prestito" da creare per i giocatori non a titolo definitivo */
+    loanWrites: { ref: DocumentReference; data: Record<string, unknown> }[] = [],
   ): Promise<void> {
     const rivalutazioniById = new Map(
       rivalutazioni.map((r) => [r.player.id, r] as const),
@@ -651,6 +730,7 @@ export class ScambiService {
       const vecchioRef = doc(this.firestore, this.playerPath(m.fromTeamId, m.player.id));
       batch.set(nuovoRef, {
         ...playerData,
+        ...(m.contractTypeOverride ? { contractType: m.contractTypeOverride } : {}),
         ...patch,
         updatedAt: serverTimestamp(),
       });
@@ -659,6 +739,12 @@ export class ScambiService {
       // stato, e sparisce dalla nuova (prima=null perché lì non esisteva).
       undoDocs.push({ path: vecchioRef.path, before: playerData as Record<string, unknown> });
       undoDocs.push({ path: nuovoRef.path, before: null });
+    }
+
+    for (const l of loanWrites) {
+      batch.set(l.ref, l.data);
+      // Annullamento: la voce non esisteva prima, va cancellata.
+      undoDocs.push({ path: l.ref.path, before: null });
     }
 
     for (const f of financeUpdates) {
@@ -854,12 +940,35 @@ export class ScambiService {
     );
     const scambioRef = this.scambioRef(scambio.id);
 
+    // Rimuove la voce "ceduto in prestito" per la squadra d'origine — solo
+    // per i prestiti confermati DOPO l'introduzione di loanedPlayerId
+    // (assente per le trattative confermate prima, in quel caso la voce
+    // va tolta a mano se presente). Letta PRIMA del batch per poter
+    // registrare il "prima" corretto nell'undo.
+    let vecchioLoanRef: ReturnType<typeof doc> | null = null;
+    let vecchioLoanData: Record<string, unknown> | null = null;
+    if (termini.loanedPlayerId) {
+      vecchioLoanRef = doc(this.loanedPlayersCollection(teamOrigine), termini.loanedPlayerId);
+      const loanSnap = await getDoc(vecchioLoanRef);
+      vecchioLoanData = loanSnap.exists() ? (loanSnap.data() as Record<string, unknown>) : null;
+    }
+
     const batch = writeBatch(this.firestore);
-    batch.set(nuovoRef, { ...datiSenzaId, updatedAt: serverTimestamp() });
+    batch.set(nuovoRef, {
+      ...datiSenzaId,
+      // Torna di proprietà piena della squadra d'origine: non è più "in
+      // prestito presso" nessuno (altrimenti resterebbe PRESTITO anche a
+      // rientro avvenuto).
+      contractType: 'TITOLO DEFINITIVO',
+      updatedAt: serverTimestamp(),
+    });
     batch.delete(vecchioRef);
     batch.update(scambioRef, {
       avanzato: rimuoviUndefined({ ...scambio.avanzato, terminiA: nuoviTerminiA, terminiB: nuoviTerminiB }),
     });
+    if (vecchioLoanRef && vecchioLoanData) {
+      batch.delete(vecchioLoanRef);
+    }
 
     this.undo.registra(batch, {
       tipo: 'rientroPrestito',
@@ -873,6 +982,7 @@ export class ScambiService {
         // l'intero documento scambio, non solo il campo avanzato — altrimenti
         // annullare cancellerebbe squadraA/squadraB/stato/snapshot/ecc.
         { path: scambioRef.path, before: scambioSenzaId as unknown as Record<string, unknown> },
+        ...(vecchioLoanRef && vecchioLoanData ? [{ path: vecchioLoanRef.path, before: vecchioLoanData }] : []),
       ],
     });
 

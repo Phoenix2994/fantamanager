@@ -513,6 +513,7 @@
                               </div>
                             }
 
+                            @if (mostraModificaTermini(s, t)) {
                             <div class="modifica-termini">
                               <div class="modifica-termini-campi">
                                 @if (t.tipoContratto === 'prestitoDiritto') {
@@ -580,6 +581,7 @@
                                 </div>
                               }
                             </div>
+                            }
                           </div>
                         }
                       }
