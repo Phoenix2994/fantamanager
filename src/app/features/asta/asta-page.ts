@@ -15,7 +15,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
-import { AstaStato, Team, ValutazioneSvincolato } from '../../core/models';
+import { AstaStato, Svincolato, Team, ValutazioneSvincolato } from '../../core/models';
 import { prossimoScaglioneMulte, round2 } from '../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
 import { slugify } from '../../core/text-utils';
@@ -243,6 +243,41 @@ type TeamStat = TeamStatAsta;
                           <div class="rilanciante"><app-team-logo [name]="s.rilanciatoDaTeamName" class="rilanciante-logo" />Ultimo rilancio: {{ s.rilanciatoDaTeamName }}</div>
                         }
                       </div>
+
+                      <!-- Giocatori simili ancora disponibili: stesso ruolo, quotazione
+                           vicina — comodo su mobile per non uscire dal pannello di
+                           rilancio per consultare la lista svincolati -->
+                      @if (giocatoriSimili().length > 0) {
+                        <button
+                          type="button"
+                          matButton
+                          class="simili-toggle"
+                          [attr.aria-expanded]="mostraSimili()"
+                          (click)="mostraSimili.set(!mostraSimili())"
+                        >
+                          <mat-icon>{{ mostraSimili() ? 'expand_less' : 'expand_more' }}</mat-icon>
+                          Giocatori simili disponibili ({{ giocatoriSimili().length }})
+                        </button>
+                        @if (mostraSimili()) {
+                          <ul class="simili-list">
+                            @for (p of giocatoriSimili(); track p.id) {
+                              <li>
+                                <span class="chips">
+                                  @for (r of rolesOf(p.ruolo); track r) {
+                                    <span
+                                      class="chip small"
+                                      [style.border-color]="colorFor(r)"
+                                      [style.color]="colorFor(r)"
+                                    >{{ r }}</span>
+                                  }
+                                </span>
+                                <span class="simili-nome">{{ p.name }}</span>
+                                <span class="simili-quota">{{ p.quotazioneAttuale | number: '1.0-0' }}</span>
+                              </li>
+                            }
+                          </ul>
+                        }
+                      }
 
                       <!-- Valutazione PRIVATA della propria squadra: solo per chi ha
                            fatto login come squadra (non per la scelta squadra anonima) -->
@@ -637,6 +672,46 @@ type TeamStat = TeamStatAsta;
       height: 18px;
     }
 
+    .simili-toggle {
+      width: 100%;
+      justify-content: center;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .simili-list {
+      list-style: none;
+      margin: 0 0 4px;
+      padding: 0;
+    }
+
+    .simili-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 4px;
+      border-bottom: 1px dashed var(--mat-sys-outline-variant);
+      font-size: 0.85rem;
+    }
+
+    .chip.small {
+      padding: 1px 7px;
+      font-size: 0.68rem;
+    }
+
+    .simili-nome {
+      flex: 1;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .simili-quota {
+      font-weight: 700;
+      color: var(--mat-sys-primary);
+      white-space: nowrap;
+    }
+
     .mia-valutazione {
       display: flex;
       flex-direction: column;
@@ -806,6 +881,41 @@ export class AstaPage {
   });
 
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
+
+  /** Svincolati (per il pannello "giocatori simili" nel box di rilancio) */
+  private readonly svincolati = toSignal(this.teamService.svincolati$, { initialValue: [] as Svincolato[] });
+
+  /** Pannello "giocatori simili": chiuso di default, per non rubare spazio ai pulsanti di rilancio */
+  readonly mostraSimili = signal(false);
+
+  private readonly MAX_SIMILI = 5;
+
+  /**
+   * Svincolati ancora disponibili (non chiamati) con almeno un ruolo in
+   * comune col giocatore attualmente in asta, i più vicini per quotazione
+   * — comodo su mobile per non dover continuamente uscire dal pannello di
+   * rilancio per consultare la lista degli svincolati.
+   */
+  readonly giocatoriSimili = computed<Svincolato[]>(() => {
+    const s = this.stato();
+    if (!s?.aperta) {
+      return [];
+    }
+    const ruoliCorrente = this.rolesOf(s.ruolo);
+    const idCorrente = slugify(s.giocatoreNome);
+    return this.svincolati()
+      .filter(
+        (p) =>
+          p.id !== idCorrente &&
+          !p.chiamato &&
+          this.rolesOf(p.ruolo).some((r) => ruoliCorrente.includes(r)),
+      )
+      .sort(
+        (a, b) =>
+          Math.abs(a.quotazioneAttuale - s.quotazione) - Math.abs(b.quotazioneAttuale - s.quotazione),
+      )
+      .slice(0, this.MAX_SIMILI);
+  });
 
   /** Squadra del partecipante corrente (persistita in localStorage) */
   readonly miaSquadra = signal<Team | null>(this.leggiSquadraSalvata());
