@@ -149,8 +149,27 @@ interface RosterEntry {
         </button>
       }
 
+      <!-- Nascondi i già chiamati in asta (non assegnati, restano svincolati
+           ma "bruciati" per il random): mostrato solo se ce n'è almeno uno,
+           altrimenti non cambierebbe nulla. I giocatori assegnati non
+           passano di qui: vengono tolti dagli svincolati alla chiusura
+           dell'asta, vedi il commento su Svincolato.chiamato in models.ts. -->
+      @if (chiamatiCount() > 0) {
+        <button
+          type="button"
+          matButton="tonal"
+          class="filter-toggle"
+          [class.active]="nascondiChiamati()"
+          [attr.aria-pressed]="nascondiChiamati()"
+          (click)="nascondiChiamati.set(!nascondiChiamati())"
+        >
+          <mat-icon>visibility_off</mat-icon>
+          Nascondi già chiamati
+        </button>
+      }
+
       <!-- Reset rapido filtri: visibile solo se qualche filtro è attivo -->
-      @if (filterRuoli().length > 0 || filterSquadre().length > 0 || search() || soloValutati()) {
+      @if (filterRuoli().length > 0 || filterSquadre().length > 0 || search() || soloValutati() || nascondiChiamati()) {
         <button matIconButton aria-label="Azzera filtri" class="reset-filters" (click)="azzeraFiltri()">
           <mat-icon>filter_alt_off</mat-icon>
         </button>
@@ -597,6 +616,8 @@ export class SvincolatiSection {
   readonly soloValutati = signal(false);
   /** true = ordina per stelle (poi per quotazione a parità), invece che per sola quotazione */
   readonly ordinaPerStelle = signal(false);
+  /** true = nasconde gli svincolati già chiamati in asta (non assegnati) */
+  readonly nascondiChiamati = signal(false);
 
   /** Ruoli distinti presenti nella lista, nell'ordine canonico */
   readonly ruoliDisponibili = computed(() => {
@@ -639,6 +660,7 @@ export class SvincolatiSection {
     const term = normalize(this.search());
     const soloValutati = this.soloValutati();
     const perStelle = this.ordinaPerStelle();
+    const nascondiChiamati = this.nascondiChiamati();
     return this.svincolati()
       .filter(
         (p) =>
@@ -646,7 +668,8 @@ export class SvincolatiSection {
           (!ruoli.length || splitRoles(p.ruolo).some((r) => ruoli.includes(r))) &&
           (!squadre.length || squadre.includes(p.squadra)) &&
           (!term || normalize(p.name).includes(term)) &&
-          (!soloValutati || this.stelleDi(p.id) > 0),
+          (!soloValutati || this.stelleDi(p.id) > 0) &&
+          (!nascondiChiamati || !p.chiamato),
       )
       .sort((a, b) => {
         if (perStelle) {
@@ -735,12 +758,13 @@ export class SvincolatiSection {
     return splitRoles(player.ruolo);
   }
 
-  /** Azzera i filtri ruoli, ricerca e "solo valutati" */
+  /** Azzera i filtri ruoli, ricerca, "solo valutati" e "nascondi già chiamati" */
   azzeraFiltri(): void {
     this.filterRuoli.set([]);
     this.filterSquadre.set([]);
     this.search.set('');
     this.soloValutati.set(false);
+    this.nascondiChiamati.set(false);
   }
 
   /**
