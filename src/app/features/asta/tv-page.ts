@@ -8,7 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { combineLatest, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
-import { AstaStato } from '../../core/models';
+import { AstaStato, Svincolato } from '../../core/models';
 import { prossimoScaglioneMulte, round2 } from '../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
 import { nomeSquadraSerieA } from '../../core/serie-a-logos';
@@ -130,6 +130,7 @@ function nomeLeggibile(nome: string): string {
                 <div class="squadra-giocatore">
                   <app-serie-a-logo [sigla]="s.squadra" class="squadra-giocatore-logo" />
                   {{ s.squadra }}
+                  <span class="quotazione">Q. {{ s.quotazione }}</span>
                 </div>
               }
               <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
@@ -168,6 +169,7 @@ function nomeLeggibile(nome: string): string {
         <h2>
           <mat-icon>bar_chart</mat-icon>
           Statistiche asta
+          <span class="rimanenti">{{ rimanenti() }} da chiamare</span>
         </h2>
         <app-asta-stats-panel [stats]="stats()" [sempreAperto]="true" [colonne]="true" />
       </aside>
@@ -253,6 +255,13 @@ function nomeLeggibile(nome: string): string {
       font-size: 1.25rem;
     }
 
+    .rimanenti {
+      margin-left: auto;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
     .content {
       display: flex;
       flex-direction: column;
@@ -294,6 +303,12 @@ function nomeLeggibile(nome: string): string {
     .squadra-giocatore-logo {
       width: clamp(1.6rem, 4vw, 2.4rem);
       height: clamp(1.6rem, 4vw, 2.4rem);
+    }
+
+    .quotazione {
+      font-size: 0.55em;
+      opacity: 0.75;
+      font-weight: 600;
     }
 
     .prezzo {
@@ -392,6 +407,12 @@ export class TvPage {
     ),
     { initialValue: [] as TeamStatAsta[] },
   );
+
+  private readonly svincolati = toSignal(this.teamService.svincolati$, {
+    initialValue: [] as Svincolato[],
+  });
+  /** Quanti svincolati non sono ancora stati chiamati all'asta (esclusi random e manuali) */
+  readonly rimanenti = computed(() => this.svincolati().filter((s) => !s.chiamato).length);
 
   /** Annuncio vocale ON/OFF (controllo locale, non persistito: si riparte da ON ad ogni apertura) */
   readonly audioAttivo = signal(true);

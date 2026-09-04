@@ -158,6 +158,13 @@ export interface AstaStato {
   /** Solo se ultimoEsito === 'assegnato': squadra e prezzo dell'acquisto appena confermato */
   ultimoVincitoreNome?: string;
   ultimoPrezzo?: number;
+  /**
+   * true se questa asta è stata aperta da "Apri asta random": alla sua
+   * assegnazione, il servizio apre automaticamente l'asta sul prossimo
+   * giocatore random, per non dover rilanciare manualmente il pulsante ad
+   * ogni giocatore durante una sessione di asta veloce.
+   */
+  apertoDaRandom?: boolean;
 }
 
 /** Squadra: teams/{teamId} */

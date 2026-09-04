@@ -778,7 +778,7 @@ export class SvincolatiSection {
       return;
     }
     const scelto = candidati[Math.floor(Math.random() * candidati.length)];
-    await this.apriAsta(scelto);
+    await this.apriAsta(scelto, true);
   }
 
   /**
@@ -786,8 +786,12 @@ export class SvincolatiSection {
    * conferma: \u00e8 un'azione pubblica e visibile a tutti in tempo reale, va
    * evitato un click accidentale (soprattutto per il pick da random, dove
    * il nome scelto non era prevedibile in anticipo).
+   *
+   * `daRandom` viene passato al servizio: se true, quando questo giocatore
+   * verr\u00e0 assegnato l'asta prosegue da sola sul prossimo random, senza
+   * dover ricliccare il pulsante ad ogni giocatore.
    */
-  async apriAsta(giocatore: Svincolato): Promise<void> {
+  async apriAsta(giocatore: Svincolato, daRandom = false): Promise<void> {
     const confermato = await firstValueFrom(
       this.dialog
         .open(ConfirmDialog, {
@@ -805,7 +809,7 @@ export class SvincolatiSection {
       return;
     }
     try {
-      await this.astaService.apriAsta(giocatore);
+      await this.astaService.apriAsta(giocatore, daRandom);
       this.snackBar.open(`Asta aperta su ${giocatore.name}`, undefined, { duration: 3000 });
     } catch {
       this.snackBar.open('Errore durante l\u2019apertura dell\u2019asta', undefined, {

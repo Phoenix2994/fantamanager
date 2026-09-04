@@ -80,7 +80,7 @@ export class AstaService {
    * reset esplicito — non ha altro effetto (resta comunque richiamabile a
    * mano dall'admin in qualunque momento).
    */
-  async apriAsta(giocatore: Svincolato): Promise<void> {
+  async apriAsta(giocatore: Svincolato, daRandom = false): Promise<void> {
     const svincolatoRef = doc(
       this.firestore,
       `league/${environment.leagueId}/svincolati/${giocatore.id}`,
@@ -98,6 +98,7 @@ export class AstaService {
       rilanciatoDaTeamId: '',
       rilanciatoDaTeamName: '',
       timestampUltimoRilancio: serverTimestamp(),
+      apertoDaRandom: daRandom,
     });
     batch.set(
       svincolatoRef,
@@ -345,6 +346,42 @@ export class AstaService {
         `Assegnazione asta: ${stato.giocatoreNome} a ${teamName} ` +
         `per ${prezzoDaUsare} €`,
     });
+
+    // Se questa era un'asta "random", incatena subito la prossima — non
+    // deve mai bloccare l'assegnazione appena fatta: eventuali errori (es.
+    // nessun svincolato più richiamabile) restano silenziosi.
+    if (stato.apertoDaRandom) {
+      void this.apriAstaRandomSuccessiva();
+    }
+  }
+
+  /** Pick di un nuovo giocatore random tra i non ancora chiamati e apertura automatica della sua asta */
+  private async apriAstaRandomSuccessiva(): Promise<void> {
+    try {
+      const snap = await getDocs(
+        collection(this.firestore, `league/${environment.leagueId}/svincolati`),
+      );
+      const candidati = snap.docs.filter((d) => d.data()['chiamato'] !== true);
+      if (candidati.length === 0) {
+        return;
+      }
+      const scelto = candidati[Math.floor(Math.random() * candidati.length)];
+      const d = scelto.data();
+      await this.apriAsta(
+        {
+          id: scelto.id,
+          name: d['name'] as string,
+          ruolo: d['ruolo'] as string,
+          squadra: d['squadra'] as string,
+          quotazioneAttuale: d['quotazioneAttuale'] as number,
+          season: d['season'] as string,
+        },
+        true,
+      );
+    } catch {
+      // silenzioso: l'assegnazione precedente è comunque andata a buon
+      // fine, il proseguimento automatico è solo un di più
+    }
   }
 
   private async getStato(): Promise<AstaStato | undefined> {
