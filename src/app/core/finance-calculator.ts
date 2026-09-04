@@ -58,15 +58,22 @@ export function calcolaProssimaSpesaRinnovo(
 }
 
 /**
- * Mappatura della prossima percentuale di rinnovo dopo un rinnovo.
- * Scala fissa: 0.85 → 1.15, 1.1 → 1.55, 1.45 → 2.15, 2.0 → 2.9.
- * Valori non presenti in mappa restano invariati (aggiornamento manuale).
+ * Mappatura della prossima percentuale di rinnovo dopo un rinnovo — stessa
+ * scala pubblicata nel regolamento (1°...9°+): 60% → 85% → 115% → 155% →
+ * 215% → 290% → 400% → 550% → 760%, poi stabile (dal 9° in poi il rinnovo
+ * costa sempre 760%). Valori non presenti in mappa restano invariati
+ * (aggiornamento manuale, o percentuali storiche non più in uso).
  */
 const PROSSIMA_PERC_MAP: Record<number, number> = {
+ 0.6: 0.85,
  0.85: 1.15,
- 1.1: 1.55,
- 1.45: 2.15,
- 2.0: 2.9,
+ 1.15: 1.55,
+ 1.55: 2.15,
+ 2.15: 2.9,
+ 2.9: 4.0,
+ 4.0: 5.5,
+ 5.5: 7.6,
+ 7.6: 7.6,
 };
 
 export function prossimaPercentRinnovo(perce: number): number {

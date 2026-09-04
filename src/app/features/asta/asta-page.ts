@@ -986,6 +986,19 @@ export class AstaPage {
   readonly inCooldown = signal(false);
 
   constructor() {
+    // Chi ha fatto login col PROPRIO account squadra rilancia sempre per sé
+    // stesso: non ha senso chiedergli "chi sei?" come nella modalità
+    // anonima. Il picker "Chi sei?" (e il "Cambia" dell'admin) restano solo
+    // per le sessioni anonime — dispositivo condiviso durante l'asta dal
+    // vivo, dove più persone reali si alternano senza login individuale —
+    // e per l'admin, che può ancora scegliere/cambiare squadra a mano.
+    effect(() => {
+      const mia = this.myTeam();
+      if (mia) {
+        this.miaSquadra.set(mia);
+      }
+    });
+
     // Se la squadra salvata non esiste più nel DB, resetta la scelta.
     // Attenzione: teams parte da [] (initialValue) — resetta SOLO quando
     // la lista è stata effettivamente caricata (length > 0).

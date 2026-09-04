@@ -5,6 +5,7 @@ import {
   preparaRescissione,
   preparaRinnovo,
   preparaTrasferimento,
+  prossimaPercentRinnovo,
   prossimoScaglioneMulte,
   residuoAlleMulte,
   etichettaResiduoMulte,
@@ -167,6 +168,28 @@ describe('finance-calculator: operazioni annullabili', () => {
     it('è zero se non ci sono scaglioni configurati', () => {
       expect(prossimoScaglioneMulte(300, [])).toBeNull();
       expect(residuoAlleMulte(300, [])).toBe(0);
+    });
+  });
+
+  describe('prossimaPercentRinnovo', () => {
+    it('segue la scala pubblicata a regolamento: 60→85→115→155→215→290→400→550→760', () => {
+      expect(prossimaPercentRinnovo(0.6)).toBe(0.85);
+      expect(prossimaPercentRinnovo(0.85)).toBe(1.15);
+      expect(prossimaPercentRinnovo(1.15)).toBe(1.55);
+      expect(prossimaPercentRinnovo(1.55)).toBe(2.15);
+      expect(prossimaPercentRinnovo(2.15)).toBe(2.9);
+      expect(prossimaPercentRinnovo(2.9)).toBe(4.0);
+      expect(prossimaPercentRinnovo(4.0)).toBe(5.5);
+      expect(prossimaPercentRinnovo(5.5)).toBe(7.6);
+    });
+
+    it('dal 9° rinnovo in poi resta stabile al 760%', () => {
+      expect(prossimaPercentRinnovo(7.6)).toBe(7.6);
+    });
+
+    it('una percentuale non in scala (es. storica, o impostata a mano) resta invariata', () => {
+      expect(prossimaPercentRinnovo(0.667)).toBe(0.667);
+      expect(prossimaPercentRinnovo(1)).toBe(1);
     });
   });
 });
