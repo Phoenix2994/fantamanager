@@ -124,6 +124,11 @@ export class AstaService {
    * Rilancia di `incremento` € per la squadra indicata.
    * Transaction atomica con regole:
    * - asta aperta
+   * - il prezzo corrente coincide ancora con `prezzoAtteso` (il prezzo che
+   *   il client aveva visto): se nel frattempo un'altra squadra ha già
+   *   rilanciato, il rilancio viene rifiutato invece di sommarsi in
+   *   silenzio a un prezzo mai visto dal client — solo il primo di due
+   *   rilanci simultanei vince, il secondo va ripetuto sul nuovo prezzo
    * - la squadra non è già l'ultima rilanciante
    * - incremento >= minimo in base al prezzo corrente
    * - la squadra non ha raggiunto i 28 giocatori
@@ -133,12 +138,18 @@ export class AstaService {
     teamName: string,
     incremento: number,
     giocatoriSquadra: number,
+    prezzoAtteso: number,
   ): Promise<void> {
     await runTransaction(this.firestore, async (tx) => {
       const snap = await tx.get(this.statoRef);
       const stato = snap.data() as AstaStato | undefined;
       if (!stato || !stato.aperta) {
         throw new Error('L\u2019asta non \u00e8 aperta');
+      }
+      if (Math.abs(stato.prezzoAttuale - prezzoAtteso) > 1e-9) {
+        throw new Error(
+          `Prezzo già cambiato a ${stato.prezzoAttuale.toFixed(2)} €: riprova`,
+        );
       }
       if (stato.rilanciatoDaTeamId === teamId) {
         throw new Error('La tua squadra \u00e8 gi\u00e0 l\u2019ultima rilanciante');

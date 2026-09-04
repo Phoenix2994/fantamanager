@@ -1094,24 +1094,37 @@ export class AstaPage {
   });
 
   async rilancia(incremento: number): Promise<void> {
-    await this.eseguiRilancio(incremento);
+    await this.eseguiRilancio(incremento, this.stato()?.prezzoAttuale ?? 0);
   }
 
   async rilanciaCustom(): Promise<void> {
     if (!this.customValida()) {
       return;
     }
-    await this.eseguiRilancio(this.customBid() - (this.stato()?.prezzoAttuale ?? 0));
+    const prezzoAtteso = this.stato()?.prezzoAttuale ?? 0;
+    await this.eseguiRilancio(this.customBid() - prezzoAtteso, prezzoAtteso);
   }
 
-  private async eseguiRilancio(incremento: number): Promise<void> {
+  /**
+   * `prezzoAtteso` è il prezzo visto da questo client al momento del click:
+   * se nel frattempo un'altra squadra ha già rilanciato, il servizio
+   * rifiuta il rilancio invece di sommarlo in silenzio al nuovo prezzo —
+   * l'utente vede l'errore e, se vuole, rilancia di nuovo consapevolmente.
+   */
+  private async eseguiRilancio(incremento: number, prezzoAtteso: number): Promise<void> {
     const team = this.miaSquadra();
     if (!team || this.inCooldown()) {
       return;
     }
     try {
-      await this.astaService.rilancia(team.id, team.name, incremento, this.mieiGiocatori());
-      // Cooldown di 1 secondo: evita doppi click/race tra partecipanti
+      await this.astaService.rilancia(
+        team.id,
+        team.name,
+        incremento,
+        this.mieiGiocatori(),
+        prezzoAtteso,
+      );
+      // Cooldown di 1 secondo: evita doppi click/race dello stesso utente
       this.inCooldown.set(true);
       setTimeout(() => this.inCooldown.set(false), 1000);
     } catch (e) {
