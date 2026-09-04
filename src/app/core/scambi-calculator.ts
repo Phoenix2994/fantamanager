@@ -243,7 +243,10 @@ export function patchGiocatore(
   }
 
   if (rivalutazione) {
-    const nuovoValore = rivalutazione.valoreDopo;
+    // round1: valoreDopo può arrivare già arrotondato a 2 decimali dal
+    // calcolatore degli scambi avanzati — qui si applica sempre la
+    // convenzione a 1 decimale di V.I./V.A. (vedi calcolaValoreAttuale).
+    const nuovoValore = round1(rivalutazione.valoreDopo);
     patch.valoreIniziale = nuovoValore;
     patch.quotazioneIniziale = player.quotazioneAttuale;
     patch.valoreAttuale = calcolaValoreAttuale(

@@ -15,7 +15,7 @@ import {
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AstaStato, PlayerInput, SeasonFinance, Svincolato } from '../models';
-import { calcolaValoreAttuale, calcolaProssimaSpesaRinnovo, round2 } from '../finance-calculator';
+import { calcolaValoreAttuale, calcolaProssimaSpesaRinnovo, round1, round2 } from '../finance-calculator';
 import { slugify } from '../text-utils';
 import { AuditService } from './audit.service';
 import { FinanceService } from './finance.service';
@@ -274,7 +274,9 @@ export class AstaService {
       // Q.I. = Q.A. = quotazione al momento dell'acquisto
       quotazioneIniziale: stato.quotazione,
       quotazioneAttuale: stato.quotazione,
-      valoreIniziale: prezzoDaUsare,
+      // round1: V.I. segue sempre la convenzione a 1 decimale, anche se il
+      // prezzo di assegnazione è stato inserito a mano dall'admin
+      valoreIniziale: round1(prezzoDaUsare),
     };
 
     const batch = writeBatch(this.firestore);

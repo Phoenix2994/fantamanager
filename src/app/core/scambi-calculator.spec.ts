@@ -263,6 +263,19 @@ describe('scambi-calculator', () => {
       // Spesa rinnovo sul nuovo V.A. (14) ma con la percentuale esistente (1.1), non 60%
       expect(patch.prossimaSpesaRinnovo).toBeCloseTo(14 * 1.1, 1);
     });
+
+    it('arrotonda valoreIniziale a 1 decimale anche se la rivalutazione arriva a 2 decimali (es. dal calcolatore avanzato)', () => {
+      const p = player('p1', 10, 100);
+      const patch = patchGiocatore(p, {
+        player: p,
+        valorePrima: 10,
+        aumento: 4.54,
+        valoreDopo: 14.54,
+      });
+
+      expect(patch.valoreIniziale).toBe(14.5);
+      expect(patch.valoreAttuale).toBe(14.5);
+    });
   });
 
   describe('possedutoATitoloDefinitivo', () => {

@@ -18,6 +18,7 @@ import {
  calcolaProssimaSpesaRinnovo,
  calcolaValoreAttuale,
  prossimaPercentRinnovo,
+ round1,
  round2,
 } from '../finance-calculator';
 import {
@@ -101,8 +102,11 @@ export class TeamService {
 
   /** Crea un nuovo giocatore nella rosa della stagione corrente */
   async addPlayer(teamId: string, input: PlayerInput): Promise<string> {
+    // round1: V.I. e V.A. seguono sempre la convenzione a 1 decimale,
+    // anche quando arrivano da un campo libero compilato a mano.
+    const valoreIniziale = round1(input.valoreIniziale);
     const valoreAttuale = calcolaValoreAttuale(
-      input.valoreIniziale,
+      valoreIniziale,
       input.quotazioneIniziale,
       input.quotazioneAttuale,
     );
@@ -110,6 +114,7 @@ export class TeamService {
       collection(this.firestore, `${this.seasonPath(teamId)}/players`),
       {
         ...input,
+        valoreIniziale,
         valoreAttuale,
         prossimaSpesaRinnovo: calcolaProssimaSpesaRinnovo(
           valoreAttuale,
@@ -129,7 +134,7 @@ export class TeamService {
       operation: 'create',
       fieldModified: '*',
       valueBefore: null,
-      valueAfter: { ...input, valoreAttuale },
+      valueAfter: { ...input, valoreIniziale, valoreAttuale },
       changeSummary: `Creazione giocatore ${input.name}`,
     });
 
@@ -141,8 +146,11 @@ export class TeamService {
    * ricalcola valoreAttuale e prossimaSpesaRinnovo.
    */
   async updatePlayer(teamId: string, playerId: string, input: PlayerInput): Promise<void> {
+    // round1: V.I. e V.A. seguono sempre la convenzione a 1 decimale,
+    // anche quando arrivano da un campo libero compilato a mano.
+    const valoreIniziale = round1(input.valoreIniziale);
     const valoreAttuale = calcolaValoreAttuale(
-      input.valoreIniziale,
+      valoreIniziale,
       input.quotazioneIniziale,
       input.quotazioneAttuale,
     );
@@ -165,6 +173,7 @@ export class TeamService {
 
     await updateDoc(this.playerRef(teamId, playerId), {
       ...input,
+      valoreIniziale,
       valoreAttuale,
       prossimaSpesaRinnovo: calcolaProssimaSpesaRinnovo(
         valoreAttuale,
@@ -182,7 +191,7 @@ export class TeamService {
       operation: 'update',
       fieldModified: '*',
       valueBefore,
-      valueAfter: { ...input, valoreAttuale },
+      valueAfter: { ...input, valoreIniziale, valoreAttuale },
       changeSummary: `Modifica giocatore ${input.name}`,
     });
   }
