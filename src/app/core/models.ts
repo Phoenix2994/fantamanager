@@ -148,6 +148,16 @@ export interface AstaStato {
   rilanciatoDaTeamId: string;
   rilanciatoDaTeamName: string;
   timestampUltimoRilancio?: Timestamp | null;
+  /**
+   * Esito dell'ultima chiusura (assegnato con successo, o chiusa senza
+   * assegnazione) — serve solo lato TV per sapere se annunciare a voce
+   * l'acquisto; rilanciatoDaTeamName non basta perché l'admin può assegnare
+   * a una squadra diversa dall'ultima rilanciante.
+   */
+  ultimoEsito?: 'assegnato' | 'chiuso';
+  /** Solo se ultimoEsito === 'assegnato': squadra e prezzo dell'acquisto appena confermato */
+  ultimoVincitoreNome?: string;
+  ultimoPrezzo?: number;
 }
 
 /** Squadra: teams/{teamId} */

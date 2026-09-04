@@ -43,3 +43,16 @@ export function logoUrlPerSquadra(sigla: string | null | undefined): string | nu
   const slug = LOGO_SLUG_PER_SQUADRA[sigla];
   return slug ? `loghi-serie-a/${slug}.png` : null;
 }
+
+/**
+ * Nome esteso di un club reale (per sigla, es. "MON" → "Monza"), o null se
+ * non mappato — usa lo stesso slug del logo, capitalizzato. Utile ovunque
+ * la sola sigla non sia abbastanza chiara (es. annuncio vocale in TV).
+ */
+export function nomeSquadraSerieA(sigla: string | null | undefined): string | null {
+  if (!sigla) {
+    return null;
+  }
+  const slug = LOGO_SLUG_PER_SQUADRA[sigla];
+  return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : null;
+}

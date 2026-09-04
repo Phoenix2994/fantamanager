@@ -3,17 +3,16 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { combineLatest, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
-import { AstaStato, Team } from '../../core/models';
+import { AstaStato } from '../../core/models';
 import { prossimoScaglioneMulte, round2 } from '../../core/finance-calculator';
 import { roleColor, splitRoles } from '../../core/roles';
-import { AstaService, ProvenienzaAsta } from '../../core/services/asta.service';
+import { nomeSquadraSerieA } from '../../core/serie-a-logos';
+import { AstaService } from '../../core/services/asta.service';
 import { AuthService } from '../../core/services/auth.service';
 import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
@@ -23,25 +22,41 @@ import {
   TeamStatAsta,
 } from './asta-stats-panel';
 import { TeamLogo } from '../../shared/team-logo';
+import { SerieALogo } from '../../shared/serie-a-logo';
+
+/**
+ * Nomi (giocatori, squadre) SOLO per gli annunci vocali: molte sintesi
+ * vocali (es. "Google italiano") leggono una parola tutta MAIUSCOLA come se
+ * fosse una sigla, lettera per lettera ("NGONGE" → "enne gi o enne gi e")
+ * invece di pronunciarla come un nome. Qui si converte in maiuscolo/
+ * minuscolo normale ("Ngonge") solo per il testo letto — a schermo il nome
+ * resta tutto maiuscolo com'è sempre stato, più leggibile da lontano su una
+ * TV. \p{L} (Unicode) copre anche le lettere accentate.
+ */
+function nomeLeggibile(nome: string): string {
+  return nome
+    .toLowerCase()
+    .replace(/(^|[\s'-])(\p{L})/gu, (_, separatore, lettera) => separatore + lettera.toUpperCase());
+}
 
 /**
  * Vista TV dell'asta live (/tv): display in grande aggiornato realtime.
- * Sola lettura per tutti; l'admin autenticato vede inoltre un pannello
- * di controllo per assegnare il giocatore (conferma acquisto per la rosa
- * e per la cifra battuta all'asta) o chiudere senza assegnare.
+ * Sola lettura per tutti, incluso l'admin — le azioni di controllo
+ * (assegna/chiudi) si fanno dal proprio dispositivo sulla pagina /asta,
+ * non da qui.
  */
 @Component({
   selector: 'app-tv-page',
   imports: [
     DecimalPipe,
     MatButtonModule,
-    MatCardModule,
     MatFormFieldModule,
     MatIconModule,
     MatSelectModule,
     RouterLink,
     AstaStatsPanel,
     TeamLogo,
+    SerieALogo,
   ],
   template: `
     <div class="tv">
@@ -52,6 +67,38 @@ import { TeamLogo } from '../../shared/team-logo';
           Accedi come admin
         </a>
       }
+
+      <!-- Annuncio vocale di squadra + cifra ad ogni rilancio: utile perché
+           durante l'asta dal vivo non tutti guardano lo schermo di continuo -->
+      <div class="audio-controls">
+        <button
+          type="button"
+          matButton="tonal"
+          class="audio-toggle"
+          [attr.aria-pressed]="audioAttivo()"
+          (click)="toggleAudio()"
+        >
+          <mat-icon>{{ audioAttivo() ? 'volume_up' : 'volume_off' }}</mat-icon>
+          {{ audioAttivo() ? 'Audio rilanci ON' : 'Audio rilanci OFF' }}
+        </button>
+
+        <!-- Scelta della voce: alcune "di sistema" sono molto robotiche,
+             quelle di rete (es. "Google italiano") suonano molto meglio —
+             mostrato solo se il browser ne offre più di una tra cui scegliere -->
+        @if (vociItaliane().length > 1) {
+          <mat-form-field appearance="fill" subscriptSizing="dynamic" class="voice-select">
+            <mat-label>Voce annunci</mat-label>
+            <mat-select [value]="nomeVoceScelta()" (selectionChange)="scegliVoce($event.value)">
+              @for (v of vociItaliane(); track v.name) {
+                <mat-option [value]="v.name">{{ v.name }}{{ v.localService ? '' : ' (rete)' }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <button type="button" matIconButton aria-label="Prova voce" (click)="provaVoce()">
+            <mat-icon>play_circle</mat-icon>
+          </button>
+        }
+      </div>
       <div class="stage">
         <div class="main">
         @if (stato(); as s) {
@@ -68,14 +115,19 @@ import { TeamLogo } from '../../shared/team-logo';
               </div>
               <div class="nome">{{ s.giocatoreNome }}</div>
               @if (s.squadra) {
-                <div class="squadra-giocatore">{{ s.squadra }}</div>
+                <div class="squadra-giocatore">
+                  <app-serie-a-logo [sigla]="s.squadra" class="squadra-giocatore-logo" />
+                  {{ s.squadra }}
+                </div>
               }
               <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
               @if (s.rilanciatoDaTeamName) {
                 <div class="rilancio">
                   <span class="label">Rilancia</span>
-                  <app-team-logo [name]="s.rilanciatoDaTeamName" class="rilancio-logo" />
-                  <span class="team">{{ s.rilanciatoDaTeamName }}</span>
+                  <div class="rilancio-riga">
+                    <app-team-logo [name]="s.rilanciatoDaTeamName" class="rilancio-logo" />
+                    <span class="team">{{ s.rilanciatoDaTeamName }}</span>
+                  </div>
                 </div>
               } @else {
                 <div class="rilancio">
@@ -94,57 +146,19 @@ import { TeamLogo } from '../../shared/team-logo';
           </div>
         }
         </div>
-
-        <!-- Statistiche asta (solo desktop): squadre con acquisti per esteso -->
-        <aside class="tv-stats">
-          <h2>
-            <mat-icon>bar_chart</mat-icon>
-            Statistiche asta
-          </h2>
-          <app-asta-stats-panel [stats]="stats()" [sempreAperto]="true" [colonne]="true" />
-        </aside>
       </div>
 
-      <!-- Pannello admin: visibile solo all'admin autenticato -->
-      @if (isAdmin()) {
-        <mat-card class="admin-panel">
-          <h3>
-            <mat-icon>admin_panel_settings</mat-icon>
-            Controllo asta (admin)
-          </h3>
-          @if (stato()?.aperta) {
-            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
-              <mat-label>Squadra vincitrice</mat-label>
-              <mat-select [value]="assegnaA()" (selectionChange)="assegnaA.set($event.value)">
-                @for (team of teams(); track team.id) {
-                  <mat-option [value]="team.id">{{ team.name }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
-              <mat-label>Voce di spesa</mat-label>
-              <mat-select [value]="provenienza()" (selectionChange)="provenienza.set($event.value)">
-                <mat-option value="acquistiAstaSettembre">Asta settembre</mat-option>
-                <mat-option value="acquistiMercatoInfrasettimanale">Asta infrasettimanale</mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <div class="admin-actions">
-              <button matButton="filled" color="primary" (click)="assegnaVincitore()">
-                <mat-icon>gavel</mat-icon>
-                Assegna e conferma acquisto
-              </button>
-              <button matButton (click)="chiudi()">
-                <mat-icon>close</mat-icon>
-                Chiudi senza assegnare
-              </button>
-            </div>
-          } @else {
-            <p class="hint">L'asta è chiusa. Aprila dalla sezione Svincolati della dashboard.</p>
-          }
-        </mat-card>
-      }
+      <!-- Statistiche asta: fuori da .stage apposta, per usare tutta la
+           larghezza disponibile invece di fermarsi al max-width del
+           riquadro giocatore (altrimenti a zoom ridotto restava piccola
+           con spazio vuoto ai lati) -->
+      <aside class="tv-stats">
+        <h2>
+          <mat-icon>bar_chart</mat-icon>
+          Statistiche asta
+        </h2>
+        <app-asta-stats-panel [stats]="stats()" [sempreAperto]="true" [colonne]="true" />
+      </aside>
     </div>
   `,
   styles: `
@@ -166,11 +180,29 @@ import { TeamLogo } from '../../shared/team-logo';
       z-index: 10;
     }
 
+    .audio-controls {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      max-width: min(90vw, 520px);
+    }
+
+    .voice-select {
+      width: 220px;
+    }
+
     .main {
       width: 100%;
     }
 
-    /* Stage: giocatore in alto, statistiche sotto */
+    /* Riquadro giocatore in asta: larghezza limitata per restare leggibile
+       anche su schermi molto larghi (le statistiche sotto, fuori da qui,
+       usano invece tutta la larghezza disponibile) */
     .stage {
       width: 100%;
       display: flex;
@@ -230,9 +262,17 @@ import { TeamLogo } from '../../shared/team-logo';
     }
 
     .squadra-giocatore {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       font-size: clamp(1.5rem, 4vw, 2.5rem);
       font-weight: 700;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .squadra-giocatore-logo {
+      width: clamp(1.6rem, 4vw, 2.4rem);
+      height: clamp(1.6rem, 4vw, 2.4rem);
     }
 
     .prezzo {
@@ -255,9 +295,16 @@ import { TeamLogo } from '../../shared/team-logo';
       letter-spacing: 2px;
     }
 
+    .rilancio-riga {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
     .rilancio-logo {
       width: clamp(3rem, 8vw, 5.5rem);
       height: clamp(3rem, 8vw, 5.5rem);
+      flex-shrink: 0;
     }
 
     .rilancio .team {
@@ -270,39 +317,6 @@ import { TeamLogo } from '../../shared/team-logo';
       font-weight: 700;
       color: var(--mat-sys-on-surface-variant);
     }
-
-    /* ---------- Pannello admin ---------- */
-    .admin-panel {
-      width: min(480px, 100%);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding: 16px;
-    }
-
-    .admin-panel h3 {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 1rem;
-    }
-
-    .full-width {
-      width: 100%;
-    }
-
-    .admin-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .hint {
-      margin: 0;
-      font-size: 0.875rem;
-      color: var(--mat-sys-on-surface-variant);
-    }
   `,
 })
 export class TvPage {
@@ -310,7 +324,6 @@ export class TvPage {
   private readonly authService = inject(AuthService);
   private readonly teamService = inject(TeamService);
   private readonly financeService = inject(FinanceService);
-  private readonly snackBar = inject(MatSnackBar);
 
   readonly stato = toSignal(this.astaService.stato$, {
     initialValue: undefined as AstaStato | undefined,
@@ -318,8 +331,6 @@ export class TvPage {
 
   /** true solo per l'admin autenticato con email/password */
   readonly isAdmin = toSignal(this.authService.isAdmin$, { initialValue: false });
-
-  readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
 
   /**
    * Statistiche di tutte le squadre: giocatori su 28, bilancio e acquisti
@@ -361,17 +372,191 @@ export class TvPage {
     { initialValue: [] as TeamStatAsta[] },
   );
 
-  readonly assegnaA = signal<string>('');
-  readonly provenienza = signal<ProvenienzaAsta>('acquistiAstaSettembre');
+  /** Annuncio vocale ON/OFF (controllo locale, non persistito: si riparte da ON ad ogni apertura) */
+  readonly audioAttivo = signal(true);
+  /**
+   * Ultima "chiave" di rilancio già vista (squadra+prezzo, null se nessun
+   * rilancio in corso) — undefined SOLO prima della primissima valutazione
+   * dell'effetto: serve a distinguerla da un vero null (asta aperta ma
+   * senza ancora nessun rilancio), altrimenti il primissimo rilancio reale
+   * verrebbe scambiato per "stato già in corso al caricamento" e non
+   * annunciato.
+   */
+  private ultimaChiaveAnnunciata: string | null | undefined = undefined;
+  /**
+   * Giocatore dell'ultima asta APERTA di cui è già stato annunciato
+   * l'inizio (null se nessuna asta aperta) — stessa convenzione di
+   * ultimaChiaveAnnunciata: undefined solo prima della primissima
+   * valutazione, per non annunciare l'asta già in corso al caricamento.
+   */
+  private ultimoGiocatoreAnnunciato: string | null | undefined = undefined;
+  /**
+   * "Chiave" dell'ultima assegnazione già annunciata (giocatore+vincitore+
+   * prezzo, null se l'asta è aperta o è stata chiusa senza assegnare) —
+   * stessa convenzione delle altre due: undefined solo prima della
+   * primissima valutazione.
+   */
+  private ultimaAssegnazioneAnnunciata: string | null | undefined = undefined;
+
+  private static readonly VOCE_STORAGE_KEY = 'tv.voceAnnunci';
+  /** Voci italiane disponibili nel browser per la sintesi vocale */
+  readonly vociItaliane = signal<SpeechSynthesisVoice[]>([]);
+  /** Voce attualmente scelta per gli annunci (null finché le voci non sono ancora caricate) */
+  readonly voceScelta = signal<SpeechSynthesisVoice | null>(null);
+  readonly nomeVoceScelta = computed(() => this.voceScelta()?.name ?? '');
 
   constructor() {
-    // Pre-valorizza la squadra vincitrice con l'ultimo rilanciante
+    this.caricaVoci();
+
+    // Annuncio vocale "squadra, cifra" ad ogni NUOVO rilancio — utile perché
+    // durante l'asta dal vivo in modalità TV non tutti guardano lo schermo
+    // di continuo. Non annuncia lo stato già in corso al primo caricamento
+    // della pagina, solo i rilanci successivi.
     effect(() => {
       const s = this.stato();
-      if (s?.aperta && s.rilanciatoDaTeamId) {
-        this.assegnaA.set(s.rilanciatoDaTeamId);
+      if (!s) {
+        return;
+      }
+      const chiaveAttuale =
+        s.aperta && s.rilanciatoDaTeamName ? `${s.rilanciatoDaTeamId}-${s.prezzoAttuale}` : null;
+      if (chiaveAttuale === this.ultimaChiaveAnnunciata) {
+        return;
+      }
+      const primaValutazione = this.ultimaChiaveAnnunciata === undefined;
+      this.ultimaChiaveAnnunciata = chiaveAttuale;
+      if (!primaValutazione && chiaveAttuale && this.audioAttivo()) {
+        this.annuncia(`${nomeLeggibile(s.rilanciatoDaTeamName)}, ${s.prezzoAttuale} euro`);
       }
     });
+
+    // Annuncio vocale "ha inizio l'asta per..." quando si apre l'asta su un
+    // NUOVO giocatore — stessa logica di skip del primo caricamento pagina
+    // usata sopra per i rilanci.
+    effect(() => {
+      const s = this.stato();
+      if (!s) {
+        return;
+      }
+      const giocatoreAttuale = s.aperta ? s.giocatoreNome : null;
+      if (giocatoreAttuale === this.ultimoGiocatoreAnnunciato) {
+        return;
+      }
+      const primaValutazione = this.ultimoGiocatoreAnnunciato === undefined;
+      this.ultimoGiocatoreAnnunciato = giocatoreAttuale;
+      if (!primaValutazione && giocatoreAttuale && this.audioAttivo()) {
+        const nomeSquadra = nomeSquadraSerieA(s.squadra) ?? s.squadra;
+        this.annuncia(
+          `Ha inizio l'asta per ${nomeLeggibile(giocatoreAttuale)} della squadra ${nomeSquadra}`,
+        );
+      }
+    });
+
+    // Annuncio vocale "... ha acquistato ... per ..." quando l'asta viene
+    // chiusa con un'assegnazione — rilanciatoDaTeamName non basta a capire
+    // chi ha vinto: l'admin può assegnare a una squadra diversa dall'ultima
+    // rilanciante, quindi il servizio scrive squadra e prezzo effettivi in
+    // ultimoVincitoreNome/ultimoPrezzo apposta per questo annuncio.
+    effect(() => {
+      const s = this.stato();
+      if (!s) {
+        return;
+      }
+      const chiaveAssegnazione =
+        !s.aperta && s.ultimoEsito === 'assegnato' && s.ultimoVincitoreNome
+          ? `${s.giocatoreNome}-${s.ultimoVincitoreNome}-${s.ultimoPrezzo}`
+          : null;
+      if (chiaveAssegnazione === this.ultimaAssegnazioneAnnunciata) {
+        return;
+      }
+      const primaValutazione = this.ultimaAssegnazioneAnnunciata === undefined;
+      this.ultimaAssegnazioneAnnunciata = chiaveAssegnazione;
+      if (!primaValutazione && chiaveAssegnazione && this.audioAttivo()) {
+        this.annuncia(
+          `${nomeLeggibile(s.ultimoVincitoreNome!)} ha acquistato ${nomeLeggibile(s.giocatoreNome)} per ${s.ultimoPrezzo} euro`,
+        );
+      }
+    });
+  }
+
+  toggleAudio(): void {
+    this.audioAttivo.set(!this.audioAttivo());
+    if (!this.audioAttivo()) {
+      window.speechSynthesis?.cancel();
+    }
+  }
+
+  /**
+   * Carica le voci italiane disponibili nel browser e sceglie quella
+   * migliore di default — le voci "di rete" (es. "Google italiano" su
+   * Chrome) suonano molto più naturali di quelle "di sistema" (SAPI /
+   * accessibilità Windows, sempre locali) che il browser userebbe altrimenti
+   * come scelta implicita. L'elenco arriva spesso in modo asincrono, da qui
+   * il listener oltre alla lettura immediata.
+   */
+  private caricaVoci(): void {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return;
+    }
+    const aggiorna = () => {
+      const italiane = window.speechSynthesis
+        .getVoices()
+        .filter((v) => v.lang.toLowerCase().startsWith('it'));
+      if (italiane.length === 0) {
+        return;
+      }
+      this.vociItaliane.set(italiane);
+      if (!this.voceScelta()) {
+        this.voceScelta.set(this.sceglieMigliore(italiane));
+      }
+    };
+    aggiorna();
+    window.speechSynthesis.onvoiceschanged = aggiorna;
+  }
+
+  private sceglieMigliore(voci: SpeechSynthesisVoice[]): SpeechSynthesisVoice {
+    try {
+      const salvata = localStorage.getItem(TvPage.VOCE_STORAGE_KEY);
+      const trovata = salvata ? voci.find((v) => v.name === salvata) : undefined;
+      if (trovata) {
+        return trovata;
+      }
+    } catch {
+      // localStorage non disponibile: si ripiega sulla scelta automatica
+    }
+    return voci.find((v) => !v.localService) ?? voci[0];
+  }
+
+  scegliVoce(nome: string): void {
+    const voce = this.vociItaliane().find((v) => v.name === nome);
+    if (!voce) {
+      return;
+    }
+    this.voceScelta.set(voce);
+    try {
+      localStorage.setItem(TvPage.VOCE_STORAGE_KEY, voce.name);
+    } catch {
+      // localStorage non disponibile: la scelta resta valida solo per questa sessione
+    }
+  }
+
+  /** Piccolo assaggio della voce scelta, per confrontarle senza aspettare un rilancio vero */
+  provaVoce(): void {
+    this.annuncia("Questa è la voce degli annunci durante l'asta");
+  }
+
+  /** Sintesi vocale in italiano — interrompe un annuncio precedente non ancora finito */
+  private annuncia(testo: string): void {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(testo);
+    utterance.lang = 'it-IT';
+    const voce = this.voceScelta();
+    if (voce) {
+      utterance.voice = voce;
+    }
+    window.speechSynthesis.speak(utterance);
   }
 
   rolesOf(ruolo: string): string[] {
@@ -380,32 +565,5 @@ export class TvPage {
 
   colorFor(role: string): string {
     return roleColor(role);
-  }
-
-  async assegnaVincitore(): Promise<void> {
-    const teamId = this.assegnaA();
-    if (!teamId) {
-      this.snackBar.open('Seleziona la squadra vincitrice', undefined, { duration: 2500 });
-      return;
-    }
-    const team = this.teams().find((t) => t.id === teamId);
-    try {
-      await this.astaService.assegna(teamId, team?.name ?? '', this.provenienza());
-      this.snackBar.open('Acquisto confermato', undefined, { duration: 3000 });
-    } catch (e) {
-      this.snackBar.open(
-        e instanceof Error ? e.message : 'Errore durante l\u2019assegnazione',
-        undefined,
-        { duration: 4000 },
-      );
-    }
-  }
-
-  async chiudi(): Promise<void> {
-    try {
-      await this.astaService.chiudiAsta();
-    } catch {
-      this.snackBar.open('Errore durante la chiusura', undefined, { duration: 3000 });
-    }
   }
 }

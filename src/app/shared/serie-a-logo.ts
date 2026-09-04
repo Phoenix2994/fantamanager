@@ -1,5 +1,6 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { logoUrlPerSquadra } from '../core/serie-a-logos';
+import { ThemeService } from '../core/services/theme.service';
 
 /**
  * Logo di un club reale di Serie A (per sigla, es. "UDI"), o la sigla stessa
@@ -11,7 +12,7 @@ import { logoUrlPerSquadra } from '../core/serie-a-logos';
   selector: 'app-serie-a-logo',
   template: `
     @if (url(); as src) {
-      <img [src]="src" [class.invertito-su-scuro]="sigla() === 'JUV'" [alt]="sigla() ? sigla() + ' logo' : 'Logo squadra'" />
+      <img [src]="src" [class.invertito-su-scuro]="daInvertire()" [alt]="sigla() ? sigla() + ' logo' : 'Logo squadra'" />
     } @else {
       <span class="fallback">{{ sigla() }}</span>
     }
@@ -30,11 +31,7 @@ import { logoUrlPerSquadra } from '../core/serie-a-logos';
       object-fit: contain;
     }
 
-    /* Lo stemma Juventus attuale è solo nero su sfondo trasparente:
-       invisibile sul tema scuro (default dell'app, vedi ThemeService). Un
-       semplice invert lo rende bianco, senza dover generare/gestire un
-       secondo file immagine per il tema chiaro. */
-    :host-context(:not(.light-theme)) img.invertito-su-scuro {
+    img.invertito-su-scuro {
       filter: invert(1);
     }
 
@@ -46,6 +43,18 @@ import { logoUrlPerSquadra } from '../core/serie-a-logos';
   `,
 })
 export class SerieALogo {
+  private readonly themeService = inject(ThemeService);
+
   readonly sigla = input<string | null | undefined>(null);
   readonly url = computed(() => logoUrlPerSquadra(this.sigla()));
+
+  /**
+   * Lo stemma Juventus attuale è solo nero su sfondo trasparente: invisibile
+   * sul tema scuro, va invertito in bianco lì (e SOLO lì — su tema chiaro
+   * deve restare nero). Calcolato qui in TS invece che con
+   * :host-context(:not(.light-theme)) in CSS: quella condizione non si è
+   * dimostrata affidabile (il logo restava bianco anche a tema chiaro), il
+   * segnale del tema reale dal servizio invece lo è sempre.
+   */
+  readonly daInvertire = computed(() => this.sigla() === 'JUV' && this.themeService.tema() === 'scuro');
 }

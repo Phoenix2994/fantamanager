@@ -161,7 +161,7 @@ export class AstaService {
 
   /** Chiude l'asta senza assegnare il giocatore (nessuno lo vuole) */
   async chiudiAsta(): Promise<void> {
-    await updateDoc(this.statoRef, { aperta: false });
+    await updateDoc(this.statoRef, { aperta: false, ultimoEsito: 'chiuso' });
 
     void this.audit.log({
       leagueId: environment.leagueId,
@@ -296,7 +296,12 @@ export class AstaService {
       { merge: true },
     );
     batch.delete(svincolatoRef);
-    batch.update(this.statoRef, { aperta: false });
+    batch.update(this.statoRef, {
+      aperta: false,
+      ultimoEsito: 'assegnato',
+      ultimoVincitoreNome: teamName,
+      ultimoPrezzo: prezzoDaUsare,
+    });
 
     this.undo.registra(batch, {
       tipo: 'acquistoAsta',
