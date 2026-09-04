@@ -29,6 +29,7 @@ import {
   ConfirmAssegnazioneDialog,
   ConfirmAssegnazioneData,
 } from './confirm-assegnazione-dialog';
+import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
 import {
   AstaService,
   MAX_GIOCATORI,
@@ -1174,6 +1175,31 @@ export class AstaPage {
   }
 
   async chiudi(): Promise<void> {
+    // Se qualcuno ha già rilanciato, chiedi conferma prima di buttare via
+    // quel rilancio — troppo facile cliccare "Chiudi" per sbaglio invece di
+    // "Assegna" quando c'è già un'offerta in corso.
+    const s = this.stato();
+    if (s?.rilanciatoDaTeamId) {
+      const confermato = await firstValueFrom(
+        this.dialog
+          .open(ConfirmDialog, {
+            data: {
+              title: 'Chiudere senza assegnare?',
+              message:
+                `${s.rilanciatoDaTeamName} ha rilanciato ${s.prezzoAttuale} € per ${s.giocatoreNome}: ` +
+                'chiudendo senza assegnare quel rilancio va perso. Continuare?',
+              confirmLabel: 'Chiudi senza assegnare',
+            },
+            width: '95vw',
+            maxWidth: '400px',
+          })
+          .afterClosed(),
+      );
+      if (!confermato) {
+        return;
+      }
+    }
+
     try {
       await this.astaService.chiudiAsta();
     } catch {

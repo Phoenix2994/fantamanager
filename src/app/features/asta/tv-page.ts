@@ -99,6 +99,18 @@ function nomeLeggibile(nome: string): string {
           </button>
         }
       </div>
+
+      <!-- Chrome (e altri) bloccano speak() finché la pagina non ha
+           ricevuto un click reale: se un annuncio viene rifiutato per
+           questo, lo segnaliamo qui — un click su questo stesso bottone
+           sblocca tutti gli annunci successivi per il resto della sessione -->
+      @if (audioBloccato() && audioAttivo()) {
+        <button type="button" matButton="filled" color="warn" class="audio-bloccato" (click)="riattivaAudio()">
+          <mat-icon>volume_off</mat-icon>
+          Il browser ha bloccato gli annunci — clicca per attivarli
+        </button>
+      }
+
       <div class="stage">
         <div class="main">
         @if (stato(); as s) {
@@ -194,6 +206,15 @@ function nomeLeggibile(nome: string): string {
 
     .voice-select {
       width: 220px;
+    }
+
+    .audio-bloccato {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      font-size: 1rem;
     }
 
     .main {
@@ -398,6 +419,14 @@ export class TvPage {
    */
   private ultimaAssegnazioneAnnunciata: string | null | undefined = undefined;
 
+  /**
+   * true quando l'ultimo tentativo di annuncio è stato rifiutato dal
+   * browser con "not-allowed" (nessun gesto utente ancora ricevuto su
+   * questa pagina) — mostra un avviso con un bottone che, cliccato, sblocca
+   * tutti gli annunci successivi per il resto della sessione.
+   */
+  readonly audioBloccato = signal(false);
+
   private static readonly VOCE_STORAGE_KEY = 'tv.voceAnnunci';
   /** Voci italiane disponibili nel browser per la sintesi vocale */
   readonly vociItaliane = signal<SpeechSynthesisVoice[]>([]);
@@ -482,7 +511,19 @@ export class TvPage {
     this.audioAttivo.set(!this.audioAttivo());
     if (!this.audioAttivo()) {
       window.speechSynthesis?.cancel();
+      return;
     }
+    // Il click è un vero gesto dell'utente: Chrome richiede almeno UNA
+    // chiamata a speak() dentro un gesto genuino prima di permettere quelle
+    // successive innescate da eventi asincroni (un nuovo rilancio, un'asta
+    // che si apre) — altrimenti le blocca in silenzio con errore
+    // "not-allowed". Questo annuncio "sblocca" tutti quelli seguenti.
+    this.annuncia('Audio attivato');
+  }
+
+  /** Click sul banner "annunci bloccati": stesso principio di toggleAudio, riprova a parlare dentro il gesto */
+  riattivaAudio(): void {
+    this.annuncia('Audio attivato');
   }
 
   /**
@@ -544,18 +585,41 @@ export class TvPage {
     this.annuncia("Questa è la voce degli annunci durante l'asta");
   }
 
-  /** Sintesi vocale in italiano — interrompe un annuncio precedente non ancora finito */
+  /**
+   * Sintesi vocale in italiano — interrompe un annuncio precedente non
+   * ancora finito. Il resume() prima di speak() è un workaround noto per un
+   * bug di Chrome: dopo diversi annunci consecutivi (tipico durante un'asta
+   * con più rilanci) la coda di speechSynthesis può bloccarsi silenziosamente
+   * senza errori — resume() la sblocca, ed è innocuo quando non serve.
+   *
+   * L'errore "not-allowed" invece è una vera policy del browser: Chrome
+   * blocca speak() finché la pagina non ha ricevuto ALMENO un gesto reale
+   * dell'utente (un click) — un annuncio innescato da un rilancio/apertura/
+   * assegnazione arrivati via Firestore, senza che nessuno abbia mai
+   * cliccato nulla sullo schermo TV, viene quindi rifiutato in silenzio
+   * (nessuna eccezione, solo l'evento "error" dell'utterance). Se succede,
+   * lo intercettiamo per mostrare un avviso a schermo — un click su
+   * "Attiva audio" lì lo sblocca subito, perché quel click SÌ è un gesto
+   * genuino.
+   */
   private annuncia(testo: string): void {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       return;
     }
     window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
     const utterance = new SpeechSynthesisUtterance(testo);
     utterance.lang = 'it-IT';
     const voce = this.voceScelta();
     if (voce) {
       utterance.voice = voce;
     }
+    utterance.addEventListener('start', () => this.audioBloccato.set(false));
+    utterance.addEventListener('error', (e) => {
+      if (e.error === 'not-allowed') {
+        this.audioBloccato.set(true);
+      }
+    });
     window.speechSynthesis.speak(utterance);
   }
 
