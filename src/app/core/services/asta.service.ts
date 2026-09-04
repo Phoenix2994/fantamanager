@@ -173,6 +173,7 @@ export class AstaService {
 
   /** Chiude l'asta senza assegnare il giocatore (nessuno lo vuole) */
   async chiudiAsta(): Promise<void> {
+    const stato = await this.getStato();
     await updateDoc(this.statoRef, { aperta: false, ultimoEsito: 'chiuso' });
 
     void this.audit.log({
@@ -187,6 +188,12 @@ export class AstaService {
       valueAfter: null,
       changeSummary: 'Chiusura asta senza assegnazione',
     });
+
+    // Come per l'assegnazione: se era un'asta "random", incatena subito la
+    // prossima anche quando si chiude senza assegnare nessuno.
+    if (stato?.apertoDaRandom) {
+      void this.apriAstaRandomSuccessiva();
+    }
   }
 
   /**
