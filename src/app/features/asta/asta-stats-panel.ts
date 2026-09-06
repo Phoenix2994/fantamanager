@@ -258,14 +258,14 @@ export function estraiAcquistiAsta(players: Player[]): AcquistoAsta[] {
       white-space: normal;
       line-height: 1.2;
       font-weight: 700;
-      font-size: 1.1rem;
+      font-size: 1.3rem;
       margin-bottom: 4px;
     }
 
     /* Vista TV: font più grandi di quelli usati nel pannello "normale"
        (tab statistiche della pagina /asta), leggibili da più lontano */
     .stats-list.colonne .stat-row {
-      font-size: 1.0625rem;
+      font-size: 1.25rem;
     }
 
     .stats-list.colonne .acquisti {
@@ -275,11 +275,11 @@ export function estraiAcquistiAsta(players: Player[]): AcquistoAsta[] {
     }
 
     .stats-list.colonne .acquisto {
-      font-size: 0.9375rem;
+      font-size: 1.1rem;
     }
 
     .stats-list.colonne .nessun-acquisto {
-      font-size: 0.875rem;
+      font-size: 1rem;
     }
   `,
 })
@@ -302,7 +302,7 @@ export class AstaStatsPanel {
    * o di forzare uno scroll orizzontale.
    */
   colonneGriglia(): string {
-    return 'repeat(auto-fill, minmax(150px, 1fr))';
+    return 'repeat(auto-fill, minmax(180px, 1fr))';
   }
 
   aperto(id: string): boolean {
