@@ -1,16 +1,24 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, of } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { map, switchMap } from 'rxjs/operators';
 import { DecimalPipe } from '@angular/common';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { environment } from '../../../environments/environment';
-import { SeasonFinance } from '../../core/models';
 import { round2 } from '../../core/finance-calculator';
 import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
+import { TeamLogo } from '../../shared/team-logo';
+
+/** Bilancio societario stagionale di una squadra, per la tabella riepilogativa */
+interface RigaBilancio {
+  id: string;
+  name: string;
+  bilancio: number;
+}
 
 /** Riga della tabella premi: posizione finale e quota % sul montepremi totale */
 interface RigaPremio {
@@ -49,7 +57,7 @@ const COPPA_E_MINICOPPA: readonly RigaPremio[] = [
  */
 @Component({
   selector: 'app-montepremi-page',
-  imports: [DecimalPipe, MatIconModule, NavMenu, HeaderAuthStatus],
+  imports: [DecimalPipe, MatExpansionModule, MatIconModule, NavMenu, HeaderAuthStatus, TeamLogo],
   styleUrls: ['../../core/nav/page-shell.scss'],
   template: `
     <div class="page">
@@ -100,6 +108,21 @@ const COPPA_E_MINICOPPA: readonly RigaPremio[] = [
             </div>
           </section>
         </div>
+
+        <mat-expansion-panel class="bilanci-panel">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Bilancio societario stagionale per squadra</mat-panel-title>
+          </mat-expansion-panel-header>
+          @for (r of bilanciSquadre(); track r.id) {
+            <div class="row bilancio-row">
+              <app-team-logo [name]="r.name" class="row-logo" />
+              <span>{{ r.name }}</span>
+              <strong [class.negativo]="r.bilancio < 0" [class.positivo]="r.bilancio >= 0">
+                {{ r.bilancio | number: '1.2-2' }} €
+              </strong>
+            </div>
+          }
+        </mat-expansion-panel>
       </main>
     </div>
   `,
@@ -125,6 +148,16 @@ const COPPA_E_MINICOPPA: readonly RigaPremio[] = [
       display: flex;
       flex-direction: column;
       gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .bilanci-panel {
+      border-radius: 16px !important;
+    }
+
+    .bilanci-panel .row {
+      padding-left: 16px;
+      padding-right: 16px;
     }
 
     .group {
@@ -174,6 +207,24 @@ const COPPA_E_MINICOPPA: readonly RigaPremio[] = [
       font-variant-numeric: tabular-nums;
     }
 
+    .bilancio-row {
+      gap: 10px;
+    }
+
+    .row-logo {
+      width: 1.5rem;
+      height: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .bilancio-row strong.positivo {
+      color: var(--mat-sys-primary);
+    }
+
+    .bilancio-row strong.negativo {
+      color: var(--mat-sys-error);
+    }
+
     .row.totale {
       margin-top: 4px;
       padding-top: 10px;
@@ -197,26 +248,36 @@ export class MontepremiPage {
   readonly totaleCampionatoPerc = CAMPIONATO.reduce((sum, r) => sum + r.percentuale, 0);
   readonly totaleCoppaPerc = COPPA_E_MINICOPPA.reduce((sum, r) => sum + r.percentuale, 0);
 
-  /** Bilancio stagionale di ogni squadra, in realtime (undefined finché non c'è ancora un documento) */
-  private readonly bilanciSquadre = toSignal(
+  /** Bilancio stagionale di ogni squadra, in realtime (0 finché non c'è ancora un documento) */
+  private readonly datiSquadre = toSignal(
     this.teamService.teams$.pipe(
       switchMap((teams) =>
         teams.length
-          ? combineLatest(teams.map((t) => this.financeService.seasonFinance$(t.id)))
-          : of([] as (SeasonFinance | undefined)[]),
+          ? combineLatest(
+              teams.map((t) =>
+                this.financeService.seasonFinance$(t.id).pipe(
+                  map((f) => ({
+                    id: t.id,
+                    name: t.name,
+                    bilancio: f?.bilancioSocietarioStagionale ?? 0,
+                  })),
+                ),
+              ),
+            )
+          : of([] as RigaBilancio[]),
       ),
     ),
-    { initialValue: [] as (SeasonFinance | undefined)[] },
+    { initialValue: [] as RigaBilancio[] },
+  );
+
+  /** Tabella riepilogativa, dalla squadra col bilancio peggiore alla migliore */
+  readonly bilanciSquadre = computed(() =>
+    [...this.datiSquadre()].sort((a, b) => a.bilancio - b.bilancio),
   );
 
   /** Somma dei bilanci stagionali di TUTTE le squadre: il montepremi totale */
   readonly montepremiTotale = computed(() =>
-    round2(
-      -this.bilanciSquadre().reduce(
-        (sum, f) => sum + (f?.bilancioSocietarioStagionale || 0),
-        0,
-      ),
-    ),
+    round2(-this.datiSquadre().reduce((sum, r) => sum + r.bilancio, 0)),
   );
 
   readonly campionato = computed(() => this.conValore(CAMPIONATO));
