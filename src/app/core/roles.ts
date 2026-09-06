@@ -42,20 +42,50 @@ export function roleColor(role: string): string {
   return ROLE_COLORS[role] ?? 'var(--mat-sys-on-surface-variant)';
 }
 
+/** Indici nell'ordine canonico dei ruoli del giocatore, dal più vicino al più lontano */
+function indiciOrdinati(ruolo: string): number[] {
+  return splitRoles(ruolo)
+    .map((r) => ROLE_ORDER.indexOf(r))
+    .filter((i) => i >= 0)
+    .sort((a, b) => a - b);
+}
+
 /**
- * Chiave di ordinamento: posizione del ruolo "più lontano" (ultimo
- * nell'ordine canonico) tra quelli del giocatore — non il primo. Un
- * giocatore Dd;Dc va quindi ordinato dopo i puri Dc (posizione di Dd),
- * non insieme a loro: i ruoli aggiuntivi lo spostano più in basso nella
- * lista, mai più in alto.
+ * Confronto tra due stringhe ruolo (anche composte, es. "Dd;Dc") per
+ * l'ordinamento nelle liste (rosa, filtri). Gli indici canonici dei ruoli
+ * di ciascun giocatore vengono ordinati dal più vicino al più lontano, poi
+ * le due sequenze si confrontano lessicograficamente — come si confrontano
+ * due parole lettera per lettera: decide il primo ruolo, a parità il
+ * secondo, e così via; chi si "esaurisce" prima (meno ruoli aggiuntivi)
+ * viene prima.
+ *
+ * Questo fa sì che:
+ * - un ruolo puro preceda le proprie varianti con un ruolo aggiuntivo più
+ *   lontano (Dc prima di Dd;Dc, che a sua volta precede Ds;Dc);
+ * - un giocatore con un secondo ruolo più vicino di un altro gruppo lo
+ *   preceda comunque (E;W prima di M;C, perché E precede M; Ds;E prima
+ *   del puro E, perché Ds precede E; C;T prima del puro T, perché C
+ *   precede T).
  */
-export function roleSortKey(ruolo: string): number {
-  let worst = -1;
-  for (const r of splitRoles(ruolo)) {
-    const idx = ROLE_ORDER.indexOf(r);
-    if (idx > worst) {
-      worst = idx;
+export function compareRuoli(ruoloA: string, ruoloB: string): number {
+  const a = indiciOrdinati(ruoloA);
+  const b = indiciOrdinati(ruoloB);
+  const lunghezza = Math.max(a.length, b.length);
+  for (let i = 0; i < lunghezza; i++) {
+    const va = a[i];
+    const vb = b[i];
+    if (va === undefined && vb === undefined) {
+      continue;
+    }
+    if (va === undefined) {
+      return -1;
+    }
+    if (vb === undefined) {
+      return 1;
+    }
+    if (va !== vb) {
+      return va - vb;
     }
   }
-  return worst < 0 ? ROLE_ORDER.length : worst;
+  return 0;
 }

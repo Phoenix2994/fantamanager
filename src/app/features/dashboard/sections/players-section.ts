@@ -20,7 +20,7 @@ import {
   Team,
 } from '../../../core/models';
 import { calcolaValoreAttuale, round2 } from '../../../core/finance-calculator';
-import { roleColor, roleSortKey, splitRoles } from '../../../core/roles';
+import { compareRuoli, roleColor, splitRoles } from '../../../core/roles';
 import { AuthService } from '../../../core/services/auth.service';
 import { FinanceService } from '../../../core/services/finance.service';
 import { TeamSelectionService } from '../../../core/services/team-selection.service';
@@ -454,7 +454,7 @@ export class PlayersSection {
         set.add(r);
       }
     }
-    return [...set].sort((a, b) => roleSortKey(a) - roleSortKey(b));
+    return [...set].sort(compareRuoli);
   });
 
   readonly contractTypes = CONTRACT_TYPES;
@@ -555,10 +555,7 @@ export class PlayersSection {
           (!ruoli.length || splitRoles(p.ruolo).some((r) => ruoli.includes(r))) &&
           (!contratto || p.contractType === contratto),
       )
-      .sort(
-        (a, b) =>
-          roleSortKey(a.ruolo) - roleSortKey(b.ruolo) || a.name.localeCompare(b.name),
-      );
+      .sort((a, b) => compareRuoli(a.ruolo, b.ruolo) || a.name.localeCompare(b.name));
   });
 
   readonly valoreRosa = computed(() =>
@@ -722,7 +719,7 @@ export class PlayersSection {
     // "grezzo" di Firestore che players() restituisce.
     const daRinnovare = this.players()
       .filter((p) => !(p.acquistoRinnovoSpesa > 0))
-      .sort((a, b) => roleSortKey(a.ruolo) - roleSortKey(b.ruolo) || a.name.localeCompare(b.name));
+      .sort((a, b) => compareRuoli(a.ruolo, b.ruolo) || a.name.localeCompare(b.name));
     const bilancioAttuale = this.financeCorrente()?.bilancioSocietarioStagionale ?? 0;
     this.dialog.open(RenewPreviewDialog, {
       data: {
