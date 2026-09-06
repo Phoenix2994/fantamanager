@@ -251,21 +251,35 @@ export function estraiAcquistiAsta(players: Player[]): AcquistoAsta[] {
       background: var(--mat-sys-surface-container-high);
     }
 
-    .stats-list.colonne .Svicol {
+    .stats-list.colonne .stat-name {
       /* Il nome occupa un'intera riga: nelle colonne strette lo spazio
          residuo accanto a conteggio e bilancio lo nasconderebbe */
       flex: 1 1 100%;
       white-space: normal;
       line-height: 1.2;
       font-weight: 700;
-      font-size: 0.9375rem;
+      font-size: 1.1rem;
       margin-bottom: 4px;
+    }
+
+    /* Vista TV: font più grandi di quelli usati nel pannello "normale"
+       (tab statistiche della pagina /asta), leggibili da più lontano */
+    .stats-list.colonne .stat-row {
+      font-size: 1.0625rem;
     }
 
     .stats-list.colonne .acquisti {
       padding-left: 0;
       max-height: 40vh;
       overflow-y: auto;
+    }
+
+    .stats-list.colonne .acquisto {
+      font-size: 0.9375rem;
+    }
+
+    .stats-list.colonne .nessun-acquisto {
+      font-size: 0.875rem;
     }
   `,
 })
@@ -280,9 +294,15 @@ export class AstaStatsPanel {
 
   private readonly espanse = signal<ReadonlySet<string>>(new Set<string>());
 
-  /** Una colonna per squadra, con larghezza minima per la leggibilità */
+  /**
+   * Una colonna per squadra, larghezza minima per la leggibilità — auto-fill
+   * invece di un numero fisso di colonne: se il contenitore non è abbastanza
+   * largo per tutte in una riga (es. la barra laterale della vista TV
+   * desktop), vanno semplicemente a capo su più righe invece di restringersi
+   * o di forzare uno scroll orizzontale.
+   */
   colonneGriglia(): string {
-    return `repeat(${Math.max(this.stats().length, 1)}, minmax(150px, 1fr))`;
+    return 'repeat(auto-fill, minmax(150px, 1fr))';
   }
 
   aperto(id: string): boolean {

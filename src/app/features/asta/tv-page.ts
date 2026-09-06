@@ -59,7 +59,7 @@ function nomeLeggibile(nome: string): string {
     SerieALogo,
   ],
   template: `
-    <div class="tv">
+    <div class="tv" [style.--stage-width]="stageWidth() + 'px'">
       <!-- Accesso admin: visibile solo se non si è già admin -->
       @if (!isAdmin()) {
         <a matButton class="admin-login" routerLink="/login">
@@ -111,6 +111,33 @@ function nomeLeggibile(nome: string): string {
         </button>
       }
 
+      <!-- Statistiche divise a metà ai due lati del giocatore rilanciato,
+           invece che tutte da un lato solo: sfrutta lo spazio orizzontale
+           su entrambi i fianchi invece di uno solo. Da sotto i 1000px
+           tornano entrambe sotto il giocatore (ordine gestito via CSS). -->
+      <aside class="tv-stats tv-stats-left">
+        <h2>
+          <mat-icon>bar_chart</mat-icon>
+          Statistiche asta
+          <span class="rimanenti">{{ rimanenti() }} da chiamare</span>
+        </h2>
+        <app-asta-stats-panel [stats]="statsSinistra()" [sempreAperto]="true" [colonne]="true" />
+      </aside>
+
+      <!-- Manici di ridimensionamento (solo desktop, vedi CSS): trascinando
+           si allarga o si restringe la colonna centrale del giocatore,
+           preferenza salvata sul dispositivo. -->
+      <div
+        class="resize-handle resize-handle-left"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Ridimensiona la colonna del giocatore"
+        (pointerdown)="iniziaTrascinamento($event, -1)"
+        (pointermove)="trascina($event)"
+        (pointerup)="fineTrascinamento($event)"
+        (pointercancel)="fineTrascinamento($event)"
+      ></div>
+
       <div class="stage">
         <div class="main">
         @if (stato(); as s) {
@@ -161,22 +188,25 @@ function nomeLeggibile(nome: string): string {
         </div>
       </div>
 
-      <!-- Statistiche asta: fuori da .stage apposta, per usare tutta la
-           larghezza disponibile invece di fermarsi al max-width del
-           riquadro giocatore (altrimenti a zoom ridotto restava piccola
-           con spazio vuoto ai lati) -->
-      <aside class="tv-stats">
-        <h2>
-          <mat-icon>bar_chart</mat-icon>
-          Statistiche asta
-          <span class="rimanenti">{{ rimanenti() }} da chiamare</span>
-        </h2>
-        <app-asta-stats-panel [stats]="stats()" [sempreAperto]="true" [colonne]="true" />
+      <div
+        class="resize-handle resize-handle-right"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Ridimensiona la colonna del giocatore"
+        (pointerdown)="iniziaTrascinamento($event, 1)"
+        (pointermove)="trascina($event)"
+        (pointerup)="fineTrascinamento($event)"
+        (pointercancel)="fineTrascinamento($event)"
+      ></div>
+
+      <aside class="tv-stats tv-stats-right">
+        <app-asta-stats-panel [stats]="statsDestra()" [sempreAperto]="true" [colonne]="true" />
       </aside>
     </div>
   `,
   styles: `
     .tv {
+      height: 100vh;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -185,6 +215,88 @@ function nomeLeggibile(nome: string): string {
       gap: 24px;
       background: var(--mat-sys-surface-container-lowest, #fafafa);
       padding: 24px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    /* Da desktop in su: giocatore al centro con le statistiche divise a
+       metà sui due fianchi, invece che impilate sotto — sfrutta la
+       larghezza (di solito abbondante) invece di contendersi l'altezza,
+       dove con molti acquisti l'elenco poteva non entrare più nello
+       schermo. Le statistiche scorrono in verticale nella propria colonna,
+       così non vengono mai tagliate. Sotto i 1000px l'ordine (gestito da
+       "order") torna: giocatore, poi le due liste impilate sotto. */
+    .stage {
+      order: 1;
+    }
+
+    .tv-stats-left {
+      order: 2;
+    }
+
+    .tv-stats-right {
+      order: 3;
+    }
+
+    .resize-handle {
+      display: none;
+    }
+
+    @media (min-width: 1000px) {
+      .tv {
+        flex-direction: row;
+        align-items: stretch;
+        justify-content: center;
+        /* niente gap qui: lo spazio tra i pannelli lo fanno i manici di
+           ridimensionamento stessi (vedi sotto), che sono anche interattivi */
+        gap: 0;
+      }
+
+      .tv-stats-left {
+        order: 1;
+      }
+
+      .resize-handle-left {
+        order: 2;
+      }
+
+      .stage {
+        order: 3;
+      }
+
+      .resize-handle-right {
+        order: 4;
+      }
+
+      .tv-stats-right {
+        order: 5;
+      }
+
+      .resize-handle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 28px;
+        width: 28px;
+        align-self: stretch;
+        cursor: col-resize;
+        touch-action: none;
+      }
+
+      .resize-handle::before {
+        content: '';
+        width: 4px;
+        height: 64px;
+        max-height: 40%;
+        border-radius: 2px;
+        background: var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.3));
+        transition: background-color 100ms ease;
+      }
+
+      .resize-handle:hover::before,
+      .resize-handle:active::before {
+        background: var(--mat-sys-primary);
+      }
     }
 
     .admin-login {
@@ -224,19 +336,39 @@ function nomeLeggibile(nome: string): string {
     }
 
     /* Riquadro giocatore in asta: larghezza limitata per restare leggibile
-       anche su schermi molto larghi (le statistiche sotto, fuori da qui,
-       usano invece tutta la larghezza disponibile) */
+       anche su schermi molto larghi (le statistiche, fuori da qui, usano
+       invece tutta la larghezza/altezza residua) */
     .stage {
       width: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       gap: 24px;
       max-width: 1700px;
+      min-height: 0;
     }
 
-    /* Statistiche sotto il giocatore: una colonna per squadra,
-       con scorrimento orizzontale se non entrano nello schermo */
+    /* Da desktop in su la colonna centrale resta volutamente stretta, per
+       lasciare più spazio (e quindi più colonne per riga) alle statistiche
+       sui due fianchi — larghezza regolabile trascinando i manici (vedi
+       sopra), con --stage-width impostata dal componente e salvata sul
+       dispositivo. container-type: i font del giocatore sotto usano unità
+       cqw, così si adattano alla larghezza REALE di questa colonna invece
+       che alla larghezza dell'intera finestra come farebbe vw. */
+    @media (min-width: 1000px) {
+      .stage {
+        flex: 0 0 var(--stage-width, 320px);
+        min-width: 0;
+        container-type: inline-size;
+      }
+    }
+
+    /* Sotto i 1000px: entrambe le liste sotto il giocatore (impilate,
+       "order" le mette in sequenza), ciascuna una colonna per squadra con
+       scorrimento orizzontale se non entra nello schermo. Da 1000px in su
+       diventano due colonne laterali (vedi media query sotto) che scorrono
+       in verticale, non più vincolate alla larghezza. */
     .tv-stats {
       width: 100%;
       text-align: left;
@@ -245,6 +377,20 @@ function nomeLeggibile(nome: string): string {
       background: var(--mat-sys-surface-container, #fff);
       box-sizing: border-box;
       overflow-x: auto;
+    }
+
+    @media (min-width: 1000px) {
+      .tv-stats {
+        /* si spartiscono tutto lo spazio residuo lasciato dalla colonna
+           centrale (che ora è stretta apposta): più largo il fianco, più
+           colonne di squadre entrano sulla stessa riga */
+        flex: 1 1 0;
+        min-width: 0;
+        width: auto;
+        max-height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
     }
 
     .tv-stats h2 {
@@ -285,8 +431,12 @@ function nomeLeggibile(nome: string): string {
       color: var(--mat-sys-primary);
     }
 
+    /* clamp() con min(Xvw, Yvh): su schermi larghi ma bassi (tipico un
+       laptop desktop) il font non deve crescere solo in base alla
+       larghezza, altrimenti "mangia" tutta l'altezza disponibile e le
+       statistiche accanto restano schiacciate */
     .nome {
-      font-size: clamp(3rem, 10vw, 7rem);
+      font-size: clamp(3rem, min(10vw, 12vh), 7rem);
       font-weight: 900;
       line-height: 1.05;
     }
@@ -295,7 +445,7 @@ function nomeLeggibile(nome: string): string {
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: clamp(1.5rem, 4vw, 2.5rem);
+      font-size: clamp(1.5rem, min(4vw, 5vh), 2.5rem);
       font-weight: 700;
       color: var(--mat-sys-on-surface-variant);
     }
@@ -306,13 +456,13 @@ function nomeLeggibile(nome: string): string {
     }
 
     .quotazione {
-      font-size: 0.55em;
+      font-size: 1em;
       opacity: 0.75;
       font-weight: 600;
     }
 
     .prezzo {
-      font-size: clamp(5rem, 18vw, 13rem);
+      font-size: clamp(3.5rem, min(18vw, 20vh), 13rem);
       font-weight: 900;
       color: var(--mat-sys-primary);
       line-height: 1;
@@ -338,13 +488,13 @@ function nomeLeggibile(nome: string): string {
     }
 
     .rilancio-logo {
-      width: clamp(3rem, 8vw, 5.5rem);
-      height: clamp(3rem, 8vw, 5.5rem);
+      width: clamp(3rem, min(8vw, 9vh), 5.5rem);
+      height: clamp(3rem, min(8vw, 9vh), 5.5rem);
       flex-shrink: 0;
     }
 
     .rilancio .team {
-      font-size: clamp(2rem, 6vw, 4rem);
+      font-size: clamp(2rem, min(6vw, 7vh), 4rem);
       font-weight: 800;
     }
 
@@ -352,6 +502,43 @@ function nomeLeggibile(nome: string): string {
       font-size: clamp(2rem, 6vw, 4rem);
       font-weight: 700;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    /* Da desktop in su .stage è una colonna stretta a larghezza fissa (vedi
+       sopra): i font qui usano cqw (% della larghezza di QUELLA colonna,
+       grazie a container-type: inline-size su .stage) invece di vw (%
+       della finestra intera), altrimenti resterebbero dimensionati per una
+       colonna larga anche quando è stata ristretta apposta. */
+    @media (min-width: 1000px) {
+      .nome {
+        font-size: clamp(1.6rem, 13cqw, 3.2rem);
+      }
+
+      .squadra-giocatore {
+        font-size: clamp(1rem, 6cqw, 1.6rem);
+      }
+
+      .squadra-giocatore-logo {
+        width: clamp(1.2rem, 6cqw, 1.6rem);
+        height: clamp(1.2rem, 6cqw, 1.6rem);
+      }
+
+      .prezzo {
+        font-size: clamp(2.2rem, 22cqw, 5rem);
+      }
+
+      .rilancio-logo {
+        width: clamp(2rem, 10cqw, 3.5rem);
+        height: clamp(2rem, 10cqw, 3.5rem);
+      }
+
+      .rilancio .team {
+        font-size: clamp(1.4rem, 9cqw, 2.6rem);
+      }
+
+      .waiting-text {
+        font-size: clamp(1.4rem, 9cqw, 2.6rem);
+      }
     }
   `,
 })
@@ -408,6 +595,10 @@ export class TvPage {
     { initialValue: [] as TeamStatAsta[] },
   );
 
+  /** Metà delle squadre a sinistra del giocatore rilanciato, metà a destra */
+  readonly statsSinistra = computed(() => this.stats().slice(0, Math.ceil(this.stats().length / 2)));
+  readonly statsDestra = computed(() => this.stats().slice(Math.ceil(this.stats().length / 2)));
+
   private readonly svincolati = toSignal(this.teamService.svincolati$, {
     initialValue: [] as Svincolato[],
   });
@@ -454,6 +645,20 @@ export class TvPage {
   /** Voce attualmente scelta per gli annunci (null finché le voci non sono ancora caricate) */
   readonly voceScelta = signal<SpeechSynthesisVoice | null>(null);
   readonly nomeVoceScelta = computed(() => this.voceScelta()?.name ?? '');
+
+  private static readonly LARGHEZZA_STORAGE_KEY = 'tv.larghezzaColonna';
+  private static readonly LARGHEZZA_MIN = 220;
+  private static readonly LARGHEZZA_MAX = 700;
+  /**
+   * Larghezza (px) della colonna centrale del giocatore, regolabile
+   * trascinando i manici ai suoi lati — preferenza locale al dispositivo
+   * (come la voce degli annunci), non condivisa con gli altri spettatori.
+   */
+  readonly stageWidth = signal(this.leggiLarghezzaSalvata());
+  private trascinamentoAttivo = false;
+  private segnoTrascinamento: 1 | -1 = 1;
+  private larghezzaAllInizioTrascinamento = 0;
+  private clientXAllInizioTrascinamento = 0;
 
   constructor() {
     this.caricaVoci();
@@ -604,6 +809,64 @@ export class TvPage {
   /** Piccolo assaggio della voce scelta, per confrontarle senza aspettare un rilancio vero */
   provaVoce(): void {
     this.annuncia("Questa è la voce degli annunci durante l'asta");
+  }
+
+  /**
+   * Trascinamento dei manici ai lati della colonna centrale: `segno` è -1
+   * per il manico sinistro e +1 per quello destro, così lo stesso calcolo
+   * allarga la colonna quando si trascina verso il proprio esterno,
+   * indipendentemente da quale dei due manici si stia usando.
+   * `setPointerCapture` fa sì che i successivi pointermove/pointerup
+   * arrivino comunque a QUESTO stesso elemento anche se il puntatore esce
+   * dal manico durante il trascinamento (pattern standard per gli slider).
+   */
+  iniziaTrascinamento(event: PointerEvent, segno: 1 | -1): void {
+    this.trascinamentoAttivo = true;
+    this.segnoTrascinamento = segno;
+    this.larghezzaAllInizioTrascinamento = this.stageWidth();
+    this.clientXAllInizioTrascinamento = event.clientX;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  trascina(event: PointerEvent): void {
+    if (!this.trascinamentoAttivo) {
+      return;
+    }
+    const delta = (event.clientX - this.clientXAllInizioTrascinamento) * this.segnoTrascinamento;
+    const nuova = Math.min(
+      TvPage.LARGHEZZA_MAX,
+      Math.max(TvPage.LARGHEZZA_MIN, this.larghezzaAllInizioTrascinamento + delta),
+    );
+    this.stageWidth.set(Math.round(nuova));
+  }
+
+  fineTrascinamento(event: PointerEvent): void {
+    if (!this.trascinamentoAttivo) {
+      return;
+    }
+    this.trascinamentoAttivo = false;
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    this.salvaLarghezza(this.stageWidth());
+  }
+
+  private leggiLarghezzaSalvata(): number {
+    try {
+      const salvata = Number(localStorage.getItem(TvPage.LARGHEZZA_STORAGE_KEY));
+      if (salvata >= TvPage.LARGHEZZA_MIN && salvata <= TvPage.LARGHEZZA_MAX) {
+        return salvata;
+      }
+    } catch {
+      // localStorage non disponibile: si usa il default
+    }
+    return 320;
+  }
+
+  private salvaLarghezza(valore: number): void {
+    try {
+      localStorage.setItem(TvPage.LARGHEZZA_STORAGE_KEY, String(valore));
+    } catch {
+      // localStorage non disponibile: la scelta resta valida solo per questa sessione
+    }
   }
 
   /**

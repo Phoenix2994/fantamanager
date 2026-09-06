@@ -123,7 +123,9 @@ type TeamStat = TeamStatAsta;
                         </div>
                         <div class="nome">{{ s.giocatoreNome }}</div>
                         @if (s.squadra) {
-                          <div class="squadra-giocatore">{{ s.squadra }}</div>
+                          <div class="squadra-giocatore">
+                            {{ s.squadra }} <span class="quotazione">Q. {{ s.quotazione }}</span>
+                          </div>
                         }
                         <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                         @if (s.rilanciatoDaTeamName) {
@@ -242,7 +244,9 @@ type TeamStat = TeamStatAsta;
                         </div>
                         <div class="nome">{{ s.giocatoreNome }}</div>
                         @if (s.squadra) {
-                          <div class="squadra-giocatore">{{ s.squadra }}</div>
+                          <div class="squadra-giocatore">
+                            {{ s.squadra }} <span class="quotazione">Q. {{ s.quotazione }}</span>
+                          </div>
                         }
                         <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                         @if (s.rilanciatoDaTeamName) {
@@ -413,7 +417,9 @@ type TeamStat = TeamStatAsta;
                   </div>
                   <div class="nome">{{ s.giocatoreNome }}</div>
                   @if (s.squadra) {
-                    <div class="squadra-giocatore">{{ s.squadra }}</div>
+                    <div class="squadra-giocatore">
+                      {{ s.squadra }} <span class="quotazione">Q. {{ s.quotazione }}</span>
+                    </div>
                   }
                   <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                   @if (s.rilanciatoDaTeamName) {
@@ -515,7 +521,9 @@ type TeamStat = TeamStatAsta;
                   </div>
                   <div class="nome">{{ s.giocatoreNome }}</div>
                   @if (s.squadra) {
-                    <div class="squadra-giocatore">{{ s.squadra }}</div>
+                    <div class="squadra-giocatore">
+                      {{ s.squadra }} <span class="quotazione">Q. {{ s.quotazione }}</span>
+                    </div>
                   }
                   <div class="prezzo">{{ s.prezzoAttuale | number: '1.2-2' }} €</div>
                   @if (s.rilanciatoDaTeamName) {
@@ -662,6 +670,12 @@ type TeamStat = TeamStatAsta;
       font-size: 1rem;
       font-weight: 600;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .quotazione {
+      font-size: 1em;
+      opacity: 0.75;
+      font-weight: 600;
     }
 
     .rilanciante {
