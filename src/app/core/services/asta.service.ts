@@ -171,8 +171,13 @@ export class AstaService {
     });
   }
 
-  /** Chiude l'asta senza assegnare il giocatore (nessuno lo vuole) */
-  async chiudiAsta(): Promise<void> {
+  /**
+   * Chiude l'asta senza assegnare il giocatore (nessuno lo vuole).
+   * `continuaRandom` (default true) permette al chiamante di rifiutare
+   * l'incatenamento al prossimo random anche se l'asta era stata aperta
+   * così — scelta fatta dall'admin nella modale di conferma.
+   */
+  async chiudiAsta(continuaRandom = true): Promise<void> {
     const stato = await this.getStato();
     await updateDoc(this.statoRef, { aperta: false, ultimoEsito: 'chiuso' });
 
@@ -190,8 +195,9 @@ export class AstaService {
     });
 
     // Come per l'assegnazione: se era un'asta "random", incatena subito la
-    // prossima anche quando si chiude senza assegnare nessuno.
-    if (stato?.apertoDaRandom) {
+    // prossima anche quando si chiude senza assegnare nessuno — a meno che
+    // l'admin non l'abbia esplicitamente rifiutato nella modale.
+    if (stato?.apertoDaRandom && continuaRandom) {
       void this.apriAstaRandomSuccessiva();
     }
   }
@@ -238,6 +244,7 @@ export class AstaService {
     teamName: string,
     provenienza: ProvenienzaAsta,
     prezzo?: number,
+    continuaRandom = true,
   ): Promise<void> {
     const stato = await this.getStato();
     if (!stato || !stato.aperta) {
@@ -354,10 +361,11 @@ export class AstaService {
         `per ${prezzoDaUsare} €`,
     });
 
-    // Se questa era un'asta "random", incatena subito la prossima — non
-    // deve mai bloccare l'assegnazione appena fatta: eventuali errori (es.
+    // Se questa era un'asta "random", incatena subito la prossima — a meno
+    // che l'admin non l'abbia rifiutato nella modale di conferma. Non deve
+    // mai bloccare l'assegnazione appena fatta: eventuali errori (es.
     // nessun svincolato più richiamabile) restano silenziosi.
-    if (stato.apertoDaRandom) {
+    if (stato.apertoDaRandom && continuaRandom) {
       void this.apriAstaRandomSuccessiva();
     }
   }

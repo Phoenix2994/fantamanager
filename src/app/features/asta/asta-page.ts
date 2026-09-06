@@ -28,8 +28,13 @@ import {
 import {
   ConfirmAssegnazioneDialog,
   ConfirmAssegnazioneData,
+  ConfirmAssegnazioneResult,
 } from './confirm-assegnazione-dialog';
-import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
+import {
+  ConfirmChiudiAstaDialog,
+  ConfirmChiudiAstaData,
+  ConfirmChiudiAstaResult,
+} from './confirm-chiudi-asta-dialog';
 import {
   AstaService,
   MAX_GIOCATORI,
@@ -1161,22 +1166,28 @@ export class AstaPage {
         this.provenienza() === 'acquistiAstaSettembre'
           ? 'Asta settembre'
           : 'Asta infrasettimanale',
+      apertoDaRandom: stato?.apertoDaRandom,
     };
-    const confirmed = await firstValueFrom(
+    const risultato = await firstValueFrom(
       this.dialog
-        .open(ConfirmAssegnazioneDialog, {
-          data,
-          width: '95vw',
-          maxWidth: '420px',
-        })
+        .open<ConfirmAssegnazioneDialog, ConfirmAssegnazioneData, ConfirmAssegnazioneResult>(
+          ConfirmAssegnazioneDialog,
+          { data, width: '95vw', maxWidth: '420px' },
+        )
         .afterClosed(),
     );
-    if (!confirmed) {
+    if (!risultato) {
       return;
     }
 
     try {
-      await this.astaService.assegna(teamId, team?.name ?? '', this.provenienza(), this.assegnaPrezzo());
+      await this.astaService.assegna(
+        teamId,
+        team?.name ?? '',
+        this.provenienza(),
+        this.assegnaPrezzo(),
+        risultato.continuaRandom,
+      );
       this.snackBar.open('Giocatore assegnato', undefined, { duration: 3000 });
     } catch (e) {
       this.snackBar.open(
@@ -1188,33 +1199,42 @@ export class AstaPage {
   }
 
   async chiudi(): Promise<void> {
-    // Se qualcuno ha già rilanciato, chiedi conferma prima di buttare via
-    // quel rilancio — troppo facile cliccare "Chiudi" per sbaglio invece di
-    // "Assegna" quando c'è già un'offerta in corso.
     const s = this.stato();
-    if (s?.rilanciatoDaTeamId) {
-      const confermato = await firstValueFrom(
+    const haRilanciante = !!s?.rilanciatoDaTeamId;
+    const apertoDaRandom = !!s?.apertoDaRandom;
+
+    // Chiedi conferma se c'è un rilancio da buttare via (troppo facile
+    // cliccare "Chiudi" per sbaglio invece di "Assegna") o se l'asta era
+    // random (l'admin può scegliere se incatenare subito la prossima) —
+    // altrimenti chiudi direttamente, non c'è nulla da decidere.
+    let continuaRandom = true;
+    if (haRilanciante || apertoDaRandom) {
+      const risultato = await firstValueFrom(
         this.dialog
-          .open(ConfirmDialog, {
-            data: {
-              title: 'Chiudere senza assegnare?',
-              message:
-                `${s.rilanciatoDaTeamName} ha rilanciato ${s.prezzoAttuale} € per ${s.giocatoreNome}: ` +
-                'chiudendo senza assegnare quel rilancio va perso. Continuare?',
-              confirmLabel: 'Chiudi senza assegnare',
+          .open<ConfirmChiudiAstaDialog, ConfirmChiudiAstaData, ConfirmChiudiAstaResult>(
+            ConfirmChiudiAstaDialog,
+            {
+              data: {
+                giocatoreNome: s?.giocatoreNome ?? '',
+                rilanciante: haRilanciante
+                  ? { nome: s!.rilanciatoDaTeamName, prezzo: s!.prezzoAttuale }
+                  : undefined,
+                apertoDaRandom,
+              },
+              width: '95vw',
+              maxWidth: '400px',
             },
-            width: '95vw',
-            maxWidth: '400px',
-          })
+          )
           .afterClosed(),
       );
-      if (!confermato) {
+      if (!risultato) {
         return;
       }
+      continuaRandom = risultato.continuaRandom;
     }
 
     try {
-      await this.astaService.chiudiAsta();
+      await this.astaService.chiudiAsta(continuaRandom);
     } catch {
       this.snackBar.open('Errore durante la chiusura', undefined, { duration: 3000 });
     }
