@@ -303,12 +303,12 @@ interface RosterEntry {
 
     h2 {
       margin: 0;
-      font-size: 1.1rem;
+      font-size: 1.2rem;
     }
 
     h3 {
       margin: 16px 0 8px;
-      font-size: 0.95rem;
+      font-size: 1.05rem;
     }
 
     .header-actions {
@@ -318,7 +318,7 @@ interface RosterEntry {
     }
 
     .count {
-      font-size: 0.85rem;
+      font-size: 0.9375rem;
       color: var(--mat-sys-on-surface-variant);
     }
 
@@ -327,7 +327,7 @@ interface RosterEntry {
       padding: 10px 14px;
       border-radius: 8px;
       background: var(--mat-sys-primary-container);
-      font-size: 0.9rem;
+      font-size: 0.9375rem;
     }
 
     .filters {
@@ -363,7 +363,7 @@ interface RosterEntry {
       padding: 2px 8px;
       border-radius: 999px;
       border: 1.5px solid currentColor;
-      font-size: 0.72rem;
+      font-size: 0.8rem;
       font-weight: 700;
       line-height: 1.4;
       white-space: nowrap;
@@ -378,7 +378,7 @@ interface RosterEntry {
     .list li {
       padding: 6px 0;
       border-bottom: 1px dashed var(--mat-sys-outline-variant);
-      font-size: 0.875rem;
+      font-size: 0.9375rem;
     }
 
     .row {
@@ -406,9 +406,9 @@ interface RosterEntry {
     }
 
     .star-mini {
-      font-size: 14px;
-      width: 14px;
-      height: 14px;
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
     }
 
     .panel-indicator {
@@ -466,7 +466,7 @@ interface RosterEntry {
       background: var(--mat-sys-surface-container-high);
       color: var(--mat-sys-on-surface);
       font: inherit;
-      font-size: 0.82rem;
+      font-size: 0.9rem;
     }
 
     .cards {
@@ -489,8 +489,8 @@ interface RosterEntry {
     }
 
     .row-logo {
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
     }
 
     .option-logo {
@@ -517,7 +517,7 @@ interface RosterEntry {
 
     .empty-state {
       color: var(--mat-sys-on-surface-variant);
-      font-size: 0.875rem;
+      font-size: 0.9375rem;
     }
   `,
 })
