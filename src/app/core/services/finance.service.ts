@@ -194,14 +194,18 @@ export class FinanceService {
   }
 
   /**
-   * Prepara (SENZA scrivere) il documento finanze con un acquisto d'asta
-   * (stessa logica di `addAcquisto`, ma pura: usata da AstaService per
-   * includere la scrittura in un unico batch atomico con giocatore e
-   * svincolato, con snapshot "prima" per l'undo).
+   * Prepara (SENZA scrivere) il documento finanze con un acquisto d'asta o
+   * manuale (stessa logica di `addAcquisto`, ma pura: usata da AstaService
+   * e da TeamService.addPlayer per includere la scrittura in un unico batch
+   * atomico col giocatore, con snapshot "prima" per l'undo).
    */
   preparaAcquistoAsta(
     current: SeasonFinance | undefined,
-    campo: 'acquistiAstaSettembre' | 'acquistiMercatoInfrasettimanale' | 'acquistiAstaGennaio',
+    campo:
+      | 'acquistiAstaSettembre'
+      | 'acquistiMercatoInfrasettimanale'
+      | 'acquistiAstaGennaio'
+      | 'trasferimentiUscita',
     importo: number,
     valoreRosa: number,
   ): { data: SeasonFinanceInputs & SeasonFinanceComputed } {
@@ -216,67 +220,6 @@ export class FinanceService {
   /** Riferimento al documento finanze di una squadra (stagione corrente) */
   financeDocRef(teamId: string) {
     return this.financeRef(teamId);
-  }
-
-  /**
-   * Somma l'importo di un acquisto alla voce di spesa corrispondente
-   * alla provenienza del giocatore (asta sett / infrasettimanale /
-   * asta gen / trasferimenti) e ricalcola tutti i derivati.
-   */
-  async addAcquisto(
-    teamId: string,
-    campo:
-      | 'acquistiAstaSettembre'
-      | 'acquistiMercatoInfrasettimanale'
-      | 'acquistiAstaGennaio'
-      | 'trasferimentiUscita',
-    importo: number,
-    valoreRosa: number,
-    nomeGiocatore: string,
-  ): Promise<void> {
-    if (!(importo > 0)) {
-      return;
-    }
-
-    const snap = await getDoc(this.financeRef(teamId));
-    const current = snap.data() as SeasonFinance | undefined;
-
-    const merged: SeasonFinanceInputs = {
-      ...EMPTY_FINANCE_INPUTS,
-      ...(current ?? {}),
-      [campo]: (current?.[campo] ?? 0) + importo,
-    };
-
-    const computed = ricalcolaFinance(
-      merged,
-      this.bracketsCache,
-      valoreRosa,
-      current?.taxMinimumHistoric ?? 0,
-    );
-
-    await setDoc(
-      this.financeRef(teamId),
-      {
-        ...merged,
-        ...computed,
-        updatedAt: serverTimestamp(),
-        updatedBy: this.auth.currentUser?.uid ?? 'unknown',
-      },
-      { merge: true },
-    );
-
-    void this.audit.log({
-      leagueId: environment.leagueId,
-      teamId,
-      adminId: this.auth.currentUser?.uid ?? 'unknown',
-      entityType: 'seasonFinance',
-      entityId: `${teamId}/${environment.season}`,
-      operation: 'update',
-      fieldModified: campo,
-      valueBefore: { [campo]: current?.[campo] ?? 0 },
-      valueAfter: { [campo]: merged[campo], importo },
-      changeSummary: `Acquisto ${nomeGiocatore}: +${importo} € a ${campo}`,
-    });
   }
 
   /**

@@ -19,7 +19,7 @@ import {
   SeasonFinance,
   Team,
 } from '../../../core/models';
-import { calcolaValoreAttuale, round2 } from '../../../core/finance-calculator';
+import { round2 } from '../../../core/finance-calculator';
 import { compareRuoli, roleColor, splitRoles } from '../../../core/roles';
 import { AuthService } from '../../../core/services/auth.service';
 import { FinanceService } from '../../../core/services/finance.service';
@@ -620,25 +620,20 @@ export class PlayersSection {
     } as const;
 
     try {
-      await this.teamService.addPlayer(this.selectedTeamId()!, result);
-
-      // Somma i soldi spesi alla voce di spesa della provenienza scelta
-      if (result.acquistoRinnovoSpesa > 0) {
-        const vaNuovo = calcolaValoreAttuale(
-          result.valoreIniziale,
-          result.quotazioneIniziale,
-          result.quotazioneAttuale,
-        );
-        const nuovaRosa =
-          Math.round((this.valoreRosa() + (vaNuovo || 0)) * 100) / 100;
-        await this.financeService.addAcquisto(
-          this.selectedTeamId()!,
-          CAMPO_PROVENIENZA[result.provenienza as ProvenienzaAcquisto],
-          result.acquistoRinnovoSpesa,
-          nuovaRosa,
-          result.name,
-        );
-      }
+      // Giocatore + eventuale spesa in un unico batch atomico (vedi
+      // TeamService.addPlayer): così l'intera operazione è annullabile da
+      // /storico come un acquisto d'asta, non solo il giocatore da solo.
+      await this.teamService.addPlayer(
+        this.selectedTeamId()!,
+        result,
+        result.acquistoRinnovoSpesa > 0
+          ? {
+              campo: CAMPO_PROVENIENZA[result.provenienza as ProvenienzaAcquisto],
+              importo: result.acquistoRinnovoSpesa,
+              valoreRosaAttuale: this.valoreRosa(),
+            }
+          : undefined,
+      );
 
       this.snackBar.open('Giocatore aggiunto', undefined, { duration: 2500 });
     } catch {

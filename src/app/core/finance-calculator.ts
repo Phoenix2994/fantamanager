@@ -380,12 +380,17 @@ export function preparaAiutoDiStato(
 }
 
 /**
- * Prepara (pura, senza I/O) il documento finanze con un acquisto d'asta:
- * +importo sulla voce di provenienza (asta sett / infrasettimanale / gen).
+ * Prepara (pura, senza I/O) il documento finanze con un acquisto d'asta o
+ * manuale: +importo sulla voce di provenienza (asta sett / infrasettimanale
+ * / gen / trasferimenti, per un'aggiunta manuale in rosa da trasferimento).
  */
 export function preparaAcquistoAsta(
   current: SeasonFinance | undefined,
-  campo: 'acquistiAstaSettembre' | 'acquistiMercatoInfrasettimanale' | 'acquistiAstaGennaio',
+  campo:
+    | 'acquistiAstaSettembre'
+    | 'acquistiMercatoInfrasettimanale'
+    | 'acquistiAstaGennaio'
+    | 'trasferimentiUscita',
   importo: number,
   valoreRosa: number,
   brackets: ReadonlyArray<TaxBracket>,

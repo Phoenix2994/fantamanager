@@ -100,8 +100,27 @@ export class TeamService {
     );
   }
 
-  /** Crea un nuovo giocatore nella rosa della stagione corrente */
-  async addPlayer(teamId: string, input: PlayerInput): Promise<string> {
+  /**
+   * Crea un nuovo giocatore nella rosa della stagione corrente. Se `acquisto`
+   * è indicato (soldi spesi > 0), la spesa viene sommata alla voce scelta
+   * nello STESSO batch atomico del giocatore, con una voce di undoLog: come
+   * un acquisto d'asta, l'intera operazione (giocatore + finanze) è
+   * annullabile da /storico.
+   */
+  async addPlayer(
+    teamId: string,
+    input: PlayerInput,
+    acquisto?: {
+      campo:
+        | 'acquistiAstaSettembre'
+        | 'acquistiMercatoInfrasettimanale'
+        | 'acquistiAstaGennaio'
+        | 'trasferimentiUscita';
+      importo: number;
+      /** valore rosa PRIMA di questa aggiunta (serve al ricalcolo finanze) */
+      valoreRosaAttuale: number;
+    },
+  ): Promise<string> {
     // round1: V.I. e V.A. seguono sempre la convenzione a 1 decimale,
     // anche quando arrivano da un campo libero compilato a mano.
     const valoreIniziale = round1(input.valoreIniziale);
@@ -110,27 +129,59 @@ export class TeamService {
       input.quotazioneIniziale,
       input.quotazioneAttuale,
     );
-    const ref = await addDoc(
-      collection(this.firestore, `${this.seasonPath(teamId)}/players`),
-      {
-        ...input,
-        valoreIniziale,
-        valoreAttuale,
-        prossimaSpesaRinnovo: calcolaProssimaSpesaRinnovo(
-          valoreAttuale,
-          input.prossimaPercRinnovo,
-        ),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-    );
+
+    const playerRef = doc(collection(this.firestore, `${this.seasonPath(teamId)}/players`));
+    const batch = writeBatch(this.firestore);
+    batch.set(playerRef, {
+      ...input,
+      valoreIniziale,
+      valoreAttuale,
+      prossimaSpesaRinnovo: calcolaProssimaSpesaRinnovo(valoreAttuale, input.prossimaPercRinnovo),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    const docsUndo: { path: string; before: Record<string, unknown> | null }[] = [
+      { path: playerRef.path, before: null },
+    ];
+
+    if (acquisto && acquisto.importo > 0) {
+      const financeRef = this.finance.financeDocRef(teamId);
+      const financeSnap = await getDoc(financeRef);
+      const financeBefore = financeSnap.data() as SeasonFinance | undefined;
+      const nuovaRosa = round2(acquisto.valoreRosaAttuale + valoreAttuale);
+
+      const { data: financeData } = this.finance.preparaAcquistoAsta(
+        financeBefore,
+        acquisto.campo,
+        acquisto.importo,
+        nuovaRosa,
+      );
+      batch.set(financeRef, { ...financeData, ...this.finance.metaScrittura() }, { merge: true });
+      docsUndo.push({
+        path: financeRef.path,
+        before: (financeBefore as unknown as Record<string, unknown>) ?? null,
+      });
+    }
+
+    this.undo.registra(batch, {
+      tipo: 'acquistoManuale',
+      leagueId: environment.leagueId,
+      teamIds: [teamId],
+      descrizione: acquisto?.importo
+        ? `Aggiunta giocatore: ${input.name} per ${acquisto.importo} €`
+        : `Aggiunta giocatore: ${input.name}`,
+      docs: docsUndo,
+    });
+
+    await batch.commit();
 
     void this.audit.log({
       leagueId: environment.leagueId,
       teamId,
       adminId: this.auth.currentUser?.uid ?? 'unknown',
       entityType: 'player',
-      entityId: ref.id,
+      entityId: playerRef.id,
       operation: 'create',
       fieldModified: '*',
       valueBefore: null,
@@ -138,7 +189,7 @@ export class TeamService {
       changeSummary: `Creazione giocatore ${input.name}`,
     });
 
-    return ref.id;
+    return playerRef.id;
   }
 
   /**

@@ -24,6 +24,7 @@ const ENTITY_PER_TIPO: Record<OperazioneAnnullabile, AuditEntityType> = {
   eliminazione: 'player',
   rimborso: 'player',
   acquistoAsta: 'player',
+  acquistoManuale: 'player',
   scambioConferma: 'scambio',
   rientroPrestito: 'player',
   eventoBonusScambio: 'scambio',

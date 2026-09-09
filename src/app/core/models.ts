@@ -495,6 +495,7 @@ export type OperazioneAnnullabile =
   | 'eliminazione'
   | 'rimborso'
   | 'acquistoAsta'
+  | 'acquistoManuale'
   | 'scambioConferma'
   | 'rientroPrestito'
   | 'eventoBonusScambio'
