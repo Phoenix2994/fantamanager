@@ -7,6 +7,7 @@ import {
   Validators,
 } from '@angular/forms';
 import { map } from 'rxjs';
+import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -16,7 +17,9 @@ import {
   calcolaProssimaSpesaRinnovo,
   calcolaValoreAttuale,
 } from '../../../core/finance-calculator';
-import { CONTRACT_TYPES, Player } from '../../../core/models';
+import { CONTRACT_TYPES, Player, Svincolato } from '../../../core/models';
+import { TeamService } from '../../../core/services/team.service';
+import { normalize } from '../../../core/text-utils';
 
 /** Da dove arriva il giocatore: determina la voce di spesa da incrementare */
 export type ProvenienzaAcquisto =
@@ -53,6 +56,7 @@ export interface PlayerDialogResult {
   imports: [
     DecimalPipe,
     ReactiveFormsModule,
+    MatAutocompleteModule,
     MatButtonModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -68,7 +72,14 @@ export interface PlayerDialogResult {
       <form [formGroup]="form" class="dialog-form">
         <mat-form-field appearance="fill">
           <mat-label>Nome</mat-label>
-          <input matInput formControlName="name" />
+          <input matInput formControlName="name" [matAutocomplete]="autoNome" />
+          <!-- Solo in creazione: suggerisce gli svincolati corrispondenti,
+               selezionandone uno prevalorizza ruolo/Q.I./Q.A. sotto -->
+          <mat-autocomplete #autoNome="matAutocomplete" (optionSelected)="selezionaSvincolato($event)">
+            @for (s of suggerimentiNome(); track s.id) {
+              <mat-option [value]="s.name">{{ s.name }} ({{ s.ruolo }}, {{ s.squadra }})</mat-option>
+            }
+          </mat-autocomplete>
         </mat-form-field>
 
         <div class="row">
@@ -178,6 +189,7 @@ export class PlayerDialog {
   readonly data = inject<PlayerDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject(MatDialogRef<PlayerDialog, PlayerDialogResult>);
   private readonly fb = inject(NonNullableFormBuilder);
+  private readonly teamService = inject(TeamService);
 
   readonly contractTypes = CONTRACT_TYPES;
 
@@ -209,6 +221,41 @@ export class PlayerDialog {
   readonly spesaRinnovoPreview = computed(() =>
     calcolaProssimaSpesaRinnovo(this.valoreAttualePreview(), this.formValue().prossimaPercRinnovo),
   );
+
+  /**
+   * Svincolati suggeriti mentre si digita il nome — solo in creazione (in
+   * modifica il giocatore è già in rosa, non ha senso cercarlo tra i
+   * liberi). Selezionandone uno, ruolo/Q.I./Q.A. vengono prevalorizzati
+   * dai suoi dati (vedi selezionaSvincolato).
+   */
+  private readonly svincolati = toSignal(this.teamService.svincolati$, {
+    initialValue: [] as Svincolato[],
+  });
+
+  readonly suggerimentiNome = computed(() => {
+    if (this.data.mode !== 'create') {
+      return [];
+    }
+    const termine = normalize(this.formValue().name);
+    if (!termine) {
+      return [];
+    }
+    return this.svincolati()
+      .filter((s) => normalize(s.name).includes(termine))
+      .slice(0, 20);
+  });
+
+  selezionaSvincolato(event: MatAutocompleteSelectedEvent): void {
+    const svincolato = this.svincolati().find((s) => s.name === event.option.value);
+    if (!svincolato) {
+      return;
+    }
+    this.form.patchValue({
+      ruolo: svincolato.ruolo,
+      quotazioneIniziale: svincolato.quotazioneAttuale,
+      quotazioneAttuale: svincolato.quotazioneAttuale,
+    });
+  }
 
   save(): void {
     if (this.form.invalid) {
