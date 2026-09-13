@@ -11,14 +11,26 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AstaStato, Player, Svincolato, Team, ValutazioneSvincolato } from '../../../core/models';
+import {
+  AstaInfrasettimanale,
+  AstaStato,
+  Player,
+  Svincolato,
+  Team,
+  ValutazioneSvincolato,
+} from '../../../core/models';
 import { ROLE_ORDER, roleColor, splitRoles } from '../../../core/roles';
 import { AstaService } from '../../../core/services/asta.service';
+import {
+  AstaInfrasettimanaleService,
+  FaseInfrasettimanale,
+} from '../../../core/services/asta-infrasettimanale.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { TeamNotesService } from '../../../core/services/team-notes.service';
 import { TeamService } from '../../../core/services/team.service';
 import { normalize } from '../../../core/text-utils';
 import { ConfirmDialog } from '../dialogs/confirm-dialog';
+import { AstaInfrasettimanaleConfigPanel } from '../../asta-infrasettimanale/asta-infrasettimanale-config';
 import { ExpandablePlayerCard } from '../../../shared/expandable-player-card';
 import { SerieALogo } from '../../../shared/serie-a-logo';
 
@@ -45,6 +57,7 @@ interface RosterEntry {
     MatInputModule,
     MatSelectModule,
     RouterLink,
+    AstaInfrasettimanaleConfigPanel,
     ExpandablePlayerCard,
     SerieALogo,
   ],
@@ -71,6 +84,10 @@ interface RosterEntry {
         <span class="count">{{ filtered().length }} giocatori</span>
       </div>
     </div>
+
+    @if (isAdmin()) {
+      <app-asta-infrasettimanale-config />
+    }
 
     @if (astaAperta(); as s) {
       <p class="asta-banner">
@@ -256,13 +273,19 @@ interface RosterEntry {
                     (blur)="salvaNota(squadra.id, p.id, $any($event.target).value)"
                   ></textarea>
                 }
+                <!-- In fondo e a destra, staccate dalle stelle: se erano
+                     troppo vicine era facile toccarle per sbaglio mentre si
+                     valuta -->
                 @if (isAdmin()) {
-                  <!-- In fondo e a destra, staccato dalle stelle: se ci sono
-                       entrambe le sezioni erano troppo vicine ed era facile
-                       toccare "Apri asta" per sbaglio mentre si valuta -->
                   <button matButton="tonal" class="auction-btn" (click)="apriAsta(p)">
                     <mat-icon>gavel</mat-icon>
                     Apri asta
+                  </button>
+                }
+                @if (puoiChiamareInfra(p)) {
+                  <button matButton="tonal" class="auction-btn" (click)="chiamaInfrasettimanale(p)">
+                    <mat-icon>event_repeat</mat-icon>
+                    Chiama (infrasettimanale)
                   </button>
                 }
               </div>
@@ -524,6 +547,7 @@ interface RosterEntry {
 export class SvincolatiSection {
   private readonly teamService = inject(TeamService);
   private readonly astaService = inject(AstaService);
+  private readonly astaInfraService = inject(AstaInfrasettimanaleService);
   private readonly authService = inject(AuthService);
   private readonly teamNotesService = inject(TeamNotesService);
   private readonly snackBar = inject(MatSnackBar);
@@ -566,6 +590,38 @@ export class SvincolatiSection {
 
   /** true se la riga ha qualcosa da mostrare nel pannello espanso (valutazione e/o apri asta) */
   readonly puoiEspandere = computed(() => this.isAdmin() || !!this.myTeam());
+
+  /** Fase corrente del ciclo di asta infrasettimanale (vedi AstaInfrasettimanaleService) */
+  readonly faseInfra = toSignal(this.astaInfraService.fase$, {
+    initialValue: 'disabilitata' as FaseInfrasettimanale,
+  });
+
+  private readonly asteInfraAperte = toSignal(this.astaInfraService.aperte$, {
+    initialValue: [] as AstaInfrasettimanale[],
+  });
+
+  /** Nomi già in un'asta infrasettimanale aperta: non richiamabili finché non si chiude */
+  private readonly nomiInAstaInfra = computed(
+    () => new Set(this.asteInfraAperte().map((a) => a.giocatoreNome)),
+  );
+
+  /** Giocatori in rosa della propria squadra — serve al tetto dei 28 per la chiamata */
+  private readonly mieiGiocatoriInfra = toSignal(
+    toObservable(this.myTeam).pipe(
+      switchMap((team) => (team ? this.teamService.players$(team.id) : of([] as Player[]))),
+      map((players) => players.length),
+    ),
+    { initialValue: 0 },
+  );
+
+  /** true se si può chiamare QUESTO svincolato ora (fase giusta, non già in asta) */
+  puoiChiamareInfra(p: Svincolato): boolean {
+    return (
+      !!this.myTeam() &&
+      this.faseInfra() === 'chiamata' &&
+      !this.nomiInAstaInfra().has(p.name)
+    );
+  }
 
   /**
    * Valutazioni PRIVATE della propria squadra sugli svincolati (vuoto se non
@@ -815,6 +871,49 @@ export class SvincolatiSection {
       this.snackBar.open('Errore durante l\u2019apertura dell\u2019asta', undefined, {
         duration: 3000,
       });
+    }
+  }
+
+  /**
+   * Chiama uno svincolato per l'asta infrasettimanale (0,10 \u20ac di partenza) \u2014
+   * a differenza di "Apri asta" (solo admin, asta di settembre), questa \u00e8
+   * aperta a qualunque presidente loggato come squadra.
+   */
+  async chiamaInfrasettimanale(giocatore: Svincolato): Promise<void> {
+    const squadra = this.myTeam();
+    if (!squadra) {
+      return;
+    }
+    const confermato = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialog, {
+          data: {
+            title: 'Chiama per l\u2019asta infrasettimanale',
+            message: `Chiamare ${giocatore.name} a 0,10 \u20ac? Sar\u00e0 visibile a tutti i presidenti, che potranno rilanciare.`,
+            confirmLabel: 'Chiama',
+          },
+          width: '95vw',
+          maxWidth: '400px',
+        })
+        .afterClosed(),
+    );
+    if (!confermato) {
+      return;
+    }
+    try {
+      await this.astaInfraService.chiama(
+        giocatore,
+        squadra.id,
+        squadra.name,
+        this.mieiGiocatoriInfra(),
+      );
+      this.snackBar.open(`${giocatore.name} chiamato`, undefined, { duration: 3000 });
+    } catch (e) {
+      this.snackBar.open(
+        e instanceof Error ? e.message : 'Errore durante la chiamata',
+        undefined,
+        { duration: 3500 },
+      );
     }
   }
 

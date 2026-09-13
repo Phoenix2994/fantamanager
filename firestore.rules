@@ -96,6 +96,42 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
+    // Asta infrasettimanale: un documento per giocatore in asta (a differenza
+    // di asta/statoCorrente, qui più aste sono aperte in contemporanea). A
+    // differenza dell'asta di settembre (dove la scelta squadra è solo un
+    // vincolo client-side, "lega tra amici fidati"), qui l'identità è
+    // verificata DAVVERO: solo chi ha fatto login come proprietario della
+    // squadra può chiamare o rilanciare — l'admin da solo (senza possedere
+    // anche lui una squadra) non può farlo. I tempi delle 4 fasi restano
+    // fatti rispettare SOLO lato client (nessuna validazione oraria qui,
+    // scelta esplicita — vedi memoria di progetto).
+    match /asteInfrasettimanali/{astaId} {
+      allow read: if true;
+
+      // Chiamata: il chiamante diventa subito il rilanciante (vedi
+      // AstaInfrasettimanaleService.chiama) — basta verificare che chi
+      // scrive possieda davvero quella squadra.
+      allow create: if isTeamOwner(request.resource.data.rilanciatoDaTeamId);
+
+      // Rilancio: stessa verifica, sul NUOVO rilanciante dichiarato — impedisce
+      // anche all'admin (se non possiede lui stesso quella squadra) di
+      // rilanciare per conto di qualcun altro. L'admin può però finalizzare
+      // (assegna/chiudiSenzaAssegnare), che NON cambia rilanciatoDaTeamId:
+      // per questo l'altro ramo dell'OR richiede che quel campo resti uguale.
+      allow update: if isTeamOwner(request.resource.data.rilanciatoDaTeamId)
+        || (isAdmin() && request.resource.data.rilanciatoDaTeamId == resource.data.rilanciatoDaTeamId);
+
+      // Buste: private per davvero, MAI pubbliche neanche a fine asta.
+      // Solo la squadra che l'ha inserita (per questo l'id doc è il teamId,
+      // niente ambiguità) e l'admin possono leggerla o scriverla. L'admin le
+      // vede sempre a livello di regole — che non le mostri prima delle 14
+      // è un controllo SOLO lato interfaccia, per scelta esplicita (admin in
+      // buonafede, ha comunque accesso diretto a Firestore).
+      match /buste/{teamId} {
+        allow read, write: if isAdmin() || isTeamOwner(teamId);
+      }
+    }
+
     // Trattative di scambio tra squadre. Stati: bozza (PRIVATA, solo le due
     // squadre coinvolte) -> ufficializzata (visibile anche agli admin, che
     // possono confermarla) -> confermata/annullata (pubbliche, come prima).
@@ -162,6 +198,16 @@ service cloud.firestore {
       match /{document=**} {
         allow read, write: if isTeamOwner(teamId);
       }
+    }
+
+    // Token FCM per le notifiche push (solo asta infrasettimanale): un
+    // documento per squadra, con l'elenco dei token dei suoi dispositivi.
+    // Stesso pattern di teamNotes — collection dedicata, solo la squadra
+    // proprietaria (o l'admin) può leggerli/scriverli. Le Cloud Functions
+    // che inviano le notifiche usano l'Admin SDK e bypassano comunque queste
+    // regole.
+    match /pushTokens/{teamId} {
+      allow read, write: if isAdmin() || isTeamOwner(teamId);
     }
 
     // Registro delle operazioni annullabili (rinnovo, rimborso/eliminazione,

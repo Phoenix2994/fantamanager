@@ -35,4 +35,15 @@ export const environment = {
 
   /** Nome visualizzato della lega nell'header e nel login */
   leagueName: 'Fantamanager',
+
+  /**
+   * Chiave pubblica VAPID per le notifiche push (solo asta infrasettimanale,
+   * vedi PushNotificationService) — da generare UNA VOLTA in Console Firebase
+   * → Impostazioni progetto → Cloud Messaging → "Web Push certificates" →
+   * Genera coppia di chiavi, poi incollare qui la chiave pubblica. Non esiste
+   * un modo per generarla via API: è un passaggio manuale in console. Finché
+   * resta vuota, il servizio disabilita silenziosamente le notifiche (nessun
+   * errore per l'utente finale, solo bottone "Attiva notifiche" nascosto).
+   */
+  fcmVapidKey: 'BDHCuFD7sxhvlQLojTzHy-D-ldDJ8q5JTMgpkD9y5o1EuZyT-S4TwpS-PWXdSQQVW_vSvetyCS0nnL9FEO0VzSg',
 };
