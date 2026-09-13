@@ -1,1 +1,0 @@
-import{K as a,Z as l}from"./chunk-UR5O7PSS.js";var n=class e{selectedTeamIdSignal=l(null);selectedTeamId=this.selectedTeamIdSignal.asReadonly();select(t){this.selectedTeamIdSignal.set(t)}static \u0275fac=function(i){return new(i||e)};static \u0275prov=a({token:e,factory:e.\u0275fac,providedIn:"root"})};export{n as a};
