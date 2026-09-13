@@ -34,6 +34,11 @@ import {
   InfoFaseInfrasettimanale,
 } from '../asta-infrasettimanale-calculator';
 import {
+  LimiteBusteInput,
+  puoInviareBusta,
+  slotNuoveBusteDisponibili,
+} from '../asta-infrasettimanale-busta-limite-calculator';
+import {
   calcolaProssimaSpesaRinnovo,
   calcolaValoreAttuale,
   round1,
@@ -46,7 +51,7 @@ import { FinanceService } from './finance.service';
 import { LeagueService } from './league.service';
 import { UndoService } from './undo.service';
 
-export type { FaseInfrasettimanale, InfoFaseInfrasettimanale };
+export type { FaseInfrasettimanale, InfoFaseInfrasettimanale, LimiteBusteInput };
 
 /**
  * Gestione delle aste infrasettimanali: a differenza dell'asta di settembre
@@ -231,13 +236,64 @@ export class AstaInfrasettimanaleService {
     >;
   }
 
-  /** Inserisce o modifica (stesso documento, sovrascritto) la busta della squadra per un'asta */
+  /**
+   * Dati per decidere se la squadra può presentare (o aggiornare) una busta
+   * su questa asta — vedi `puoInviareBusta` per la regola vera e propria.
+   * Un'asta che sta già vincendo (rilanciante) non "costa" mai uno slot: le
+   * altre invece sono limitate dagli slot di rosa liberi meno quelli già
+   * impegnati dalle aste vinte altrove. Pubblico (non solo usato da
+   * `inserisciBusta`): la UI lo richiama per mostrare quante buste restano
+   * disponibili prima ancora di provare a inviarne una.
+   */
+  async infoLimiteBuste(
+    astaId: string,
+    teamId: string,
+    giocatoriInRosa: number,
+  ): Promise<LimiteBusteInput> {
+    const attiveSnap = await getDocs(query(this.collectionRef, where('chiusa', '==', false)));
+    const astaCorrente = attiveSnap.docs.find((d) => d.id === astaId);
+    const staGiaVincendoQuesta = astaCorrente?.data()['rilanciatoDaTeamId'] === teamId;
+
+    const astePosseduteAltrove = attiveSnap.docs.filter(
+      (d) => d.id !== astaId && d.data()['rilanciatoDaTeamId'] === teamId,
+    ).length;
+
+    const altreNonVinte = attiveSnap.docs.filter(
+      (d) => d.id !== astaId && d.data()['rilanciatoDaTeamId'] !== teamId,
+    );
+    const busteEsistentiDocs = await Promise.all(
+      altreNonVinte.map((d) =>
+        getDoc(doc(this.firestore, `asteInfrasettimanali/${d.id}/buste/${teamId}`)),
+      ),
+    );
+    const busteEsistentiSuAltriNonVinti = busteEsistentiDocs.filter((d) => d.exists()).length;
+
+    return { giocatoriInRosa, astePosseduteAltrove, staGiaVincendoQuesta, busteEsistentiSuAltriNonVinti };
+  }
+
+  /**
+   * Inserisce o modifica (stesso documento, sovrascritto) la busta della
+   * squadra per un'asta — soggetta al tetto di `puoInviareBusta`: una busta
+   * su un giocatore che non si sta già vincendo consuma uno slot "nuovo"
+   * (rosa libera meno le aste già vinte altrove), quella sul giocatore già
+   * in testa è invece sempre permessa.
+   */
   async inserisciBusta(
     astaId: string,
     teamId: string,
     teamName: string,
     importo: number,
+    giocatoriInRosa: number,
   ): Promise<void> {
+    const info = await this.infoLimiteBuste(astaId, teamId, giocatoriInRosa);
+    if (!puoInviareBusta(info)) {
+      const slotNuovi = slotNuoveBusteDisponibili(giocatoriInRosa, info.astePosseduteAltrove);
+      const astaLabel = info.astePosseduteAltrove === 1 ? 'un’altra asta' : `altre ${info.astePosseduteAltrove} aste`;
+      throw new Error(
+        `Puoi presentare al massimo ${slotNuovi} bust${slotNuovi === 1 ? 'a' : 'e'} su giocatori diversi da quelli che stai già vincendo (hai ${giocatoriInRosa}/${MAX_GIOCATORI} in rosa e sei già in testa in ${astaLabel}).`,
+      );
+    }
+
     await setDoc(doc(this.firestore, `asteInfrasettimanali/${astaId}/buste/${teamId}`), {
       teamId,
       teamName,

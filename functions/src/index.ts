@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
-import { onDocumentWritten, onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 
 initializeApp();
@@ -136,29 +136,8 @@ export const onRilancioInfrasettimanale = onDocumentWritten(
   },
 );
 
-/**
- * Notifica le altre squadre eleggibili (quelle che avevano rilanciato nella
- * fascia "solo rilanci") quando una di loro presenta una busta — MAI
- * l'importo, le buste restano private: il testo dice solo che è arrivata.
- * Solo al PRIMO inserimento (onDocumentCreated), non ad ogni modifica
- * successiva della stessa busta.
- */
-export const onBustaInserita = onDocumentCreated(
-  'asteInfrasettimanali/{astaId}/buste/{teamId}',
-  async (event) => {
-    const { astaId, teamId } = event.params;
-    const astaSnap = await db.doc(`asteInfrasettimanali/${astaId}`).get();
-    const asta = astaSnap.data();
-    if (!asta) {
-      return;
-    }
-    const eleggibili = (asta['squadreEleggibiliBusta'] as string[] | undefined) ?? [];
-    const daAvvisare = eleggibili.filter((id) => id !== teamId);
-
-    await inviaATeam(
-      daAvvisare,
-      'Asta infrasettimanale',
-      `È stata presentata una busta per ${asta['giocatoreNome']}`,
-    );
-  },
-);
+// NOTA: niente notifiche per le buste (né push né in-app) — scelta esplicita
+// dell'utente: le buste restano un fatto privato tra la squadra e l'admin, e
+// non devono generare alcun avviso quando arrivano. C'era una
+// onBustaInserita che lo faceva, rimossa apposta (vedi memoria di progetto
+// "asta-infrasettimanale-piano").

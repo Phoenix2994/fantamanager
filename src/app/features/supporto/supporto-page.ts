@@ -60,7 +60,7 @@ const ASTA_INFRA_FUNZIONALITA_STATICHE: readonly Funzionalita[] = [
     icona: 'notifications',
     titolo: 'Notifiche push (opzionali)',
     descrizione:
-      'Dopo aver scelto la tua squadra, se il browser le supporta compare il bottone "Attiva notifiche". Una volta attive, ricevi un avviso quando qualcuno rilancia su un giocatore a cui hai messo almeno una stellina negli Svincolati, e quando arriva una busta su un giocatore per cui avevi rilanciato — l’avviso dice solo che è arrivata una busta, MAI l’importo, per non intaccarne la segretezza. Se il sito è aperto in primo piano l’avviso compare dentro la pagina; se è chiuso o in background arriva come una vera notifica di sistema (serve solo che il browser sia ancora acceso, anche in background).',
+      'Dopo aver scelto la tua squadra, se il browser le supporta compare il bottone "Attiva notifiche". Una volta attive, ricevi un avviso quando qualcuno rilancia su un giocatore a cui hai messo almeno una stellina negli Svincolati. Le buste NON generano mai nessun avviso, né push né dentro l’app: restano un fatto privato tra te e l’admin, nemmeno il loro arrivo viene segnalato alle altre squadre. Se il sito è aperto in primo piano l’avviso di rilancio compare dentro la pagina; se è chiuso o in background arriva come una vera notifica di sistema (serve solo che il browser sia ancora acceso, anche in background).',
   },
   {
     icona: 'phone_iphone',
@@ -585,7 +585,9 @@ export class SupportoPage {
         icona: 'mail_lock',
         titolo: `Fase 3 — Buste (${formatIntervallo(c.inizioBuste, c.inizioAssegnazione)})`,
         descrizione:
-          'I rilanci pubblici sono chiusi: solo le squadre eleggibili (vedi fase 2) possono presentare una busta segreta, di importo almeno pari all’ultimo rilancio. È modificabile e ritirabile finché la fase resta aperta. La tua busta la vedi solo tu — nessun’altra squadra la vede mai, nemmeno a esito noto; solo l’admin la vede, e solo dopo la scadenza, per l’assegnazione.',
+          'I rilanci pubblici sono chiusi: solo le squadre eleggibili (vedi fase 2) possono presentare una busta segreta, di importo almeno pari all’ultimo rilancio. È modificabile e ritirabile finché la fase resta aperta. La tua busta la vedi solo tu — nessun’altra squadra la vede mai, nemmeno a esito noto; solo l’admin la vede, e solo dopo la scadenza, per l’assegnazione. Nessuna notifica viene mai inviata quando arriva una busta: né a te, né alle altre squadre. Quante puoi presentarne dipende dai posti liberi in rosa: su un giocatore che stai già vincendo (l’ultimo rilancio è tuo) puoi sempre presentarla, perché non ti farebbe guadagnare un posto in rosa in più; per gli ALTRI giocatori, invece, il numero di buste "nuove" è limitato ai posti liberi meno quelli già impegnati dai giocatori che stai già vincendo altrove.',
+        esempio:
+          'Esempio: 3 posti liberi, già in testa per 1 giocatore → puoi presentare busta su altri 2 giocatori diversi, più una (senza limiti) su quello che stai già vincendo. Con 1 solo posto libero e già in testa per 1 giocatore, la busta la puoi presentare solo su quello. Con 1 posto libero e nessun rilancio vinto, puoi sceglierne uno qualsiasi tra i giocatori eleggibili.',
       },
       {
         icona: 'how_to_vote',

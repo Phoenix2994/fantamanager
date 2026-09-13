@@ -2,7 +2,7 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { of } from 'rxjs';
+import { from, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -12,11 +12,16 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AstaInfrasettimanale, BustaInfrasettimanale, Player, Team } from '../../core/models';
 import { roleColor, splitRoles } from '../../core/roles';
+import {
+  puoInviareBusta,
+  slotNuoveBusteDisponibili,
+} from '../../core/asta-infrasettimanale-busta-limite-calculator';
 import { MAX_GIOCATORI, minIncremento } from '../../core/services/asta.service';
 import {
   AstaInfrasettimanaleService,
   FaseInfrasettimanale,
   InfoFaseInfrasettimanale,
+  LimiteBusteInput,
 } from '../../core/services/asta-infrasettimanale.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PushNotificationService } from '../../core/services/push-notification.service';
@@ -274,7 +279,7 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
                     </mat-form-field>
                     <button
                       matButton="filled"
-                      [disabled]="importoBusta() < a.prezzoAttuale"
+                      [disabled]="importoBusta() < a.prezzoAttuale || bustaBloccata()"
                       (click)="inviaBusta(a)"
                     >
                       {{ mieBustaCorrente() ? 'Aggiorna busta' : 'Invia busta' }}
@@ -286,6 +291,9 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
                       </p>
                     }
                     <p class="hint">La busta deve essere almeno pari all'ultimo rilancio.</p>
+                    @if (messaggioLimiteBuste(); as messaggio) {
+                      <p class="hint" [class.warn]="bustaBloccata()">{{ messaggio }}</p>
+                    }
                   </div>
                 } @else {
                   <p class="hint warn">
@@ -625,6 +633,56 @@ export class AstaInfrasettimanalePage {
     { initialValue: undefined as BustaInfrasettimanale | undefined },
   );
 
+  /**
+   * Quante buste "nuove" restano disponibili per l'asta aperta nel foglio —
+   * ricalcolato (one-shot, non realtime) ogni volta che si apre un foglio in
+   * fase "buste" per un'asta eleggibile: serve solo a mostrare un avviso
+   * preventivo, il controllo vero e vincolante resta comunque lato servizio
+   * in `inserisciBusta` (vedi AstaInfrasettimanaleService).
+   */
+  private readonly limiteBuste = toSignal(
+    toObservable(
+      computed(() => {
+        const a = this.astaSelezionata();
+        const squadra = this.miaSquadra();
+        if (!a || !squadra || this.fase() !== 'buste' || !this.eleggibileBusta(a)) {
+          return null;
+        }
+        return { astaId: a.id, teamId: squadra.id, giocatori: this.mieiGiocatori() };
+      }),
+    ).pipe(
+      switchMap((p) =>
+        p
+          ? from(this.astaInfraService.infoLimiteBuste(p.astaId, p.teamId, p.giocatori))
+          : of(null),
+      ),
+    ),
+    { initialValue: null as LimiteBusteInput | null },
+  );
+
+  /** true se l'invio di una NUOVA busta (non l'aggiornamento di una già presentata) andrebbe rifiutato */
+  readonly bustaBloccata = computed(() => {
+    const info = this.limiteBuste();
+    if (!info || this.mieBustaCorrente()) {
+      return false; // ancora in caricamento, o si sta solo aggiornando una busta già propria: sempre permesso
+    }
+    return !puoInviareBusta(info);
+  });
+
+  /** Messaggio da mostrare quando bustaBloccata() è true, o un promemoria degli slot residui altrimenti */
+  readonly messaggioLimiteBuste = computed(() => {
+    const info = this.limiteBuste();
+    if (!info || info.staGiaVincendoQuesta) {
+      return null;
+    }
+    const slotNuovi = slotNuoveBusteDisponibili(info.giocatoriInRosa, info.astePosseduteAltrove);
+    const rimanenti = Math.max(0, slotNuovi - info.busteEsistentiSuAltriNonVinti);
+    if (this.bustaBloccata()) {
+      return `Hai già usato tutti i tuoi slot per buste su giocatori diversi da quelli che stai vincendo (${slotNuovi} su ${MAX_GIOCATORI - info.giocatoriInRosa} liberi in rosa, ${info.astePosseduteAltrove} già impegnati da altre aste in testa).`;
+    }
+    return `Puoi ancora presentare ${rimanenti} bust${rimanenti === 1 ? 'a' : 'e'} su giocatori diversi da quelli che stai già vincendo.`;
+  });
+
   rolesOf(ruolo: string): string[] {
     return splitRoles(ruolo);
   }
@@ -706,10 +764,20 @@ export class AstaInfrasettimanalePage {
       return;
     }
     try {
-      await this.astaInfraService.inserisciBusta(a.id, squadra.id, squadra.name, this.importoBusta());
+      await this.astaInfraService.inserisciBusta(
+        a.id,
+        squadra.id,
+        squadra.name,
+        this.importoBusta(),
+        this.mieiGiocatori(),
+      );
       this.snackBar.open('Busta inviata', undefined, { duration: 2500 });
-    } catch {
-      this.snackBar.open('Errore durante l’invio della busta', undefined, { duration: 3000 });
+    } catch (e) {
+      this.snackBar.open(
+        e instanceof Error ? e.message : 'Errore durante l’invio della busta',
+        undefined,
+        { duration: 4000 },
+      );
     }
   }
 
