@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentWritten, onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
@@ -25,8 +25,13 @@ function slugify(value: string): string {
 }
 
 /**
- * Invia una notifica push a un elenco di squadre, leggendo i token salvati
- * in pushTokens/{teamId}.tokens (vedi PushNotificationService lato client).
+ * Notifica un elenco di squadre in DUE modi indipendenti:
+ * 1. un evento in notifiche/{teamId}/eventi, sempre — cosicché anche chi
+ *    non ha attivato le notifiche push (o è su un browser che non le
+ *    supporta) veda comunque la comunicazione, come banner all'apertura
+ *    dell'app (vedi NotificheInAppService lato client);
+ * 2. una vera notifica push, SOLO per chi ha almeno un token salvato in
+ *    pushTokens/{teamId}.tokens (vedi PushNotificationService).
  * Best-effort: un fallimento di invio non deve mai far fallire il trigger
  * (l'operazione principale su Firestore è già andata a buon fine).
  */
@@ -34,10 +39,22 @@ async function inviaATeam(teamIds: string[], title: string, body: string): Promi
   if (teamIds.length === 0) {
     return;
   }
+
+  await Promise.all(
+    teamIds.map((teamId) =>
+      db.collection(`notifiche/${teamId}/eventi`).add({
+        titolo: title,
+        corpo: body,
+        timestamp: FieldValue.serverTimestamp(),
+        letta: false,
+      }),
+    ),
+  );
+
   const tokenDocs = await Promise.all(teamIds.map((id) => db.doc(`pushTokens/${id}`).get()));
   const tokens = tokenDocs.flatMap((d) => (d.data()?.['tokens'] as string[] | undefined) ?? []);
   if (tokens.length === 0) {
-    logger.info(`Nessun token per le squadre interessate (${teamIds.join(', ')}), niente da inviare`);
+    logger.info(`Nessun token per le squadre interessate (${teamIds.join(', ')}), solo evento in-app`);
     return;
   }
   try {

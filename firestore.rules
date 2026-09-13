@@ -210,6 +210,19 @@ service cloud.firestore {
       allow read, write: if isAdmin() || isTeamOwner(teamId);
     }
 
+    // Eventi asta infrasettimanale mostrati IN-APP (banner all'apertura),
+    // così anche chi non ha attivato le notifiche push (o è su un browser
+    // che non le supporta) veda comunque la comunicazione. Scritti SOLO
+    // dalla Cloud Function che invia anche il push (Admin SDK, bypassa
+    // comunque queste regole) — il client può solo leggerli e segnarli
+    // come letti/eliminarli una volta mostrati, mai crearne di finti.
+    match /notifiche/{teamId} {
+      match /eventi/{eventoId} {
+        allow read, update, delete: if isAdmin() || isTeamOwner(teamId);
+        allow create: if false;
+      }
+    }
+
     // Registro delle operazioni annullabili (rinnovo, rimborso/eliminazione,
     // acquisto asta, conferma scambio): scritte SOLO come parte del batch
     // atomico dell'operazione stessa (già admin, vedi sopra), quindi

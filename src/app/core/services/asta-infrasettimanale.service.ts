@@ -155,6 +155,12 @@ export class AstaInfrasettimanaleService {
    * Se la fase corrente è "soloRilanci", la squadra entra nell'elenco degli
    * eleggibili a presentare una busta su questo giocatore — l'unico momento
    * in cui quell'elenco cresce.
+   *
+   * Stesso tetto di 28 giocatori di `chiama()` (giocatori in rosa + testa in
+   * altre aste aperte): senza questo controllo una squadra già piena poteva
+   * comunque continuare a rilanciare (e potenzialmente vincere) su
+   * qualunque asta già aperta, aggirando di fatto il limite che le impedisce
+   * solo di chiamarne di nuove.
    */
   async rilancia(
     astaId: string,
@@ -162,7 +168,18 @@ export class AstaInfrasettimanaleService {
     teamName: string,
     incremento: number,
     prezzoAtteso: number,
+    giocatoriInRosa: number,
   ): Promise<void> {
+    const attiveSnap = await getDocs(query(this.collectionRef, where('chiusa', '==', false)));
+    const inTestaAltrove = attiveSnap.docs.filter(
+      (d) => d.id !== astaId && d.data()['rilanciatoDaTeamId'] === teamId,
+    ).length;
+    if (giocatoriInRosa + inTestaAltrove >= MAX_GIOCATORI) {
+      throw new Error(
+        `Hai già ${MAX_GIOCATORI} giocatori contando le aste in corso: non puoi rilanciare.`,
+      );
+    }
+
     const fase = calcolaFaseInfrasettimanale(
       await firstValueFrom(this.leagueService.astaInfrasettimanaleConfig$),
       new Date(),

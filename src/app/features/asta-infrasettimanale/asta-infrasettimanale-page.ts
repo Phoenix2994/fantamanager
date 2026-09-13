@@ -3,22 +3,23 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { of } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { map, switchMap } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AstaInfrasettimanale, BustaInfrasettimanale, Team } from '../../core/models';
+import { AstaInfrasettimanale, BustaInfrasettimanale, Player, Team } from '../../core/models';
 import { roleColor, splitRoles } from '../../core/roles';
-import { minIncremento } from '../../core/services/asta.service';
+import { MAX_GIOCATORI, minIncremento } from '../../core/services/asta.service';
 import {
   AstaInfrasettimanaleService,
   FaseInfrasettimanale,
 } from '../../core/services/asta-infrasettimanale.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PushNotificationService } from '../../core/services/push-notification.service';
+import { TeamService } from '../../core/services/team.service';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { TeamLogo } from '../../shared/team-logo';
@@ -196,6 +197,7 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
                       [disabled]="
                         a.rilanciatoDaTeamId === miaSquadra()!.id ||
                         inCooldown() ||
+                        squadraPiena(a.id) ||
                         inc < minIncremento(a.prezzoAttuale)
                       "
                       (click)="rilancia(a, inc)"
@@ -204,9 +206,40 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
                     </button>
                   }
                 </div>
+
+                <mat-form-field appearance="fill" subscriptSizing="dynamic" class="full-width">
+                  <mat-label>Rilancio custom (€)</mat-label>
+                  <input
+                    matInput
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    [value]="customBid()"
+                    (input)="customBid.set($any($event.target).valueAsNumber || 0)"
+                  />
+                </mat-form-field>
+                <button
+                  matButton="filled"
+                  class="bid-btn custom-bid-btn"
+                  [disabled]="
+                    !customValida() ||
+                    a.rilanciatoDaTeamId === miaSquadra()!.id ||
+                    inCooldown() ||
+                    squadraPiena(a.id)
+                  "
+                  (click)="rilanciaCustom(a)"
+                >
+                  Rilancia {{ customBid() | number: '1.2-2' }} €
+                </button>
+
                 @if (a.rilanciatoDaTeamId === miaSquadra()!.id) {
                   <p class="hint warn">
                     La tua squadra è già l'ultima rilanciante: attendi una controparte.
+                  </p>
+                } @else if (squadraPiena(a.id)) {
+                  <p class="hint warn">
+                    Hai raggiunto il limite di {{ maxGiocatori }} giocatori (contando anche le altre
+                    aste in cui sei in testa): non puoi rilanciare.
                   </p>
                 }
               } @else if (fase() === 'buste') {
@@ -441,6 +474,15 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
       margin-top: 14px;
     }
 
+    .full-width {
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    .custom-bid-btn {
+      width: 100%;
+    }
+
     .busta-form {
       display: flex;
       flex-direction: column;
@@ -463,10 +505,12 @@ export class AstaInfrasettimanalePage {
   private readonly astaInfraService = inject(AstaInfrasettimanaleService);
   private readonly authService = inject(AuthService);
   private readonly pushService = inject(PushNotificationService);
+  private readonly teamService = inject(TeamService);
   private readonly snackBar = inject(MatSnackBar);
 
   readonly incrementi = INCREMENTI;
   readonly minIncremento = minIncremento;
+  readonly maxGiocatori = MAX_GIOCATORI;
 
   readonly fase = toSignal(this.astaInfraService.fase$, {
     initialValue: 'disabilitata' as FaseInfrasettimanale,
@@ -484,13 +528,36 @@ export class AstaInfrasettimanalePage {
   /** La squadra del login REALE (AuthService.myTeam$), null se non loggati come una squadra */
   readonly miaSquadra = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
 
+  /** Giocatori in rosa della propria squadra — serve al tetto dei 28 per il rilancio (vedi AstaInfrasettimanaleService.rilancia) */
+  readonly mieiGiocatori = toSignal(
+    toObservable(this.miaSquadra).pipe(
+      switchMap((team) => (team ? this.teamService.players$(team.id) : of([] as Player[]))),
+      map((players) => players.length),
+    ),
+    { initialValue: 0 },
+  );
+
   readonly astaSelezionataId = signal<string | null>(null);
   readonly astaSelezionata = computed(() =>
     this.asteAperte().find((a) => a.id === this.astaSelezionataId()),
   );
 
+  /** true se la squadra ha già raggiunto il tetto contando anche le altre aste in cui è in testa (esclusa questa) */
+  squadraPiena(astaId: string): boolean {
+    const squadra = this.miaSquadra();
+    if (!squadra) {
+      return true;
+    }
+    const inTestaAltrove = this.asteAperte().filter(
+      (a) => a.id !== astaId && a.rilanciatoDaTeamId === squadra.id,
+    ).length;
+    return this.mieiGiocatori() + inTestaAltrove >= MAX_GIOCATORI;
+  }
+
   readonly inCooldown = signal(false);
   readonly importoBusta = signal(0);
+  /** Rilancio custom (importo libero) — stesso pattern di asta-page.ts */
+  readonly customBid = signal(0);
 
   /** true se questo browser supporta le notifiche push E la chiave VAPID è configurata */
   readonly notificheDisponibili = signal(false);
@@ -531,6 +598,23 @@ export class AstaInfrasettimanalePage {
   apriFoglio(a: AstaInfrasettimanale): void {
     this.astaSelezionataId.set(a.id);
     this.importoBusta.set(0);
+    this.customBid.set(0);
+  }
+
+  /** true se il rilancio custom è valido (> prezzo attuale + minimo) */
+  readonly customValida = computed(() => {
+    const a = this.astaSelezionata();
+    if (!a) {
+      return false;
+    }
+    return this.customBid() + 1e-9 >= a.prezzoAttuale + minIncremento(a.prezzoAttuale);
+  });
+
+  async rilanciaCustom(a: AstaInfrasettimanale): Promise<void> {
+    if (!this.customValida()) {
+      return;
+    }
+    await this.rilancia(a, this.customBid() - a.prezzoAttuale);
   }
 
   chiudiFoglio(): void {
@@ -560,6 +644,7 @@ export class AstaInfrasettimanalePage {
         squadra.name,
         incremento,
         a.prezzoAttuale,
+        this.mieiGiocatori(),
       );
       this.inCooldown.set(true);
       setTimeout(() => this.inCooldown.set(false), 1000);

@@ -15,6 +15,14 @@
         { "fieldPath": "teamId", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "eventi",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "letta", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
