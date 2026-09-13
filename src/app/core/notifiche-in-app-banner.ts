@@ -1,5 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
@@ -23,13 +24,19 @@ import { EventoInApp, NotificheInAppService } from './services/notifiche-in-app.
   template: `
     @if (corrente(); as evento) {
       <div class="notifica-overlay">
-        <div class="notifica-card">
+        <div
+          class="notifica-card"
+          role="button"
+          tabindex="0"
+          (click)="vai(evento)"
+          (keydown.enter)="vai(evento)"
+        >
           <mat-icon>notifications</mat-icon>
           <div class="notifica-testo">
             <strong>{{ evento.titolo }}</strong>
             <p>{{ evento.corpo }}</p>
           </div>
-          <button matIconButton aria-label="Chiudi" (click)="chiudi(evento)">
+          <button matIconButton aria-label="Chiudi" (click)="chiudi(evento, $event)">
             <mat-icon>close</mat-icon>
           </button>
         </div>
@@ -61,6 +68,12 @@ import { EventoInApp, NotificheInAppService } from './services/notifiche-in-app.
       background: var(--mat-sys-tertiary-container, #2d2a1f);
       color: var(--mat-sys-on-tertiary-container, #fff);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+    }
+
+    .notifica-card:focus-visible {
+      outline: 2px solid var(--mat-sys-on-tertiary-container, #fff);
+      outline-offset: 2px;
     }
 
     .notifica-card mat-icon:first-child {
@@ -93,6 +106,7 @@ import { EventoInApp, NotificheInAppService } from './services/notifiche-in-app.
 export class NotificheInAppBanner {
   private readonly authService = inject(AuthService);
   private readonly notificheService = inject(NotificheInAppService);
+  private readonly router = inject(Router);
 
   private readonly myTeam = toSignal(this.authService.myTeam$, { initialValue: null });
 
@@ -106,7 +120,19 @@ export class NotificheInAppBanner {
   /** Un evento alla volta: la coda si smaltisce chiudendoli uno per uno */
   readonly corrente = computed(() => this.eventi()[0]);
 
-  async chiudi(evento: EventoInApp): Promise<void> {
+  /** Tocco sulla card: apre l'asta infrasettimanale e segna l'evento come letto */
+  async vai(evento: EventoInApp): Promise<void> {
+    await this.segnaLetto(evento);
+    await this.router.navigateByUrl('/asta-infrasettimanale');
+  }
+
+  /** Tocco sulla "x": chiude senza navigare (ferma la propagazione verso la card) */
+  async chiudi(evento: EventoInApp, event: Event): Promise<void> {
+    event.stopPropagation();
+    await this.segnaLetto(evento);
+  }
+
+  private async segnaLetto(evento: EventoInApp): Promise<void> {
     const team = this.myTeam();
     if (!team) {
       return;

@@ -27,7 +27,12 @@ import {
   SeasonFinance,
   Svincolato,
 } from '../models';
-import { calcolaFaseInfrasettimanale, FaseInfrasettimanale } from '../asta-infrasettimanale-calculator';
+import {
+  calcolaFaseInfrasettimanale,
+  calcolaInfoFaseInfrasettimanale,
+  FaseInfrasettimanale,
+  InfoFaseInfrasettimanale,
+} from '../asta-infrasettimanale-calculator';
 import {
   calcolaProssimaSpesaRinnovo,
   calcolaValoreAttuale,
@@ -41,7 +46,7 @@ import { FinanceService } from './finance.service';
 import { LeagueService } from './league.service';
 import { UndoService } from './undo.service';
 
-export type { FaseInfrasettimanale };
+export type { FaseInfrasettimanale, InfoFaseInfrasettimanale };
 
 /**
  * Gestione delle aste infrasettimanali: a differenza dell'asta di settembre
@@ -81,6 +86,12 @@ export class AstaInfrasettimanaleService {
     this.leagueService.astaInfrasettimanaleConfig$,
     timer(0, 30_000),
   ]).pipe(map(([config]) => calcolaFaseInfrasettimanale(config, new Date())));
+
+  /** Come fase$, ma con anche l'orario di fine fase e quale fase segue (per mostrarli in UI) */
+  readonly infoFase$: Observable<InfoFaseInfrasettimanale> = combineLatest([
+    this.leagueService.astaInfrasettimanaleConfig$,
+    timer(0, 30_000),
+  ]).pipe(map(([config]) => calcolaInfoFaseInfrasettimanale(config, new Date())));
 
   /**
    * Chiama uno svincolato a 0,10 €: il chiamante diventa da subito

@@ -1,4 +1,4 @@
-import { calcolaFaseInfrasettimanale } from './asta-infrasettimanale-calculator';
+import { calcolaFaseInfrasettimanale, calcolaInfoFaseInfrasettimanale } from './asta-infrasettimanale-calculator';
 import { AstaInfrasettimanaleConfig } from './models';
 
 /**
@@ -53,5 +53,45 @@ describe('calcolaFaseInfrasettimanale', () => {
     expect(calcolaFaseInfrasettimanale(CONFIG, romaUtc(6, 12, 0))).toBe('assegnazione'); // domenica
     expect(calcolaFaseInfrasettimanale(CONFIG, romaUtc(8, 9, 59))).toBe('assegnazione'); // martedì succ., appena prima
     expect(calcolaFaseInfrasettimanale(CONFIG, romaUtc(8, 10, 0))).toBe('chiamata'); // il ciclo ricomincia
+  });
+});
+
+describe('calcolaInfoFaseInfrasettimanale', () => {
+  it('senza config, ritorna solo "disabilitata" senza fine/faseSuccessiva', () => {
+    expect(calcolaInfoFaseInfrasettimanale(undefined, romaUtc(1, 12))).toEqual({
+      fase: 'disabilitata',
+    });
+  });
+
+  it('in "chiamata", finisce a inizioSoloRilanci e la fase successiva è "soloRilanci"', () => {
+    expect(calcolaInfoFaseInfrasettimanale(CONFIG, romaUtc(1, 12))).toEqual({
+      fase: 'chiamata',
+      fine: CONFIG.inizioSoloRilanci,
+      faseSuccessiva: 'soloRilanci',
+    });
+  });
+
+  it('in "soloRilanci", finisce a inizioBuste e la fase successiva è "buste"', () => {
+    expect(calcolaInfoFaseInfrasettimanale(CONFIG, romaUtc(1, 20))).toEqual({
+      fase: 'soloRilanci',
+      fine: CONFIG.inizioBuste,
+      faseSuccessiva: 'buste',
+    });
+  });
+
+  it('in "buste", finisce a inizioAssegnazione e la fase successiva è "assegnazione"', () => {
+    expect(calcolaInfoFaseInfrasettimanale(CONFIG, romaUtc(2, 5))).toEqual({
+      fase: 'buste',
+      fine: CONFIG.inizioAssegnazione,
+      faseSuccessiva: 'assegnazione',
+    });
+  });
+
+  it('in "assegnazione", finisce a inizioChiamata (della settimana dopo) e la fase successiva è "chiamata"', () => {
+    expect(calcolaInfoFaseInfrasettimanale(CONFIG, romaUtc(2, 15))).toEqual({
+      fase: 'assegnazione',
+      fine: CONFIG.inizioChiamata,
+      faseSuccessiva: 'chiamata',
+    });
   });
 });

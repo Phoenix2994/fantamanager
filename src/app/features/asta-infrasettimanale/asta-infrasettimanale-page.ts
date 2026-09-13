@@ -16,6 +16,7 @@ import { MAX_GIOCATORI, minIncremento } from '../../core/services/asta.service';
 import {
   AstaInfrasettimanaleService,
   FaseInfrasettimanale,
+  InfoFaseInfrasettimanale,
 } from '../../core/services/asta-infrasettimanale.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PushNotificationService } from '../../core/services/push-notification.service';
@@ -43,6 +44,17 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
   buste: 'mail_lock',
   assegnazione: 'hourglass_top',
 };
+
+/** Nome breve di ogni fase, per dire qual è quella successiva nel banner */
+const FASE_NOME: Record<FaseInfrasettimanale, string> = {
+  disabilitata: 'Nessun ciclo',
+  chiamata: 'Chiamata',
+  soloRilanci: 'Solo rilanci',
+  buste: 'Buste',
+  assegnazione: 'Assegnazione',
+};
+
+const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
 
 /**
  * Vista "griglia + foglio" per l'asta infrasettimanale: tutte le aste aperte
@@ -91,7 +103,12 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
       <main class="content">
         <div class="fase-banner" [class.disabilitata]="fase() === 'disabilitata'">
           <mat-icon>{{ faseIcona() }}</mat-icon>
-          <span>{{ faseLabel() }}</span>
+          <div class="fase-banner-testo">
+            <span>{{ faseLabel() }}</span>
+            @if (dettaglioFase(); as dettaglio) {
+              <span class="fase-banner-dettaglio">{{ dettaglio }}</span>
+            }
+          </div>
         </div>
 
         @if (isAdmin() && fase() === 'assegnazione') {
@@ -288,7 +305,7 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
   styles: `
     .fase-banner {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
       padding: 10px 14px;
       border-radius: 12px;
@@ -301,6 +318,18 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
     .fase-banner.disabilitata {
       background: var(--mat-sys-surface-container-high);
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .fase-banner-testo {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .fase-banner-dettaglio {
+      font-size: 0.78rem;
+      font-weight: 400;
+      opacity: 0.85;
     }
 
     .panel {
@@ -481,6 +510,7 @@ const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
 
     .custom-bid-btn {
       width: 100%;
+      margin-top: 12px;
     }
 
     .busta-form {
@@ -517,6 +547,19 @@ export class AstaInfrasettimanalePage {
   });
   readonly faseLabel = computed(() => FASE_LABEL[this.fase()]);
   readonly faseIcona = computed(() => FASE_ICONA[this.fase()]);
+
+  private readonly infoFase = toSignal(this.astaInfraService.infoFase$, {
+    initialValue: { fase: 'disabilitata' } as InfoFaseInfrasettimanale,
+  });
+
+  /** "fino a <giorno> <ora>, poi <fase successiva>" — null se il ciclo è disabilitato */
+  readonly dettaglioFase = computed(() => {
+    const { fine, faseSuccessiva } = this.infoFase();
+    if (!fine || !faseSuccessiva) {
+      return null;
+    }
+    return `fino a ${GIORNI_LABEL[fine.giorno]} ${fine.ora}, poi ${FASE_NOME[faseSuccessiva]}`;
+  });
 
   readonly asteAperte = toSignal(this.astaInfraService.aperte$, {
     initialValue: [] as AstaInfrasettimanale[],

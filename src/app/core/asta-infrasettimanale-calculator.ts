@@ -79,3 +79,38 @@ export function calcolaFaseInfrasettimanale(
   // solo "srotolata" sull'altro lato del confine di fine settimana
   return 'assegnazione';
 }
+
+/** Fase corrente, più quando finisce e quale fase segue — per mostrarlo in UI (vedi asta-infrasettimanale-page.ts) */
+export interface InfoFaseInfrasettimanale {
+  fase: FaseInfrasettimanale;
+  /** Il momento in cui questa fase termina (= inizio della fase successiva); assente se "disabilitata" */
+  fine?: MomentoSettimanale;
+  /** La fase che segue; assente se "disabilitata" */
+  faseSuccessiva?: FaseInfrasettimanale;
+}
+
+/** I 4 campi di AstaInfrasettimanaleConfig che contengono un MomentoSettimanale (esclude "abilitata") */
+type ChiaveConfine = 'inizioChiamata' | 'inizioSoloRilanci' | 'inizioBuste' | 'inizioAssegnazione';
+
+/** Per ogni fase, dove trovare il proprio confine di fine e qual è la fase successiva */
+const CONFINE_SUCCESSIVO: Record<
+  Exclude<FaseInfrasettimanale, 'disabilitata'>,
+  { chiave: ChiaveConfine; prossima: FaseInfrasettimanale }
+> = {
+  chiamata: { chiave: 'inizioSoloRilanci', prossima: 'soloRilanci' },
+  soloRilanci: { chiave: 'inizioBuste', prossima: 'buste' },
+  buste: { chiave: 'inizioAssegnazione', prossima: 'assegnazione' },
+  assegnazione: { chiave: 'inizioChiamata', prossima: 'chiamata' },
+};
+
+export function calcolaInfoFaseInfrasettimanale(
+  config: AstaInfrasettimanaleConfig | undefined,
+  now: Date,
+): InfoFaseInfrasettimanale {
+  const fase = calcolaFaseInfrasettimanale(config, now);
+  if (!config || fase === 'disabilitata') {
+    return { fase };
+  }
+  const { chiave, prossima } = CONFINE_SUCCESSIVO[fase];
+  return { fase, fine: config[chiave], faseSuccessiva: prossima };
+}
