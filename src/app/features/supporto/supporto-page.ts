@@ -579,15 +579,15 @@ export class SupportoPage {
         icona: 'gavel',
         titolo: `Fase 2 — Solo rilanci (${formatIntervallo(c.inizioSoloRilanci, c.inizioBuste)})`,
         descrizione:
-          'Non si possono più chiamare nuovi giocatori, ma le aste già aperte restano rilanciabili: tocca la card del giocatore per aprire il dettaglio e usa uno dei pulsanti rapidi, oppure inserisci un rilancio custom — solo con l’importo custom puoi anche auto-rilanciare (alzare il tuo stesso prezzo) se sei già in testa, cosa che i pulsanti rapidi non permettono. Eleggibilità alle buste: diventano eleggibili le squadre che rilanciano in questa fascia, PIÙ la squadra che sta ancora vincendo il giocatore quando la fascia finisce (anche se nessuno l’ha più sfidata) — solo chi non ha mai rilanciato qui e non è rimasto in testa fino alla fine resta escluso dalle buste.',
+          'Non si possono più chiamare nuovi giocatori, ma le aste già aperte restano rilanciabili: tocca la card del giocatore per aprire il dettaglio e usa uno dei pulsanti rapidi. Eleggibilità alle buste: diventano eleggibili le squadre che rilanciano in questa fase — solo chi non ha mai rilanciato in questa fase resta escluso dalle buste.',
       },
       {
         icona: 'mail_lock',
         titolo: `Fase 3 — Buste (${formatIntervallo(c.inizioBuste, c.inizioAssegnazione)})`,
         descrizione:
-          'I rilanci pubblici sono chiusi: solo le squadre eleggibili (vedi fase 2) possono presentare una busta segreta, di importo almeno pari all’ultimo rilancio. È modificabile e ritirabile finché la fase resta aperta. La tua busta la vedi solo tu — nessun’altra squadra la vede mai, nemmeno a esito noto; solo l’admin la vede, e solo dopo la scadenza, per l’assegnazione. Nessuna notifica viene mai inviata quando arriva una busta: né a te, né alle altre squadre. Quante puoi presentarne dipende dai posti liberi in rosa: su un giocatore che stai già vincendo (l’ultimo rilancio è tuo) puoi sempre presentarla, perché non ti farebbe guadagnare un posto in rosa in più; per gli ALTRI giocatori, invece, il numero di buste "nuove" è limitato ai posti liberi meno quelli già impegnati dai giocatori che stai già vincendo altrove.',
+          'I rilanci pubblici sono chiusi: solo le squadre eleggibili (vedi fase 2) possono presentare una busta segreta, di importo almeno pari all’ultimo rilancio. È modificabile e ritirabile finché la fase resta aperta. La tua busta la vedi solo tu — nessun’altra squadra la vede mai, nemmeno a esito noto; solo l’admin la vede, e solo dopo la scadenza, per l’assegnazione. Nessuna notifica viene mai inviata quando arriva una busta: né a te, né alle altre squadre.',
         esempio:
-          'Esempio: 3 posti liberi, già in testa per 1 giocatore → puoi presentare busta su altri 2 giocatori diversi, più una (senza limiti) su quello che stai già vincendo. Con 1 solo posto libero e già in testa per 1 giocatore, la busta la puoi presentare solo su quello. Con 1 posto libero e nessun rilancio vinto, puoi sceglierne uno qualsiasi tra i giocatori eleggibili.',
+          'Esempio buste presentabili: 3 posti liberi, già in testa per 1 giocatore → puoi presentare busta su altri 2 giocatori diversi, più una (senza limiti) su quello che stai già vincendo. Con 1 solo posto libero e già in testa per 1 giocatore, la busta la puoi presentare solo su quello. Con 1 posto libero e nessun rilancio vinto, puoi sceglierne uno qualsiasi tra i giocatori eleggibili.',
       },
       {
         icona: 'how_to_vote',
