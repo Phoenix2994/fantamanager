@@ -149,20 +149,6 @@ const CAPITOLI: readonly Capitolo[] = [
           ),
         ],
       },
-      {
-        titolo: 'Mercato Libero (in fase di conferma)',
-        paragrafi: [
-          lista([
-            'Martedì 12:00–22:00: chiunque può aprire l’asta su uno svincolato scrivendo "Asta per -nome giocatore-".',
-            'Fino a mercoledì 12:00: ci si prenota rispondendo "Partecipo".',
-            'Dopo le 12:00 di mercoledì: i partecipanti si accordano su un orario tra le 12:00 e le 24:00 per l’asta rapida.',
-            'Se passa più di un minuto dall’ultimo rilancio (orari WhatsApp come riferimento oggettivo), il giocatore è aggiudicato a chi ha rilanciato per ultimo.',
-          ]),
-          testo(
-            'Vale il buon senso: ostruzionismo nel trovare un orario comune comporta l’esclusione dall’asta per quel giocatore. Turni infrasettimanali o soste più lunghe: tempi e modalità comunicati di volta in volta.',
-          ),
-        ],
-      },
     ],
   },
   {
@@ -174,20 +160,6 @@ const CAPITOLI: readonly Capitolo[] = [
         paragrafi: [
           testo(
             'Il gruppo gestisce le aste degli svincolati, l’ufficializzazione delle trattative, le comunicazioni ufficiali e le votazioni.',
-          ),
-        ],
-      },
-      {
-        titolo: 'Espulsioni settimanali',
-        paragrafi: [
-          testo('Comportano un’espulsione di una settimana:'),
-          lista([
-            'Rilancio senza uno spazio libero in rosa.',
-            'Avere, nello stesso momento, il rilancio più alto su più giocatori di quanti siano gli spazi liberi.',
-            'Rilancio su un giocatore non svincolato.',
-          ]),
-          testo(
-            'In tutti e tre i casi l’espulsione non scatta se chi sbaglia elimina il messaggio prima che qualcuno rilanci sulla stessa offerta. Ogni altro errore non comporta espulsione.',
           ),
         ],
       },
