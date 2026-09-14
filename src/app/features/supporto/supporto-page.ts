@@ -579,7 +579,7 @@ export class SupportoPage {
         icona: 'gavel',
         titolo: `Fase 2 — Solo rilanci (${formatIntervallo(c.inizioSoloRilanci, c.inizioBuste)})`,
         descrizione:
-          'Non si possono più chiamare nuovi giocatori, ma le aste già aperte restano rilanciabili: tocca la card del giocatore per aprire il dettaglio e usa uno dei pulsanti rapidi (o inserisci un rilancio custom). Attenzione: SOLO le squadre che rilanciano in questa fascia diventano eleggibili a presentare una busta su quel giocatore nella fase successiva — chi non rilancia qui (anche se lo aveva chiamato) resta escluso dalle buste.',
+          'Non si possono più chiamare nuovi giocatori, ma le aste già aperte restano rilanciabili: tocca la card del giocatore per aprire il dettaglio e usa uno dei pulsanti rapidi, oppure inserisci un rilancio custom — solo con l’importo custom puoi anche auto-rilanciare (alzare il tuo stesso prezzo) se sei già in testa, cosa che i pulsanti rapidi non permettono. Eleggibilità alle buste: diventano eleggibili le squadre che rilanciano in questa fascia, PIÙ la squadra che sta ancora vincendo il giocatore quando la fascia finisce (anche se nessuno l’ha più sfidata) — solo chi non ha mai rilanciato qui e non è rimasto in testa fino alla fine resta escluso dalle buste.',
       },
       {
         icona: 'mail_lock',

@@ -16,6 +16,7 @@ import {
   puoInviareBusta,
   slotNuoveBusteDisponibili,
 } from '../../core/asta-infrasettimanale-busta-limite-calculator';
+import { eEleggibilePerBusta } from '../../core/asta-infrasettimanale-eleggibilita-busta';
 import { MAX_GIOCATORI, minIncremento } from '../../core/services/asta.service';
 import {
   AstaInfrasettimanaleService,
@@ -39,7 +40,7 @@ const FASE_LABEL: Record<FaseInfrasettimanale, string> = {
   chiamata: 'Chiamata aperta — 0,10 € di partenza',
   soloRilanci: 'Solo rilanci — niente nuove chiamate',
   buste: 'Fase buste — i rilanci sono chiusi',
-  assegnazione: 'In attesa che l’admin assegni i giocatori',
+  assegnazione: 'In attesa dell’asta infrasettimanale',
 };
 
 const FASE_ICONA: Record<FaseInfrasettimanale, string> = {
@@ -243,20 +244,16 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
                 <button
                   matButton="filled"
                   class="bid-btn custom-bid-btn"
-                  [disabled]="
-                    !customValida() ||
-                    a.rilanciatoDaTeamId === miaSquadra()!.id ||
-                    inCooldown() ||
-                    squadraPiena(a.id)
-                  "
+                  [disabled]="!customValida() || inCooldown() || squadraPiena(a.id)"
                   (click)="rilanciaCustom(a)"
                 >
                   Rilancia {{ customBid() | number: '1.2-2' }} €
                 </button>
 
                 @if (a.rilanciatoDaTeamId === miaSquadra()!.id) {
-                  <p class="hint warn">
-                    La tua squadra è già l'ultima rilanciante: attendi una controparte.
+                  <p class="hint">
+                    Sei già l'ultima rilanciante: i pulsanti rapidi restano bloccati, ma puoi comunque
+                    auto-rilanciare con un importo custom.
                   </p>
                 } @else if (squadraPiena(a.id)) {
                   <p class="hint warn">
@@ -693,7 +690,7 @@ export class AstaInfrasettimanalePage {
 
   eleggibileBusta(a: AstaInfrasettimanale): boolean {
     const squadra = this.miaSquadra();
-    return !!squadra && a.squadreEleggibiliBusta.includes(squadra.id);
+    return !!squadra && eEleggibilePerBusta(squadra.id, a);
   }
 
   apriFoglio(a: AstaInfrasettimanale): void {
@@ -711,11 +708,16 @@ export class AstaInfrasettimanalePage {
     return this.customBid() + 1e-9 >= a.prezzoAttuale + minIncremento(a.prezzoAttuale);
   });
 
+  /**
+   * A differenza dei pulsanti rapidi, il rilancio custom permette anche di
+   * auto-rilanciare (alzare il proprio stesso prezzo) — richiesta esplicita
+   * dell'utente, solo per questo pulsante.
+   */
   async rilanciaCustom(a: AstaInfrasettimanale): Promise<void> {
     if (!this.customValida()) {
       return;
     }
-    await this.rilancia(a, this.customBid() - a.prezzoAttuale);
+    await this.rilancia(a, this.customBid() - a.prezzoAttuale, true);
   }
 
   chiudiFoglio(): void {
@@ -733,7 +735,7 @@ export class AstaInfrasettimanalePage {
     }
   }
 
-  async rilancia(a: AstaInfrasettimanale, incremento: number): Promise<void> {
+  async rilancia(a: AstaInfrasettimanale, incremento: number, permettiAutorilancio = false): Promise<void> {
     const squadra = this.miaSquadra();
     if (!squadra || this.inCooldown()) {
       return;
@@ -746,6 +748,7 @@ export class AstaInfrasettimanalePage {
         incremento,
         a.prezzoAttuale,
         this.mieiGiocatori(),
+        permettiAutorilancio,
       );
       this.inCooldown.set(true);
       setTimeout(() => this.inCooldown.set(false), 1000);

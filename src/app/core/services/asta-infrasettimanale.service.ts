@@ -38,6 +38,7 @@ import {
   puoInviareBusta,
   slotNuoveBusteDisponibili,
 } from '../asta-infrasettimanale-busta-limite-calculator';
+import { squadreDaAggiungereAEleggibili } from '../asta-infrasettimanale-eleggibilita-busta';
 import {
   calcolaProssimaSpesaRinnovo,
   calcolaValoreAttuale,
@@ -185,6 +186,7 @@ export class AstaInfrasettimanaleService {
     incremento: number,
     prezzoAtteso: number,
     giocatoriInRosa: number,
+    permettiAutorilancio = false,
   ): Promise<void> {
     const attiveSnap = await getDocs(query(this.collectionRef, where('chiusa', '==', false)));
     const inTestaAltrove = attiveSnap.docs.filter(
@@ -211,7 +213,7 @@ export class AstaInfrasettimanaleService {
       if (Math.abs(asta.prezzoAttuale - prezzoAtteso) > 1e-9) {
         throw new Error(`Prezzo già cambiato a ${asta.prezzoAttuale.toFixed(2)} €: riprova`);
       }
-      if (asta.rilanciatoDaTeamId === teamId) {
+      if (!permettiAutorilancio && asta.rilanciatoDaTeamId === teamId) {
         throw new Error('La tua squadra è già l’ultima rilanciante.');
       }
       const minimo = minIncremento(asta.prezzoAttuale);
@@ -224,7 +226,9 @@ export class AstaInfrasettimanaleService {
         rilanciatoDaTeamId: teamId,
         rilanciatoDaTeamName: teamName,
         timestampUltimoRilancio: serverTimestamp(),
-        ...(fase === 'soloRilanci' ? { squadreEleggibiliBusta: arrayUnion(teamId) } : {}),
+        ...(fase === 'soloRilanci'
+          ? { squadreEleggibiliBusta: arrayUnion(...squadreDaAggiungereAEleggibili(asta, teamId)) }
+          : {}),
       });
     });
   }
