@@ -93,11 +93,17 @@ async function inviaATeam(teamIds: string[], title: string, body: string): Promi
 }
 
 /**
- * Notifica le squadre che hanno messo almeno una stellina su un giocatore
- * quando quel giocatore viene chiamato o rilanciato nell'asta
- * infrasettimanale — sia la chiamata iniziale (create, il chiamante diventa
- * subito "rilanciante") sia ogni rilancio successivo (update del leader),
- * MAI su chiusura/assegnazione (stesso doc, ma non è un nuovo rilancio).
+ * Notifica le squadre quando un giocatore viene chiamato o rilanciato
+ * nell'asta infrasettimanale — sia la chiamata iniziale (create, il
+ * chiamante diventa subito "rilanciante") sia ogni rilancio successivo
+ * (update del leader), MAI su chiusura/assegnazione (stesso doc, ma non è
+ * un nuovo rilancio).
+ *
+ * Chiamata: notifica TUTTE le squadre (tranne chi ha chiamato), a
+ * prescindere dalla stellina — è un nuovo giocatore appena liberato,
+ * interessa saperlo a prescindere da chi lo aveva notato prima. Rilancio
+ * successivo: solo le squadre che hanno messo almeno una stellina su quel
+ * giocatore (altrimenti ogni rilancio spammerebbe l'intera lega).
  */
 export const onRilancioInfrasettimanale = onDocumentWritten(
   'asteInfrasettimanali/{astaId}',
@@ -107,31 +113,43 @@ export const onRilancioInfrasettimanale = onDocumentWritten(
       return;
     }
     const before = event.data?.before.data();
-    const nuovoLeader = !before || before['rilanciatoDaTeamId'] !== after['rilanciatoDaTeamId'];
+    const eChiamata = !before;
+    const nuovoLeader = eChiamata || before['rilanciatoDaTeamId'] !== after['rilanciatoDaTeamId'];
     if (!nuovoLeader) {
       return;
     }
 
-    const slug = slugify(after['giocatoreNome'] as string);
     const teamsSnap = await db.collection('teams').get();
-    const interessate: string[] = [];
-    for (const teamDoc of teamsSnap.docs) {
-      if (teamDoc.id === after['rilanciatoDaTeamId']) {
-        continue; // chi ha appena rilanciato non ha bisogno di essere avvisato
-      }
-      const nota = await db.doc(`teamNotes/${teamDoc.id}/svincolati/${slug}`).get();
-      if ((nota.data()?.['stelle'] as number | undefined ?? 0) > 0) {
-        interessate.push(teamDoc.id);
+    let interessate: string[];
+
+    if (eChiamata) {
+      interessate = teamsSnap.docs
+        .map((d) => d.id)
+        .filter((id) => id !== after['rilanciatoDaTeamId']);
+    } else {
+      const slug = slugify(after['giocatoreNome'] as string);
+      interessate = [];
+      for (const teamDoc of teamsSnap.docs) {
+        if (teamDoc.id === after['rilanciatoDaTeamId']) {
+          continue; // chi ha appena rilanciato non ha bisogno di essere avvisato
+        }
+        const nota = await db.doc(`teamNotes/${teamDoc.id}/svincolati/${slug}`).get();
+        if ((nota.data()?.['stelle'] as number | undefined ?? 0) > 0) {
+          interessate.push(teamDoc.id);
+        }
       }
     }
     logger.info(
-      `Rilancio su ${after['giocatoreNome']} (slug ${slug}) da ${after['rilanciatoDaTeamId']}: squadre interessate ${JSON.stringify(interessate)}`,
+      `${eChiamata ? 'Chiamata' : 'Rilancio'} su ${after['giocatoreNome']} da ${after['rilanciatoDaTeamId']}: squadre interessate ${JSON.stringify(interessate)}`,
     );
 
+    const prezzo = (after['prezzoAttuale'] as number).toFixed(2);
     await inviaATeam(
       interessate,
       'Asta infrasettimanale',
-      `${after['giocatoreNome']}: ${after['rilanciatoDaTeamName']} a ${(after['prezzoAttuale'] as number).toFixed(2)} €`,
+      eChiamata
+        ? `${after['giocatoreNome']} chiamato da ${after['rilanciatoDaTeamName']} a ${prezzo} €`
+        : `${after['giocatoreNome']}: ${after['rilanciatoDaTeamName']} a ${prezzo} €`,
     );
   },
 );
