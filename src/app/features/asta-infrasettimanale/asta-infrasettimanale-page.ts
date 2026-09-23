@@ -16,7 +16,10 @@ import {
   puoInviareBusta,
   slotNuoveBusteDisponibili,
 } from '../../core/asta-infrasettimanale-busta-limite-calculator';
-import { eEleggibilePerBusta } from '../../core/asta-infrasettimanale-eleggibilita-busta';
+import {
+  eEleggibilePerBusta,
+  squadreEleggibili,
+} from '../../core/asta-infrasettimanale-eleggibilita-busta';
 import { MAX_GIOCATORI, minIncremento } from '../../core/services/asta.service';
 import {
   AstaInfrasettimanaleService,
@@ -211,6 +214,13 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
                 }}
               </span>
 
+              @if (fase() === 'buste') {
+                <p class="eleggibili-pubblico">
+                  <mat-icon>how_to_vote</mat-icon>
+                  Eleggibili alle buste: {{ nomiEleggibili(a).join(', ') }}
+                </p>
+              }
+
               @if (fase() === 'chiamata' || fase() === 'soloRilanci') {
                 <div class="bid-row">
                   @for (inc of incrementi; track inc) {
@@ -262,7 +272,12 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
                   </p>
                 }
               } @else if (fase() === 'buste') {
-                @if (eleggibileBusta(a)) {
+                @if (soloIoEleggibile(a)) {
+                  <p class="hint">
+                    Sei l'unico eleggibile per questo giocatore: verrà assegnato a te dall'admin,
+                    senza bisogno di presentare una busta.
+                  </p>
+                } @else if (eleggibileBusta(a)) {
                   <div class="busta-form">
                     <mat-form-field appearance="fill" subscriptSizing="dynamic">
                       <mat-label>La tua busta (€)</mat-label>
@@ -501,6 +516,21 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
       margin-bottom: 6px;
     }
 
+    .eleggibili-pubblico {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 4px 0 0;
+      font-size: 0.8rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .eleggibili-pubblico mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
     .bid-row {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -575,6 +605,9 @@ export class AstaInfrasettimanalePage {
 
   /** La squadra del login REALE (AuthService.myTeam$), null se non loggati come una squadra */
   readonly miaSquadra = toSignal(this.authService.myTeam$, { initialValue: null as Team | null });
+
+  /** Tutte le squadre della lega — serve solo a tradurre gli id di squadreEleggibiliBusta in nomi */
+  readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
 
   /** Giocatori in rosa della propria squadra — serve al tetto dei 28 per il rilancio (vedi AstaInfrasettimanaleService.rilancia) */
   readonly mieiGiocatori = toSignal(
@@ -691,6 +724,21 @@ export class AstaInfrasettimanalePage {
   eleggibileBusta(a: AstaInfrasettimanale): boolean {
     const squadra = this.miaSquadra();
     return !!squadra && eEleggibilePerBusta(squadra.id, a);
+  }
+
+  /** Nomi delle squadre eleggibili alle buste per quest'asta, mostrati pubblicamente in fase buste */
+  nomiEleggibili(a: AstaInfrasettimanale): string[] {
+    return squadreEleggibili(a).map((id) => this.teams().find((t) => t.id === id)?.name ?? id);
+  }
+
+  /**
+   * true se sono l'unica squadra eleggibile: il giocatore sarebbe comunque
+   * mio a prescindere dall'importo della busta (l'admin assegna al prezzo
+   * di rilancio, vedi motivo "autobusta" in calcolaPropostaAssegnazione),
+   * quindi non ha senso farmi presentare una busta.
+   */
+  soloIoEleggibile(a: AstaInfrasettimanale): boolean {
+    return this.eleggibileBusta(a) && squadreEleggibili(a).length <= 1;
   }
 
   apriFoglio(a: AstaInfrasettimanale): void {
