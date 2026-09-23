@@ -1,4 +1,8 @@
-import { eEleggibilePerBusta, squadreDaAggiungereAEleggibili } from './asta-infrasettimanale-eleggibilita-busta';
+import {
+  eEleggibilePerBusta,
+  squadreDaAggiungereAEleggibili,
+  squadreEleggibili,
+} from './asta-infrasettimanale-eleggibilita-busta';
 
 describe('eEleggibilePerBusta', () => {
   it('è eleggibile chi compare già nell’elenco', () => {
@@ -32,5 +36,17 @@ describe('squadreDaAggiungereAEleggibili', () => {
   it('ai rilanci successivi (elenco già non vuoto), aggiunge solo il nuovo rilanciante', () => {
     const asta = { rilanciatoDaTeamId: 'akatsuki', squadreEleggibiliBusta: ['phoenix', 'akatsuki'] };
     expect(squadreDaAggiungereAEleggibili(asta, 'dynamo-cocito')).toEqual(['dynamo-cocito']);
+  });
+});
+
+describe('squadreEleggibili', () => {
+  it('con elenco vuoto, ritorna solo l’attuale rilanciante', () => {
+    const asta = { rilanciatoDaTeamId: 'phoenix', squadreEleggibiliBusta: [] as string[] };
+    expect(squadreEleggibili(asta)).toEqual(['phoenix']);
+  });
+
+  it('con elenco non vuoto, ritorna l’elenco così com’è', () => {
+    const asta = { rilanciatoDaTeamId: 'akatsuki', squadreEleggibiliBusta: ['phoenix', 'akatsuki'] };
+    expect(squadreEleggibili(asta)).toEqual(['phoenix', 'akatsuki']);
   });
 });

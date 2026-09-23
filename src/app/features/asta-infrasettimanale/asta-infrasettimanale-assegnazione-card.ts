@@ -12,9 +12,13 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { calcolaPropostaAssegnazione } from '../../core/asta-infrasettimanale-assegnazione-calculator';
+import { squadreEleggibili } from '../../core/asta-infrasettimanale-eleggibilita-busta';
 import { AstaInfrasettimanale, BustaInfrasettimanale, Team } from '../../core/models';
 import { roleColor, splitRoles } from '../../core/roles';
-import { AstaInfrasettimanaleService } from '../../core/services/asta-infrasettimanale.service';
+import {
+  AstaInfrasettimanaleService,
+  FaseInfrasettimanale,
+} from '../../core/services/asta-infrasettimanale.service';
 import { TeamService } from '../../core/services/team.service';
 import { SerieALogo } from '../../shared/serie-a-logo';
 import { TeamLogo } from '../../shared/team-logo';
@@ -27,12 +31,17 @@ const MOTIVO_LABEL: Record<string, string> = {
 };
 
 /**
- * Card di assegnazione per UNA asta infrasettimanale in fase "assegnazione".
- * Mostrata solo all'admin (le buste diventano visibili solo a questo punto,
- * vedi memoria di progetto "asta-infrasettimanale-piano"): propone un
- * vincitore/prezzo secondo le regole concordate, ma l'admin può sempre
- * correggere manualmente prima di confermare — mai un'assegnazione
- * automatica silenziosa.
+ * Card di assegnazione per UNA asta infrasettimanale, mostrata solo
+ * all'admin. In fase "assegnazione" mostra sempre buste, proposta e
+ * controlli di assegnazione. In fase "buste" (fase.input === 'buste')
+ * mostra solo l'elenco delle squadre eleggibili finché sono più di una —
+ * appena resta un solo eleggibile (nessuna reale contesa possibile),
+ * sblocca lo stesso pannello di assegnazione in anticipo, senza aspettare
+ * la fine della fase: le regole Firestore lasciano comunque leggere le
+ * buste all'admin in ogni momento (vedi asta-infrasettimanale-piano),
+ * quindi qui è solo una scelta di UI. L'admin può sempre correggere
+ * manualmente prima di confermare — mai un'assegnazione automatica
+ * silenziosa.
  */
 @Component({
   selector: 'app-asta-infrasettimanale-assegnazione-card',
@@ -60,60 +69,79 @@ const MOTIVO_LABEL: Record<string, string> = {
         <span class="rilancio">Ultimo rilancio: {{ asta().rilanciatoDaTeamName }} · {{ asta().prezzoAttuale | number: '1.2-2' }} €</span>
       </div>
 
-      @if (buste().length === 0) {
-        <p class="hint">Nessuna busta presentata.</p>
-      } @else {
-        <ul class="buste-list">
-          @for (b of busteOrdinate(); track b.teamId) {
-            <li>
-              <app-team-logo [name]="b.teamName" class="busta-logo" />
-              {{ b.teamName }}
-              <strong>{{ b.importo | number: '1.2-2' }} €</strong>
-            </li>
-          }
-        </ul>
-      }
-
-      <p class="proposta">
-        <mat-icon>lightbulb</mat-icon>
-        Proposta: <strong>{{ proposta().teamName }}</strong> a
-        <strong>{{ proposta().prezzo | number: '1.2-2' }} €</strong>
-        <span class="motivo">({{ motivoLabel() }})</span>
+      <p class="eleggibili">
+        <mat-icon>how_to_vote</mat-icon>
+        Eleggibili alle buste: <strong>{{ nomiEleggibili().join(', ') }}</strong>
       </p>
 
-      <div class="override-row">
-        <mat-form-field appearance="fill" subscriptSizing="dynamic">
-          <mat-label>Squadra vincitrice</mat-label>
-          <mat-select
-            [value]="teamIdSelezionato()"
-            (selectionChange)="overrideTeamId.set($event.value)"
-          >
-            @for (t of teams(); track t.id) {
-              <mat-option [value]="t.id">{{ t.name }}</mat-option>
+      @if (mostraDettaglioAssegnazione()) {
+        @if (buste().length === 0) {
+          <p class="hint">Nessuna busta presentata.</p>
+        } @else {
+          <ul class="buste-list">
+            @for (b of busteOrdinate(); track b.teamId) {
+              <li>
+                <app-team-logo [name]="b.teamName" class="busta-logo" />
+                {{ b.teamName }}
+                <strong>{{ b.importo | number: '1.2-2' }} €</strong>
+              </li>
             }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="fill" subscriptSizing="dynamic">
-          <mat-label>Prezzo (€)</mat-label>
-          <input
-            matInput
-            type="number"
-            step="0.1"
-            [value]="prezzoSelezionato()"
-            (input)="overridePrezzo.set($any($event.target).valueAsNumber)"
-          />
-        </mat-form-field>
-      </div>
+          </ul>
+        }
 
-      <div class="actions">
-        <button matButton (click)="chiudiSenzaAssegnare()" [disabled]="salvataggioInCorso()">
-          Chiudi senza assegnare
-        </button>
-        <button matButton="filled" (click)="conferma()" [disabled]="salvataggioInCorso()">
-          <mat-icon>check</mat-icon>
-          Assegna
-        </button>
-      </div>
+        <p class="proposta">
+          <mat-icon>lightbulb</mat-icon>
+          Proposta: <strong>{{ proposta().teamName }}</strong> a
+          <strong>{{ proposta().prezzo | number: '1.2-2' }} €</strong>
+          <span class="motivo">({{ motivoLabel() }})</span>
+        </p>
+
+        <div class="override-row">
+          <mat-form-field appearance="fill" subscriptSizing="dynamic">
+            <mat-label>Squadra vincitrice</mat-label>
+            <mat-select
+              [value]="teamIdSelezionato()"
+              (selectionChange)="overrideTeamId.set($event.value)"
+            >
+              @for (t of teams(); track t.id) {
+                <mat-option [value]="t.id">{{ t.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="fill" subscriptSizing="dynamic">
+            <mat-label>Prezzo (€)</mat-label>
+            <input
+              matInput
+              type="number"
+              step="0.1"
+              [value]="prezzoSelezionato()"
+              (input)="overridePrezzo.set($any($event.target).valueAsNumber)"
+            />
+          </mat-form-field>
+        </div>
+
+        @if (fase() === 'buste') {
+          <p class="hint anticipo">
+            Resta un solo eleggibile: puoi assegnare subito, senza aspettare la fine della fase
+            buste.
+          </p>
+        }
+
+        <div class="actions">
+          <button matButton (click)="chiudiSenzaAssegnare()" [disabled]="salvataggioInCorso()">
+            Chiudi senza assegnare
+          </button>
+          <button matButton="filled" (click)="conferma()" [disabled]="salvataggioInCorso()">
+            <mat-icon>check</mat-icon>
+            Assegna
+          </button>
+        </div>
+      } @else {
+        <p class="hint">
+          Il pannello di assegnazione si sblocca a fine fase buste, o prima se resta un solo
+          eleggibile.
+        </p>
+      }
     </mat-card>
   `,
   styles: `
@@ -167,6 +195,25 @@ const MOTIVO_LABEL: Record<string, string> = {
       margin: 0;
       font-size: 0.82rem;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .hint.anticipo {
+      color: var(--mat-sys-primary);
+    }
+
+    .eleggibili {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .eleggibili mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
     }
 
     .buste-list {
@@ -236,8 +283,20 @@ export class AstaInfrasettimanaleAssegnazioneCard {
   private readonly dialog = inject(MatDialog);
 
   readonly asta = input.required<AstaInfrasettimanale>();
+  readonly fase = input.required<FaseInfrasettimanale>();
 
   readonly teams = toSignal(this.teamService.teams$, { initialValue: [] as Team[] });
+
+  readonly eleggibiliIds = computed(() => squadreEleggibili(this.asta()));
+
+  readonly nomiEleggibili = computed(() =>
+    this.eleggibiliIds().map((id) => this.teams().find((t) => t.id === id)?.name ?? id),
+  );
+
+  /** In fase "buste" l'assegnazione anticipata si sblocca solo con un solo eleggibile rimasto */
+  readonly mostraDettaglioAssegnazione = computed(
+    () => this.fase() === 'assegnazione' || this.eleggibiliIds().length <= 1,
+  );
 
   readonly buste = toSignal(
     toObservable(this.asta).pipe(

@@ -117,14 +117,14 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
           </div>
         </div>
 
-        @if (isAdmin() && fase() === 'assegnazione') {
+        @if (isAdmin() && (fase() === 'assegnazione' || fase() === 'buste')) {
           <section class="admin-assegnazione">
-            <h2>Assegnazione admin</h2>
+            <h2>{{ fase() === 'buste' ? 'Eleggibilità buste' : 'Assegnazione admin' }}</h2>
             @if (asteAperte().length === 0) {
               <p class="empty-state">Nessuna asta da assegnare al momento.</p>
             } @else {
               @for (a of asteAperte(); track a.id) {
-                <app-asta-infrasettimanale-assegnazione-card [asta]="a" />
+                <app-asta-infrasettimanale-assegnazione-card [asta]="a" [fase]="fase()" />
               }
             }
           </section>

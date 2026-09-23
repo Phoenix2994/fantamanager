@@ -39,3 +39,17 @@ export function squadreDaAggiungereAEleggibili(
   }
   return [nuovoRilanciante];
 }
+
+/**
+ * Elenco completo delle squadre eleggibili a presentare una busta (stessa
+ * regola di `eEleggibilePerBusta`, ma come lista invece che come singolo
+ * check) — usato dall'admin per vedere chi può ancora partecipare durante
+ * la fase buste, e per decidere se assegnare in anticipo (vedi memoria di
+ * progetto "asta-infrasettimanale-piano").
+ */
+export function squadreEleggibili(asta: AstaPerEleggibilita): readonly string[] {
+  if (asta.squadreEleggibiliBusta.length === 0) {
+    return [asta.rilanciatoDaTeamId];
+  }
+  return asta.squadreEleggibiliBusta;
+}
