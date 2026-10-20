@@ -22,6 +22,14 @@ export const routes: Routes = [
       import('./features/asta/asta-page').then((m) => m.AstaPage),
   },
   {
+    // Asta infrasettimanale: più aste aperte in contemporanea (griglia + foglio)
+    path: 'asta-infrasettimanale',
+    loadComponent: () =>
+      import('./features/asta-infrasettimanale/asta-infrasettimanale-page').then(
+        (m) => m.AstaInfrasettimanalePage,
+      ),
+  },
+  {
     // Calciatori svincolati a schermo intero (voce del menù di navigazione)
     path: 'svincolati',
     loadComponent: () =>

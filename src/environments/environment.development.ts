@@ -33,4 +33,7 @@ export const environment = {
 
   /** Nome visualizzato della lega nell'header e nel login */
   leagueName: 'Fantamanager',
+
+  /** Vedi environment.ts per la spiegazione — stessa chiave in entrambi i file */
+  fcmVapidKey: 'BDHCuFD7sxhvlQLojTzHy-D-ldDJ8q5JTMgpkD9y5o1EuZyT-S4TwpS-PWXdSQQVW_vSvetyCS0nnL9FEO0VzSg',
 };

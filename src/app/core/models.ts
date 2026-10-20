@@ -167,6 +167,56 @@ export interface AstaStato {
   apertoDaRandom?: boolean;
 }
 
+/**
+ * Un'asta infrasettimanale: asteInfrasettimanali/{id}, un documento per
+ * giocatore in asta — a differenza di asta/statoCorrente (asta di settembre)
+ * qui più aste sono aperte in contemporanea. Vedi memoria di progetto
+ * "asta-infrasettimanale-piano" per la meccanica completa a 4 fasi.
+ */
+export interface AstaInfrasettimanale {
+  id: string;
+  giocatoreNome: string;
+  ruolo: string;
+  squadra: string;
+  quotazione: number;
+  prezzoAttuale: number;
+  rilanciatoDaTeamId: string;
+  rilanciatoDaTeamName: string;
+  timestampUltimoRilancio?: Timestamp | null;
+  /** chi ha chiamato il giocatore, a 0,10 € */
+  chiamataDaTeamId: string;
+  chiamataDaTeamName: string;
+  timestampChiamata?: Timestamp | null;
+  /**
+   * teamId delle squadre che hanno rilanciato mentre la fase corrente era
+   * "solo rilanci" (dopo inizioSoloRilanci, prima di inizioBuste) — sono le
+   * uniche che potranno inserire una busta su questo giocatore. Aggiornato
+   * con arrayUnion ad ogni rilancio fatto in quella fase, mai altrimenti.
+   */
+  squadreEleggibiliBusta: string[];
+  /** true quando l'admin ha finalizzato quest'asta (assegnata o chiusa senza assegnare) */
+  chiusa: boolean;
+  esito?: 'assegnato' | 'chiuso';
+  /** Solo se esito === 'assegnato' */
+  vincitoreTeamId?: string;
+  vincitoreTeamName?: string;
+  prezzoFinale?: number;
+}
+
+/**
+ * Offerta finale privata: asteInfrasettimanali/{astaId}/buste/{teamId} — id
+ * documento = teamId apposta, così una squadra ha al più una busta per asta
+ * e le regole di sicurezza possono verificare l'autore senza ambiguità.
+ * Modificabile e ritirabile dalla squadra fino alla scadenza della fase
+ * buste; MAI visibile alle altre squadre, nemmeno a esito noto.
+ */
+export interface BustaInfrasettimanale {
+  teamId: string;
+  teamName: string;
+  importo: number;
+  timestamp?: Timestamp | null;
+}
+
 /** Squadra: teams/{teamId} */
 export interface Team {
   id: string;
@@ -458,6 +508,37 @@ export interface League {
   id: string;
   name: string;
   season: string;
+  /** Configurazione dell'asta infrasettimanale — assente finché l'admin non la salva la prima volta */
+  astaInfrasettimanale?: AstaInfrasettimanaleConfig;
+}
+
+/**
+ * Un punto nel tempo della settimana: giorno (0=domenica…6=sabato, come
+ * Date.getDay()) + ora "HH:mm" a 24 ore, fuso Europe/Rome.
+ */
+export interface MomentoSettimanale {
+  giorno: number;
+  ora: string;
+}
+
+/**
+ * Configurazione dell'asta infrasettimanale, salvata su league/{leagueId} —
+ * modificabile dall'admin senza rilascio della webapp. Ciclo ricorrente ogni
+ * settimana. Le 4 fasi sono confinanti: la chiamata finisce dove inizia
+ * "solo rilanci", che finisce dove iniziano le buste, che finiscono dove
+ * inizia l'assegnazione admin (fino alla prossima "inizioChiamata").
+ */
+export interface AstaInfrasettimanaleConfig {
+  /** false = il prossimo ciclo (dalla prossima inizioChiamata) non parte */
+  abilitata: boolean;
+  /** da qui si può chiamare uno svincolato a 0,10 € */
+  inizioChiamata: MomentoSettimanale;
+  /** da qui non si chiama più, solo rilanci sulle aste già aperte */
+  inizioSoloRilanci: MomentoSettimanale;
+  /** da qui i rilanci si chiudono, si aprono le buste */
+  inizioBuste: MomentoSettimanale;
+  /** da qui le buste si chiudono, l'admin vede tutto e assegna */
+  inizioAssegnazione: MomentoSettimanale;
 }
 
 export type AuditEntityType =
@@ -465,6 +546,7 @@ export type AuditEntityType =
   | 'playerLoaned'
   | 'seasonFinance'
   | 'scambio'
+  | 'league'
   | 'initial_import';
 export type AuditOperation = 'create' | 'update' | 'delete';
 
@@ -495,6 +577,7 @@ export type OperazioneAnnullabile =
   | 'eliminazione'
   | 'rimborso'
   | 'acquistoAsta'
+  | 'acquistoInfrasettimanale'
   | 'acquistoManuale'
   | 'scambioConferma'
   | 'rientroPrestito'

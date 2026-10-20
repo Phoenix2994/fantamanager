@@ -1,7 +1,10 @@
-import { Component, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { environment } from '../../../environments/environment';
+import { AstaInfrasettimanaleConfig, MomentoSettimanale } from '../../core/models';
+import { LeagueService } from '../../core/services/league.service';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
 
@@ -30,13 +33,50 @@ const SCAGLIONI_FAIRPLAY: readonly Scaglione[] = [
   { soglia: 570.2, aliquota: 2.85 },
 ];
 
+/** Giorni nell'ordine di Date.getDay() (0 = domenica), per scrivere gli orari dell'asta infrasettimanale */
+const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+
+function formatMomento(m: MomentoSettimanale): string {
+  return `${GIORNI_LABEL[m.giorno]} ${m.ora}`;
+}
+
+function formatIntervallo(inizio: MomentoSettimanale, fine: MomentoSettimanale): string {
+  return `da ${formatMomento(inizio)} a ${formatMomento(fine)}`;
+}
+
+/**
+ * Le 3 voci dell'asta infrasettimanale che NON dipendono dall'orario
+ * (restano identiche a prescindere dalla configurazione) — le 4 fasi vere e
+ * proprie sono generate dal vivo, vedi SupportoPage.sezioneAstaInfrasettimanale.
+ */
+const ASTA_INFRA_FUNZIONALITA_STATICHE: readonly Funzionalita[] = [
+  {
+    icona: 'lock',
+    titolo: 'Serve il login della TUA squadra',
+    descrizione:
+      'A differenza dell’asta di settembre, qui non basta scegliere una squadra da un elenco: per chiamare, rilanciare o presentare una busta devi aver fatto login proprio con l’account della tua squadra (vedi "Accesso come squadra" in cima a questa pagina) — è una verifica vera, non solo un’impostazione della webapp, quindi non è possibile agire per conto di un’altra squadra nemmeno cambiando la selezione.',
+  },
+  {
+    icona: 'notifications',
+    titolo: 'Notifiche push (opzionali)',
+    descrizione:
+      'Dopo aver scelto la tua squadra, se il browser le supporta compare il bottone "Attiva notifiche". Una volta attive, ricevi un avviso quando qualcuno rilancia su un giocatore a cui hai messo almeno una stellina negli Svincolati. Le buste NON generano mai nessun avviso, né push né dentro l’app: restano un fatto privato tra te e l’admin, nemmeno il loro arrivo viene segnalato alle altre squadre. Se il sito è aperto in primo piano l’avviso di rilancio compare dentro la pagina; se è chiuso o in background arriva come una vera notifica di sistema (serve solo che il browser sia ancora acceso, anche in background).',
+  },
+  {
+    icona: 'phone_iphone',
+    titolo: 'Notifiche su iPhone: aggiungi l’app alla schermata Home',
+    descrizione:
+      'Su iPhone le notifiche funzionano solo se il sito è stato aggiunto alla schermata Home (richiede iOS 16.4 o successivo): tocca "Condividi" in Safari e poi "Aggiungi a Home", quindi apri sempre l’app da quell’icona (non da una scheda Safari normale) quando premi "Attiva notifiche" — da una scheda Safari qualsiasi il permesso non viene chiesto correttamente.',
+  },
+];
+
 /** Sezione di supporto: una voce di menu con le sue funzionalità da loggati */
 interface SezioneSupporto {
   icona: string;
   titolo: string;
   /** testo introduttivo breve, prima dell'elenco funzionalità */
   intro?: string;
-  funzionalita: Funzionalita[];
+  funzionalita: readonly Funzionalita[];
 }
 
 const SEZIONI: readonly SezioneSupporto[] = [
@@ -140,6 +180,15 @@ const SEZIONI: readonly SezioneSupporto[] = [
     ],
   },
   {
+    icona: 'event_repeat',
+    titolo: 'Asta infrasettimanale',
+    // intro e le 4 fasi sono generate dal vivo da sezioneAstaInfrasettimanale()
+    // (leggono la configurazione reale da Firestore): questa voce serve solo
+    // come segnaposto/ordine nell'elenco, vedi SupportoPage.sezioni.
+    intro: '',
+    funzionalita: [],
+  },
+  {
     icona: 'swap_horiz',
     titolo: 'Scambi',
     funzionalita: [
@@ -241,7 +290,7 @@ const SEZIONI: readonly SezioneSupporto[] = [
           </p>
         </section>
 
-        @for (sezione of sezioni; track sezione.titolo) {
+        @for (sezione of sezioni(); track sezione.titolo) {
           <section class="group">
             <button
               type="button"
@@ -491,8 +540,77 @@ const SEZIONI: readonly SezioneSupporto[] = [
   `,
 })
 export class SupportoPage {
+  private readonly leagueService = inject(LeagueService);
+
   readonly leagueName = environment.leagueName;
-  readonly sezioni = SEZIONI;
+
+  /** Configurazione reale dell'asta infrasettimanale, per scrivere gli orari veri invece di un "di default" statico */
+  private readonly config = toSignal(this.leagueService.astaInfrasettimanaleConfig$, {
+    initialValue: undefined as AstaInfrasettimanaleConfig | undefined,
+  });
+
+  /**
+   * La voce "Asta infrasettimanale" con intro e 4 fasi generate dal vivo
+   * dalla configurazione reale — si aggiorna da sola se l'admin la cambia,
+   * senza bisogno di toccare il codice (vedi domanda dell'utente: "se lo
+   * cambiassi si allineerebbe la pagina supporto?" — ora sì).
+   */
+  private readonly sezioneAstaInfrasettimanale = computed<SezioneSupporto>(() => {
+    const base = SEZIONI.find((s) => s.titolo === 'Asta infrasettimanale')!;
+    const c = this.config();
+    if (!c) {
+      // Prima che Firestore risponda: intro generica, senza orari specifici
+      // (evita di mostrare per un istante degli orari sbagliati/vuoti).
+      return {
+        ...base,
+        intro:
+          'È un ciclo settimanale ricorrente per comprare svincolati a metà settimana (parallelo all’asta di settembre): più giocatori possono essere in asta insieme, tutti visibili in una griglia — tocca una card per aprirne il dettaglio e rilanciare. Il ciclo passa per 4 fasi in sequenza.',
+        funzionalita: ASTA_INFRA_FUNZIONALITA_STATICHE,
+      };
+    }
+    const fasi: Funzionalita[] = [
+      {
+        icona: 'campaign',
+        titolo: `Fase 1 — Chiamata (${formatIntervallo(c.inizioChiamata, c.inizioSoloRilanci)})`,
+        descrizione:
+          'Qualunque presidente loggato con la propria squadra può "chiamare" uno svincolato a 0,10 € di partenza, dal pannello che si apre toccando la sua riga in Svincolati ("Chiama (infrasettimanale)"). Il giocatore compare subito a tutti nella griglia di questa pagina, con te già segnato come rilanciante di partenza. Non puoi chiamare se hai già raggiunto i 28 giocatori, contando anche quelli per cui sei già in testa in altre aste infrasettimanali aperte in questo momento.',
+      },
+      {
+        icona: 'gavel',
+        titolo: `Fase 2 — Solo rilanci (${formatIntervallo(c.inizioSoloRilanci, c.inizioBuste)})`,
+        descrizione:
+          'Non si possono più chiamare nuovi giocatori, ma le aste già aperte restano rilanciabili: tocca la card del giocatore per aprire il dettaglio e usa uno dei pulsanti rapidi. Eleggibilità alle buste: diventano eleggibili le squadre che rilanciano in questa fase — solo chi non ha mai rilanciato in questa fase resta escluso dalle buste.',
+      },
+      {
+        icona: 'mail_lock',
+        titolo: `Fase 3 — Buste (${formatIntervallo(c.inizioBuste, c.inizioAssegnazione)})`,
+        descrizione:
+          'I rilanci pubblici sono chiusi: solo le squadre eleggibili (vedi fase 2) possono presentare una busta segreta, di importo almeno pari all’ultimo rilancio. È modificabile e ritirabile finché la fase resta aperta. La tua busta la vedi solo tu — nessun’altra squadra la vede mai, nemmeno a esito noto; solo l’admin la vede, e solo dopo la scadenza, per l’assegnazione. Nessuna notifica viene mai inviata quando arriva una busta: né a te, né alle altre squadre.',
+        esempio:
+          'Esempio buste presentabili: 3 posti liberi, già in testa per 1 giocatore → puoi presentare busta su altri 2 giocatori diversi, più una (senza limiti) su quello che stai già vincendo. Con 1 solo posto libero e già in testa per 1 giocatore, la busta la puoi presentare solo su quello. Con 1 posto libero e nessun rilancio vinto, puoi sceglierne uno qualsiasi tra i giocatori eleggibili.',
+      },
+      {
+        icona: 'how_to_vote',
+        titolo: `Fase 4 — Assegnazione admin (da ${formatMomento(c.inizioAssegnazione)})`,
+        descrizione:
+          'L’admin vede tutte le buste presentate con una proposta automatica di assegnazione (la busta più alta, oppure l’ultimo rilancio se non è arrivata nessuna busta), ma può sempre correggere squadra e prezzo a mano prima di confermare: non c’è mai un’assegnazione automatica silenziosa. Una volta assegnato, il giocatore entra subito nella rosa della squadra vincitrice; come ogni acquisto, resta annullabile dall’admin da Storico.',
+      },
+    ];
+    return {
+      ...base,
+      intro:
+        (c.abilitata
+          ? ''
+          : '⚠️ Il prossimo ciclo è attualmente DISABILITATO dall’admin — gli orari sotto sono quelli configurati ma non in vigore finché non viene riattivato. ') +
+        'È un ciclo settimanale ricorrente per comprare svincolati a metà settimana (parallelo all’asta di settembre): più giocatori possono essere in asta insieme, tutti visibili in una griglia — tocca una card per aprirne il dettaglio e rilanciare. Il ciclo passa per 4 fasi in sequenza; gli orari qui sotto sono quelli ATTUALMENTE impostati dall’admin, letti in tempo reale — se li cambia dal pannello nella sezione Svincolati, questa pagina si aggiorna da sola.',
+      funzionalita: [...fasi, ...ASTA_INFRA_FUNZIONALITA_STATICHE],
+    };
+  });
+
+  /** Le sezioni da mostrare: identiche a SEZIONI, tranne "Asta infrasettimanale" che è generata dal vivo */
+  readonly sezioni = computed(() =>
+    SEZIONI.map((s) => (s.titolo === 'Asta infrasettimanale' ? this.sezioneAstaInfrasettimanale() : s)),
+  );
 
   /** Sezioni aperte (stato solo UI, tutte chiuse all'apertura della pagina) */
   private readonly aperte = signal<ReadonlySet<string>>(new Set());

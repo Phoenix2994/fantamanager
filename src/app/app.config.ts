@@ -10,6 +10,7 @@ import {
   persistentMultipleTabManager,
   provideFirestore,
 } from '@angular/fire/firestore';
+import { getMessaging, provideMessaging } from '@angular/fire/messaging';
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
@@ -33,5 +34,10 @@ export const appConfig: ApplicationConfig = {
         }),
       }),
     ),
+
+    // Notifiche push (solo asta infrasettimanale, vedi PushNotificationService):
+    // l'istanza va sempre creata qui, ma le chiamate effettive (getToken) sono
+    // protette da isSupported() nel service, per i browser senza supporto FCM.
+    provideMessaging(() => getMessaging()),
   ],
 };
