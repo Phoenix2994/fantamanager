@@ -95,3 +95,40 @@ These scripts use `firebase-admin` and a service account (`scripts/serviceAccoun
 ### Testing
 
 Only the pure calculators under `src/app/core/*-calculator.ts` have spec files; there is no component or service test coverage (no Firestore/Auth test doubles in place). For changes to components, services, or anything touching Firestore, the working pattern is: `ng build` to catch type errors, then verify live against the dev server (`npm start`) — the app connects to the real Firebase project, so any manual testing that mutates data should be cleaned up afterward (the app's own `/storico` undo feature, when the action is undoable, is the safest way to do that).
+
+## Delega a worker (orchestratore/worker)
+
+Script globale: `~/.claude/delegate/delegate.sh` (config in `.delegate.conf` nella radice del repo). Verifica di default = `ng test` single-run in ChromeHeadless (91 spec, solo i calcolatori puri). Per componenti/servizi non c'e' copertura: aggiungi `&& npx ng build` come comando di verifica. Non testare mai contro il Firebase reale dal worker.
+
+### Ruoli
+Tu sei l'**orchestratore** (modello Anthropic). Pianifichi, scomponi, deleghi i task semplici e rivedi il lavoro.
+Il **worker** e' `claude -p` su Omniroute (modello gratuito, piu' debole): esegue solo task piccoli e ben definiti.
+
+### Cosa delegare
+- spec per i calcolatori esistenti in `src/app/core/*-calculator.ts` (senza cambiarne il comportamento), componenti Angular/Material simili a quelli esistenti, stringhe, refactor meccanici, documentazione
+
+### Cosa NON delegare (resta a te)
+- architettura, scomposizione dei task, debug difficili, bug multi-modulo, review finale e merge
+- `firestore.rules`, `firestore.indexes.json`, `functions/`, `scripts/*.py` (usano la service account) e `.github/workflows/` (il push su `main` e' il deploy)
+- `environment*.ts` (`adminEmail`/`legaAdminUids` duplicati nelle rules), auth e tier admin/team-owner, `asta.service.ts`, `undo.service.ts`, dipendenze in `package.json`
+- logica di dominio nei `*-calculator.ts` (finanze, tasse, scambi, estrazioni, undo): modifiche e relativi test sempre a te
+
+### Come delegare
+1. Prima scrivi: obiettivo, file da toccare, vincoli e un **comando di verifica**.
+2. Lancia dal repo: `bash ~/.claude/delegate/delegate.sh <nome-task> "<prompt autosufficiente>" "<comando-verifica>"`
+   - task brevi: Bash con timeout 600000; task lunghi: `run_in_background`.
+   - Il worker non vede questa conversazione: il prompt deve bastare da solo.
+3. Aspetta la riga finale `DONE task=... check=OK|FAIL ...`. Log in `<STATE_ROOT>/logs/<nome>.log` (default `../.delegate-<repo>/`).
+4. Rivedi **solo il diff** stampato. Se `check=OK` e il diff e' buono: `git merge --no-ff task/<nome>`, poi
+   `git worktree remove <STATE_ROOT>/wt/<nome> --force && git branch -D task/<nome>`.
+   Se il worker ha toccato file fuori ambito: `git checkout task/<nome> -- <file>` solo per quelli buoni.
+   Su Windows, se "Filename too long": `cmd /c rmdir /s /q '\?\<percorso worktree>'`, poi `git worktree prune`.
+5. Diff scadente: un solo giro di feedback (stesso nome task); poi rifai tu.
+
+### Test
+- Nuove funzioni/bug: i test (o il comando di verifica) li scrivi tu, il worker li fa passare e non modifica i test esistenti.
+- Aree critiche: i test li scrivi sempre tu. Mai worker che scrive codice e test di validazione.
+
+### Regole
+- Il worker lavora solo nel suo worktree. Committa prima: le modifiche non committate non sono visibili.
+- Niente segreti nei prompt al worker. Massimo 2 worker in parallelo.
