@@ -47,7 +47,8 @@ import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { TeamLogo } from '../../shared/team-logo';
 import { FinanceService } from '../../core/services/finance.service';
 import { TeamService } from '../../core/services/team.service';
-import { environment } from '../../../environments/environment';
+import { environment } from '../../../environments/environment';
+import { DecimalInput } from '../../shared/decimal-input';
 
 const STORAGE_KEY = 'asta.miaSquadra';
 
@@ -69,7 +70,7 @@ type TeamStat = TeamStatAsta;
  */
 @Component({
   selector: 'app-asta-page',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     MatButtonModule,
     MatCardModule,
@@ -174,11 +175,11 @@ type TeamStat = TeamStatAsta;
                         <mat-label>Prezzo di assegnazione (€)</mat-label>
                         <input
                           matInput
-                          type="number"
+                          decimale
                           step="0.1"
                           min="0.1"
                           [value]="assegnaPrezzo()"
-                          (input)="onPrezzoInput($any($event.target).valueAsNumber || 0)"
+                          (decimaleChange)="onPrezzoInput($event || 0)"
                         />
                       </mat-form-field>
 
@@ -331,11 +332,11 @@ type TeamStat = TeamStatAsta;
                         <mat-label>Rilancio custom (€)</mat-label>
                         <input
                           matInput
-                          type="number"
+                          decimale
                           step="0.1"
                           min="0.1"
                           [value]="customBid()"
-                          (input)="customBid.set($any($event.target).valueAsNumber || 0)"
+                          (decimaleChange)="customBid.set($event || 0)"
                         />
                       </mat-form-field>
                       <button
@@ -449,11 +450,11 @@ type TeamStat = TeamStatAsta;
                   <mat-label>Prezzo di assegnazione (€)</mat-label>
                   <input
                     matInput
-                    type="number"
+                    decimale
                     step="0.1"
                     min="0.1"
                     [value]="assegnaPrezzo()"
-                    (input)="onPrezzoInput($any($event.target).valueAsNumber || 0)"
+                    (decimaleChange)="onPrezzoInput($event || 0)"
                   />
                 </mat-form-field>
 
@@ -554,11 +555,11 @@ type TeamStat = TeamStatAsta;
                   <mat-label>Rilancio custom (€)</mat-label>
                   <input
                     matInput
-                    type="number"
+                    decimale
                     step="0.1"
                     min="0.1"
                     [value]="customBid()"
-                    (input)="customBid.set($any($event.target).valueAsNumber || 0)"
+                    (decimaleChange)="customBid.set($event || 0)"
                   />
                 </mat-form-field>
                 <button

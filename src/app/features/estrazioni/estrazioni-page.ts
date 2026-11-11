@@ -25,7 +25,8 @@ import { TeamService } from '../../core/services/team.service';
 import { Team } from '../../core/models';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
-import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
+import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
+import { DecimalInput } from '../../shared/decimal-input';
 
 /** Pausa promisificata, per scandire la rivelazione delle estrazioni */
 function attesa(ms: number): Promise<void> {
@@ -53,7 +54,7 @@ const DEFAULT_POSIZIONE_PER_NOME: Record<string, number> = {
 
 @Component({
   selector: 'app-estrazioni-page',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     MatButtonModule,
     MatFormFieldModule,
@@ -169,11 +170,11 @@ const DEFAULT_POSIZIONE_PER_NOME: Record<string, number> = {
                   <mat-label>Montepremi stagione precedente (€)</mat-label>
                   <input
                     matInput
-                    type="number"
+                    decimale
                     min="0"
                     step="0.01"
                     [value]="montepremiPrecedente()"
-                    (input)="montepremiPrecedente.set($any($event.target).valueAsNumber || 0)"
+                    (decimaleChange)="montepremiPrecedente.set($event || 0)"
                   />
                 </mat-form-field>
 

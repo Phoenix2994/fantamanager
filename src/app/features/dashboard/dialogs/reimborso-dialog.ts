@@ -13,7 +13,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { round2 } from '../../../core/finance-calculator';
-import { Player } from '../../../core/models';
+import { Player } from '../../../core/models';
+import { DecimalInput } from '../../../shared/decimal-input';
 
 export type MeseIndennizzo = 'settembre' | 'gennaio';
 
@@ -39,7 +40,7 @@ export interface ReimborsoDialogResult {
  */
 @Component({
   selector: 'app-reimborso-dialog',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     ReactiveFormsModule,
     MatButtonModule,
@@ -67,13 +68,13 @@ export interface ReimborsoDialogResult {
         <div class="row">
           <mat-form-field appearance="fill">
             <mat-label>% rimborso</mat-label>
-            <input matInput type="number" min="0" step="0.01" formControlName="percRimborso" />
+            <input matInput decimale min="0" step="0.01" formControlName="percRimborso" />
             <mat-hint>es. 0.5 = 50%</mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="fill">
             <mat-label>% indennizzo</mat-label>
-            <input matInput type="number" min="0" step="0.01" formControlName="percIndennizzo" />
+            <input matInput decimale min="0" step="0.01" formControlName="percIndennizzo" />
             <mat-hint>es. 0.2 = 20%</mat-hint>
           </mat-form-field>
         </div>

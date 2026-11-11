@@ -22,7 +22,8 @@ import {
 import { TeamService } from '../../core/services/team.service';
 import { SerieALogo } from '../../shared/serie-a-logo';
 import { TeamLogo } from '../../shared/team-logo';
-import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
+import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
+import { DecimalInput } from '../../shared/decimal-input';
 
 const MOTIVO_LABEL: Record<string, string> = {
   nessunaBusta: 'Nessuna busta: vince l’ultimo rilancio',
@@ -45,7 +46,7 @@ const MOTIVO_LABEL: Record<string, string> = {
  */
 @Component({
   selector: 'app-asta-infrasettimanale-assegnazione-card',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     MatButtonModule,
     MatCardModule,
@@ -112,10 +113,10 @@ const MOTIVO_LABEL: Record<string, string> = {
             <mat-label>Prezzo (€)</mat-label>
             <input
               matInput
-              type="number"
+              decimale
               step="0.1"
               [value]="prezzoSelezionato()"
-              (input)="overridePrezzo.set($any($event.target).valueAsNumber)"
+              (decimaleChange)="overridePrezzo.set($event)"
             />
           </mat-form-field>
         </div>

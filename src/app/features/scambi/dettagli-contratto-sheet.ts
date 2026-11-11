@@ -6,7 +6,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { Player } from '../../core/models';
-import type { ScambiAvanzatoPage } from './scambi-avanzato-page';
+import type { ScambiAvanzatoPage } from './scambi-avanzato-page';
+import { DecimalInput } from '../../shared/decimal-input';
 
 export interface DettagliContrattoSheetData {
   player: Player;
@@ -23,7 +24,7 @@ export interface DettagliContrattoSheetData {
  */
 @Component({
   selector: 'app-dettagli-contratto-sheet',
-  imports: [MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule],
+  imports: [DecimalInput, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule],
   templateUrl: './dettagli-contratto-sheet.html',
   styleUrls: ['./scambi-page.scss', './scambi-avanzato-page.scss'],
 })

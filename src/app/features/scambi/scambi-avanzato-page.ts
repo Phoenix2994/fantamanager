@@ -44,6 +44,8 @@ import { roleColor, splitRoles } from '../../core/roles';
 import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { DettagliContrattoSheet } from './dettagli-contratto-sheet';
+import { DecimalInput } from '../../shared/decimal-input';
+import { parseDecimale } from '../../core/decimal-utils';
 
 /** Lato del form: A o B */
 type Lato = 'A' | 'B';
@@ -63,7 +65,7 @@ let contatoreBonusId = 0;
  */
 @Component({
   selector: 'app-scambi-avanzato-page',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     MatButtonModule,
     MatCheckboxModule,
@@ -491,7 +493,7 @@ export class ScambiAvanzatoPage {
     if (valore === '') {
       return;
     }
-    const numero = Number(valore);
+    const numero = parseDecimale(valore);
     if (Number.isNaN(numero)) {
       return;
     }
@@ -511,7 +513,7 @@ export class ScambiAvanzatoPage {
     if (valore === '') {
       return;
     }
-    const eventiVerificati = Math.max(0, Math.round(Number(valore) || 0));
+    const eventiVerificati = Math.max(0, Math.round(parseDecimale(valore) || 0));
     const bonusBase = this.terminiSimulati(playerId).bonus ?? [];
     const bonusAggiornato = bonusBase.map((b) => (b.id === bonusId ? { ...b, eventiVerificati } : b));
     this.simOverrides.set({

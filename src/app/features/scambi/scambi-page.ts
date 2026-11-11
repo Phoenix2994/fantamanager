@@ -34,6 +34,8 @@ import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { TeamLogo } from '../../shared/team-logo';
 import { ConfirmDialog } from '../dashboard/dialogs/confirm-dialog';
+import { DecimalInput } from '../../shared/decimal-input';
+import { parseDecimale } from '../../core/decimal-utils';
 
 /** Giocatore mostrato nel selettore di una trattativa */
 interface PlayerOption {
@@ -70,7 +72,7 @@ interface RiepilogoGiocatore {
  */
 @Component({
   selector: 'app-scambi-page',
-  imports: [
+  imports: [DecimalInput, 
     DatePipe,
     DecimalPipe,
     MatButtonModule,
@@ -740,7 +742,7 @@ export class ScambiPage {
     if (valore === '') {
       return;
     }
-    const eventiVerificati = Math.max(0, Math.round(Number(valore) || 0));
+    const eventiVerificati = Math.max(0, Math.round(parseDecimale(valore) || 0));
     const bonusBase = this.terminiConDraft(scambio, playerId)?.bonus ?? [];
     const bonusAggiornato = bonusBase.map((b) => (b.id === bonusId ? { ...b, eventiVerificati } : b));
     this.draftTermini.set({
@@ -779,7 +781,7 @@ export class ScambiPage {
    */
   impostaDraftQuotazioneFinale(playerId: string, valore: string): void {
     const attuale = { ...this.draftTermini()[playerId] };
-    const numero = valore === '' ? NaN : Number(valore);
+    const numero = parseDecimale(valore);
     if (Number.isNaN(numero)) {
       delete attuale.quotazioneFinale;
     } else {

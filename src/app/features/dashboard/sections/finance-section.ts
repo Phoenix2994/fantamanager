@@ -24,7 +24,8 @@ import {
 import { AuthService } from '../../../core/services/auth.service';
 import { FinanceService } from '../../../core/services/finance.service';
 import { TeamSelectionService } from '../../../core/services/team-selection.service';
-import { TeamService } from '../../../core/services/team.service';
+import { TeamService } from '../../../core/services/team.service';
+import { DecimalInput } from '../../../shared/decimal-input';
 
 interface RowDef {
   key: keyof SeasonFinanceInputs;
@@ -61,7 +62,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
 
 @Component({
   selector: 'app-finance-section',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     MatButtonModule,
     MatFormFieldModule,
@@ -112,7 +113,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
               <span>{{ row.label }}</span>
               @if (editing() && financeForm) {
                 <mat-form-field appearance="fill" subscriptSizing="dynamic" class="edit-field">
-                  <input matInput type="number" step="0.01" [formControlName]="row.key" />
+                  <input matInput decimale step="0.01" [formControlName]="row.key" />
                 </mat-form-field>
               } @else {
                 <strong [class.negative]="isNegative(row.key)">
@@ -131,7 +132,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
               <span>{{ row.label }}</span>
               @if (editing() && financeForm) {
                 <mat-form-field appearance="fill" subscriptSizing="dynamic" class="edit-field">
-                  <input matInput type="number" step="0.01" [formControlName]="row.key" />
+                  <input matInput decimale step="0.01" [formControlName]="row.key" />
                 </mat-form-field>
               } @else {
                 <strong [class.negative]="isNegative(row.key)">
@@ -149,7 +150,7 @@ type FinanceForm = FormGroup<Record<keyof SeasonFinanceInputs, FormControl<numbe
             <span>Soldi versati alla Lega</span>
             @if (editing() && financeForm) {
               <mat-form-field appearance="fill" subscriptSizing="dynamic" class="edit-field">
-                <input matInput type="number" step="0.01" formControlName="soldiVersati" />
+                <input matInput decimale step="0.01" formControlName="soldiVersati" />
               </mat-form-field>
             } @else {
               <strong>{{ valueOf('soldiVersati') | number: '1.2-2' }} €</strong>

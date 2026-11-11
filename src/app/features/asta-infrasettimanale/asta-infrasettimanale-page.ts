@@ -34,7 +34,8 @@ import { NavMenu } from '../../core/nav/nav-menu';
 import { HeaderAuthStatus } from '../../shared/header-auth-status';
 import { TeamLogo } from '../../shared/team-logo';
 import { SerieALogo } from '../../shared/serie-a-logo';
-import { AstaInfrasettimanaleAssegnazioneCard } from './asta-infrasettimanale-assegnazione-card';
+import { AstaInfrasettimanaleAssegnazioneCard } from './asta-infrasettimanale-assegnazione-card';
+import { DecimalInput } from '../../shared/decimal-input';
 
 const INCREMENTI = [0.1, 0.2, 0.5, 1] as const;
 
@@ -84,7 +85,7 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
  */
 @Component({
   selector: 'app-asta-infrasettimanale-page',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     MatButtonModule,
     MatCardModule,
@@ -244,11 +245,11 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
                   <mat-label>Rilancio custom (€)</mat-label>
                   <input
                     matInput
-                    type="number"
+                    decimale
                     step="0.1"
                     min="0.1"
                     [value]="customBid()"
-                    (input)="customBid.set($any($event.target).valueAsNumber || 0)"
+                    (decimaleChange)="customBid.set($event || 0)"
                   />
                 </mat-form-field>
                 <button
@@ -283,10 +284,10 @@ const GIORNI_LABEL = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì
                       <mat-label>La tua busta (€)</mat-label>
                       <input
                         matInput
-                        type="number"
+                        decimale
                         step="0.1"
                         [value]="importoBusta()"
-                        (input)="importoBusta.set($any($event.target).valueAsNumber || 0)"
+                        (decimaleChange)="importoBusta.set($event || 0)"
                       />
                     </mat-form-field>
                     <button

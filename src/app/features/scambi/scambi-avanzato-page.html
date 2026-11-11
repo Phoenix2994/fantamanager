@@ -67,12 +67,12 @@
                 <mat-label>Conguaglio versato da {{ lato }} (€)</mat-label>
                 <input
                   matInput
-                  type="number"
+                  decimale
                   min="0"
                   step="0.5"
                   [value]="lato === 'A' ? conguaglioA() : conguaglioB()"
-                  (input)="
-                    (lato === 'A' ? conguaglioA : conguaglioB).set($any($event.target).valueAsNumber || 0)
+                  (decimaleChange)="
+                    (lato === 'A' ? conguaglioA : conguaglioB).set($event || 0)
                   "
                 />
               </mat-form-field>

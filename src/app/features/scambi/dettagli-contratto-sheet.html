@@ -39,7 +39,7 @@
       <mat-label>Sim: quotazione finale</mat-label>
       <input
         matInput
-        type="number"
+        decimale
         min="0"
         step="0.5"
         placeholder="attuale"
@@ -57,11 +57,11 @@
       <mat-label>Cifra di riscatto (€)</mat-label>
       <input
         matInput
-        type="number"
+        decimale
         min="0"
         step="0.5"
         [value]="page.terminiDi(playerId).cifraRiscatto ?? 0"
-        (input)="page.setCifraRiscatto(playerId, $any($event.target).valueAsNumber)"
+        (decimaleChange)="page.setCifraRiscatto(playerId, $event)"
       />
     </mat-form-field>
   }
@@ -126,11 +126,11 @@
               <mat-label>€/evento</mat-label>
               <input
                 matInput
-                type="number"
+                decimale
                 min="0"
                 step="0.1"
                 [value]="b.rewardPerEvento"
-                (input)="page.aggiornaBonus(playerId, b.id, { rewardPerEvento: $any($event.target).valueAsNumber || 0 })"
+                (decimaleChange)="page.aggiornaBonus(playerId, b.id, { rewardPerEvento: $event || 0 })"
               />
             </mat-form-field>
           } @else {
@@ -138,22 +138,22 @@
               <mat-label>Soglia</mat-label>
               <input
                 matInput
-                type="number"
+                decimale
                 min="0"
                 step="0.1"
                 [value]="b.soglia"
-                (input)="page.aggiornaBonus(playerId, b.id, { soglia: $any($event.target).valueAsNumber || 0 })"
+                (decimaleChange)="page.aggiornaBonus(playerId, b.id, { soglia: $event || 0 })"
               />
             </mat-form-field>
             <mat-form-field appearance="fill" subscriptSizing="dynamic" class="campo-mini">
               <mat-label>Bonus fisso (€)</mat-label>
               <input
                 matInput
-                type="number"
+                decimale
                 min="0"
                 step="0.5"
                 [value]="b.rewardUnaTantum"
-                (input)="page.aggiornaBonus(playerId, b.id, { rewardUnaTantum: $any($event.target).valueAsNumber || 0 })"
+                (decimaleChange)="page.aggiornaBonus(playerId, b.id, { rewardUnaTantum: $event || 0 })"
               />
             </mat-form-field>
           }
@@ -165,7 +165,7 @@
                 <mat-label>Sim: eventi verificati</mat-label>
                 <input
                   matInput
-                  type="number"
+                  decimale
                   min="0"
                   [value]="$any(page.bonusSimulato(playerId, b.id))?.eventiVerificati ?? 0"
                   (input)="page.impostaSimEventiVerificati(playerId, b.id, $any($event.target).value)"

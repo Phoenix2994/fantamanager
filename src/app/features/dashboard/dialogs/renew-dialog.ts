@@ -9,7 +9,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { Player } from '../../../core/models';
+import { Player } from '../../../core/models';
+import { DecimalInput } from '../../../shared/decimal-input';
 
 export interface RenewDialogData {
   player: Player;
@@ -22,7 +23,7 @@ export interface RenewDialogData {
  */
 @Component({
   selector: 'app-renew-dialog',
-  imports: [
+  imports: [DecimalInput, 
     DecimalPipe,
     ReactiveFormsModule,
     MatButtonModule,
@@ -48,7 +49,7 @@ export interface RenewDialogData {
       <form [formGroup]="form">
         <mat-form-field appearance="fill" class="full-width">
           <mat-label>Nuova % rinnovo</mat-label>
-          <input matInput type="number" min="0.01" step="0.001" formControlName="nuovaPerc" />
+          <input matInput decimale min="0.01" step="0.001" formControlName="nuovaPerc" />
           <mat-hint>es. 1.45 = 145% — la nuova spesa rinnovo sarà ricalcolata sul V.A.</mat-hint>
           @if (form.controls.nuovaPerc.hasError('required')) {
             <mat-error>Inserisci la percentuale</mat-error>
